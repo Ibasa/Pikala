@@ -8,9 +8,9 @@ Pikala can also serialise type definitions and reconstruct them into dynamic ass
 
 Pikal is only supported to send objects between the exact same version.
 
-Using Pikala for *long-term object storage is not supported and strongly discouraged*.
+Using Pikala for **long-term object storage is not supported and strongly discouraged**.
 
-*Security notice*: one should *only load pikala data from trusted sources* as otherwise Deserialize can lead to arbitrary code execution resulting in a critical security vulnerability.
+**Security notice**: one should **only load pikala data from trusted sources** as otherwise Deserialize can lead to arbitrary code execution resulting in a critical security vulnerability.
 
 ## Installation
 
@@ -114,14 +114,14 @@ Pikala makes a best effort to serialize most objects.
 * Otherwise types are handled in the following order:
     1) If the Pickler has an IReducer registered for the object type that is used.
     2) If the type inherits from [`System.Runtime.Serialization.ISerializable `](https://docs.microsoft.com/en-us/dotnet/api/system.runtime.serialization.iserializable) then `ISerializable.GetObjectData` is used to serialize, and the `(SerializationInfo, StreamingContext)` constructor is used to deserialize.
-    3) If the object inherits from MarshalByRef Pikala will now explicitly fail.
+    3) If the object inherits from [`System.MarshalByRefObject`](https://docs.microsoft.com/en-us/dotnet/api/system.marshalbyrefobject) Pikala will now explicitly fail.
     4) Otherwise Pikala tries to serialize each field on the object.
 
 ### What's an IReducer?
 
-IReducer is for reducing a complex object to a simpler one that can be serialized. Pikala has some built-in reducers, such as the one for `Dictionary<TKey, TValue>` which causes that to be serialized as a `KeyValuePair<TKey, TValue>[]` rather than trying to serialize the internal bucket structure of a `Dictionary`. (In actuality this `Dictionary` is an `ISerialisable` instance, and would serialize ok without a reducer, but the reduced version is a bit neater and is a good test type for the reduction framework).
+IReducer is for reducing a complex object to a simpler one that can be serialized. Pikala has some built-in reducers, such as the one for `Dictionary<TKey, TValue>` which causes that to be serialized as a `KeyValuePair<TKey, TValue>[]` rather than trying to serialize the internal bucket structure of a `Dictionary`. (In actuality `Dictionary` is an `ISerialisable` instance, and would serialize ok without a reducer but the reduced version is a bit neater and is a good test type for the reduction framework).
 
-Pikala is open to PRs for any BCL type that could have a better IReducer than it's default behaviour.
+Pikala is open to PRs for any BCL type that could have a better `IReducer` than it's default behaviour.
 
 ### Is this safe?
 
