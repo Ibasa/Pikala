@@ -1,6 +1,6 @@
 # Pikala for dotnet
 
-[![.NET Core](https://github.com/Ibasa/Pikala/workflows/.NET%20Core/badge.svg?branch=master)](https://github.com/Ibasa/Pikala/actions?query=workflow%3A%22.NET+Core%22) [![NuGet latest release](https://img.shields.io/nuget/v/Ibasa.Pikala.svg)](https://www.nuget.org/packages/Ibasa.Pikala)
+[![.NET Core](https://github.com/Ibasa/Pikala/actions/workflows/dotnetcore.yml/badge.svg?branch=main)](https://github.com/Ibasa/Pikala/actions/workflows/dotnetcore.yml) [![NuGet latest release](https://img.shields.io/nuget/v/Ibasa.Pikala.svg)](https://www.nuget.org/packages/Ibasa.Pikala)
 
 Ibasa.Pikala is a .NET library for for pickling object graphs, it's designed to solve the same problems as [python cloudpickle](https://github.com/cloudpipe/cloudpickle) but for dotnet.
 
