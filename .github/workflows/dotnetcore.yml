@@ -1,0 +1,34 @@
+name: .NET Core
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        submodules: recursive
+    - name: Setup .NET Core 3.1
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 3.1.102
+    - name: Build with dotnet
+      run: dotnet build --configuration Release
+    - name: Test with dotnet
+      run: dotnet test --configuration Release --no-build --results-directory tests/TestResults --blame-hang --blame-hang-timeout 5m --diag tests/TestResults/diagnostics.txt
+    - name: Archive test results
+      if: ${{ ! cancelled() }}
+      uses: actions/upload-artifact@v2
+      with:
+        name: test-results
+        path: tests/TestResults
+    - name: Pack with dotnet
+      run: dotnet pack --configuration Release --output output
+    - name: Publish NuGet
+      run: dotnet nuget push -s https://api.nuget.org/v3/index.json -k ${NUGET_API_KEY} --skip-duplicate ./output/*.nupkg
+      env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}

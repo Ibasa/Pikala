@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Ibasa.Pikala is a .NET library for for pickling object graphs, it's designed to solve the same problems as python cloudpickle but for dotnet.</Description>
+    <PackageId>Ibasa.Pikala</PackageId>
+    <Version>0.0.1</Version>
+    <Authors>Ibasa</Authors>
+    <Company>Ibasa</Company>
+    <RepositoryUrl>https://github.com/Ibasa/Pikala</RepositoryUrl>
+    <PackageLicenseExpression>LGPL-3.0-only</PackageLicenseExpression>
+    <PackageTags>Pickle</PackageTags>
+    <Copyright>Fraser Waters</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ibasa.Pikala.Tests" />
+  </ItemGroup>
+</Project>
