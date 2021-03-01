@@ -390,7 +390,7 @@ namespace Ibasa.Pikala
 
         public PickledTypeInfo GenericType { get; }
 
-        (Type, bool) GetType()
+        (Type, bool) ResolveType()
         {
             var genericArguments = new Type[GenericArguments.Length];
             bool isComplete = true;
@@ -410,7 +410,7 @@ namespace Ibasa.Pikala
                 else if (argument is PickledGenericType)
                 {
                     var constructingType = (PickledGenericType)argument;
-                    var (type, complete) = constructingType.GetType();
+                    var (type, complete) = constructingType.ResolveType();
                     isComplete &= complete;
                     genericArguments[i] = type;
                 }
@@ -438,13 +438,13 @@ namespace Ibasa.Pikala
             }
         }
 
-        public override Type Type => GetType().Item1;
+        public override Type Type => ResolveType().Item1;
 
         public PickledTypeInfo[] GenericArguments { get; set; }
 
         public override PickledConstructorInfo GetConstructor(string signature)
         {
-            var (type, isComplete) = GetType();
+            var (type, isComplete) = ResolveType();
 
             if (isComplete)
             {
@@ -460,7 +460,7 @@ namespace Ibasa.Pikala
 
         public override PickledMethodInfo GetMethod(string signature)
         {
-            var (type, isComplete) = GetType();
+            var (type, isComplete) = ResolveType();
 
             if (isComplete)
             {
@@ -476,7 +476,7 @@ namespace Ibasa.Pikala
 
         public override PickledFieldInfo GetField(string name)
         {
-            var (type, isComplete) = GetType();
+            var (type, isComplete) = ResolveType();
 
             if (isComplete)
             {
