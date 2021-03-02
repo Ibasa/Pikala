@@ -350,5 +350,29 @@ namespace Ibasa.Pikala.Tests
 
             Assert.True(valueArray.Length < boxedArray.Length);
         }
+
+        [Fact]
+        public void TestLazyValue()
+        {
+            var pickler = new Pickler();
+
+            var lazyValue = new Lazy<int>(4);
+            var lazyResult = RoundTrip.Do(pickler, lazyValue);
+
+            Assert.Equal(lazyValue.IsValueCreated, lazyResult.IsValueCreated);
+            Assert.Equal(lazyValue.Value, lazyResult.Value);
+        }
+
+        [Fact]
+        public void TestLazyFunc()
+        {
+            var pickler = new Pickler();
+
+            var lazyValue = new Lazy<int>(() => 6);
+            var lazyResult = RoundTrip.Do(pickler, lazyValue);
+
+            Assert.Equal(lazyValue.IsValueCreated, lazyResult.IsValueCreated);
+            Assert.Equal(lazyValue.Value, lazyResult.Value);
+        }
     }
 }

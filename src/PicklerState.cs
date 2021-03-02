@@ -63,7 +63,11 @@ namespace Ibasa.Pikala
         public void AddTypeDef(PickledTypeInfoDef type)
         {
             var assembly = type.TypeBuilder.Assembly;
-            var name = type.TypeBuilder.FullName;
+            var name = type.TypeBuilder.Name;
+            if (!string.IsNullOrEmpty(type.TypeBuilder.Namespace))
+            {
+                name = type.TypeBuilder.Namespace + "." + name;
+            }
 
             Dictionary<string, PickledTypeInfoDef> mapping;
             if (_constructedTypes.TryGetValue(assembly, out mapping))

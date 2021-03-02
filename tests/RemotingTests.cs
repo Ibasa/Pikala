@@ -384,5 +384,40 @@ namespace Ibasa.Pikala.Tests
             Assert.Equal("2", result(1));
             Assert.Equal("4", result(2));
         }
+
+        [Fact]
+        public void TestReturnFSharpFunc()
+        {
+            var script = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "let func = fun i -> i * 2",
+                "let base64 = serializeBase64 func",
+                "printf \"%s\" base64",
+            });
+
+            var result = Base64ToObject(RunFsi(script)) as Microsoft.FSharp.Core.FSharpFunc<int, int>;
+
+            Assert.Equal(2, result.Invoke(1));
+            Assert.Equal(4, result.Invoke(2));
+        }
+
+        [Fact]
+        public void TestReturnDU()
+        {
+            var script = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "type MyDu = | Foo of int | Bar of string",
+                "let value = Foo 2",
+                "let base64 = serializeBase64 value",
+                "printf \"%s\" base64",
+            });
+
+            var result = Base64ToObject(RunFsi(script));
+
+            var type = result.GetType();
+            Assert.True(Microsoft.FSharp.Reflection.FSharpType.IsUnion(type, null));
+        }
     }
 }

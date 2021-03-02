@@ -445,13 +445,23 @@ namespace Ibasa.Pikala
                 var mappedMethods = new List<(string, string)>();
                 for (int i = 0; i < interfaceMap.InterfaceMethods.Length; ++i)
                 {
-                    var interfaceMethodSignature = Method.GetSignature(interfaceMap.InterfaceMethods[i]);
-                    var targetMethodSignature = Method.GetSignature(interfaceMap.TargetMethods[i]);
-                    var isNewSlot = interfaceMap.TargetMethods[i].Attributes.HasFlag(MethodAttributes.NewSlot);
+                    var targetMethod = interfaceMap.TargetMethods[i];
 
-                    if (interfaceMethodSignature != targetMethodSignature || isNewSlot)
+                    if (targetMethod.DeclaringType != interfaceMap.TargetType)
                     {
-                        mappedMethods.Add((interfaceMethodSignature, targetMethodSignature));
+                        // We only care about storing in the map methods that THIS class needs to override. Any interface 
+                        // methods that our base classes are implementing don
+                    }
+                    else
+                    {
+                        var interfaceMethodSignature = Method.GetSignature(interfaceMap.InterfaceMethods[i]);
+                        var targetMethodSignature = Method.GetSignature(targetMethod);
+                        var isNewSlot = targetMethod.Attributes.HasFlag(MethodAttributes.NewSlot);
+
+                        if (interfaceMethodSignature != targetMethodSignature || isNewSlot)
+                        {
+                            mappedMethods.Add((interfaceMethodSignature, targetMethodSignature));
+                        }
                     }
                 }
 
