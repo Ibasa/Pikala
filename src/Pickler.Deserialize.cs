@@ -466,9 +466,10 @@ namespace Ibasa.Pikala
                 constructingType.FullyDefined = true;
 
             }, 
+            () => constructingType.CreateType(),
             () =>
             {
-                var type = constructingType.CreateType();
+                var type = constructingType.Type;
 
                 var staticFields =
                     type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
@@ -549,7 +550,7 @@ namespace Ibasa.Pikala
 
                 constructingType.FullyDefined = true;
 
-                state.PushTrailer(null, () => constructingType.CreateType());
+                state.PushTrailer(null, () => constructingType.CreateType(), null);
             }
             else if (constructingType.TypeDef == TypeDef.Delegate)
             {
@@ -594,7 +595,7 @@ namespace Ibasa.Pikala
 
                 constructingType.FullyDefined = true;
 
-                state.PushTrailer(null, () => constructingType.CreateType());
+                state.PushTrailer(null, () => constructingType.CreateType(), null);
             }
             else
             {
@@ -956,9 +957,9 @@ namespace Ibasa.Pikala
                     DeserializeMethodBody(state, null, method.GenericParameters, method.Locals, ilGenerator);
                 }
             },
-            () => {
-                moduleBuilder.CreateGlobalFunctions();
-
+            () => moduleBuilder.CreateGlobalFunctions(),
+            () =>
+            {
                 for (int i = 0; i < fields.Length; ++i)
                 {
                     var fieldName = state.Reader.ReadString();
@@ -1458,6 +1459,7 @@ namespace Ibasa.Pikala
                 return ((PickledObject)result).Get();
             }
             state.DoFixups();
+            state.DoStaticFields();
             return result;
         }
     }

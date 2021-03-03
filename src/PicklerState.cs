@@ -60,6 +60,7 @@ namespace Ibasa.Pikala
         Dictionary<long, object> memo;
         Dictionary<long, MemoCallback> memoCallbacks;
         List<(long, Action<object>)> fixups;
+        List<Action> staticFields;
         public BinaryReader Reader { get; private set; }
 
         Dictionary<System.Reflection.Assembly, Dictionary<string, PickledTypeInfoDef>> _constructedTypes;
@@ -69,6 +70,7 @@ namespace Ibasa.Pikala
             memo = new Dictionary<long, object>();
             memoCallbacks = new Dictionary<long, MemoCallback>();
             fixups = new List<(long, Action<object>)>();
+            staticFields = new List<Action>();
             Reader = new BinaryReader(new PickleStream(stream));
             _constructedTypes = new Dictionary<System.Reflection.Assembly, Dictionary<string, PickledTypeInfoDef>>();
             AppDomain.CurrentDomain.TypeResolve += CurrentDomain_TypeResolve;
@@ -149,6 +151,14 @@ namespace Ibasa.Pikala
                 {
                     throw new MemoException(position);
                 }
+            }
+        }
+
+        public void DoStaticFields()
+        {
+            foreach (var staticFieldReader in staticFields)
+            {
+                staticFieldReader();
             }
         }
 
@@ -242,9 +252,13 @@ namespace Ibasa.Pikala
             return result;
         }
 
-        public void PushTrailer(Action trailer, Action footer)
+        public void PushTrailer(Action trailer, Action footer, Action staticField)
         {
             trailers.Push((trailer, footer));
+            if (staticField != null)
+            {
+                staticFields.Add(staticField);
+            }
         }
     }
 
@@ -279,7 +293,8 @@ namespace Ibasa.Pikala
             return false;
         }
 
-        Stack<(Action, Action)> trailers = new Stack<(Action, Action)>();
+        Stack<Action> trailers = new Stack<Action>();
+        List<Action> statics = new List<Action>();
         int trailerDepth = 0;
 
         public void CheckTrailers()
@@ -287,6 +302,11 @@ namespace Ibasa.Pikala
             if(trailers.Count != 0)
             {
                 throw new Exception("Serialization trailers count should of been zero");
+            }
+
+            foreach (var staticFieldWriter in statics)
+            {
+                staticFieldWriter();
             }
         }
 
@@ -301,26 +321,18 @@ namespace Ibasa.Pikala
                 var postTrailers = new List<Action>();
                 while (trailers.Count > 0)
                 {
-                    var (preTrailer, postTrailer) = trailers.Pop();
-                    if (preTrailer != null)
-                    {
-                        preTrailer();
-                    }
-                    postTrailers.Add(postTrailer);
-                }
-
-                foreach (var postTrailer in postTrailers)
-                {
-                    postTrailer();
+                    var trailer = trailers.Pop();
+                    trailer();
                 }
             }
 
             --trailerDepth;
         }
 
-        public void PushTrailer(Action preTrailer, Action postTrailer)
+        public void PushTrailer(Action trailer, Action staticFields)
         {
-            trailers.Push((preTrailer, postTrailer));
+            trailers.Push(trailer);
+            statics.Add(staticFields);
         }
     }
 }
