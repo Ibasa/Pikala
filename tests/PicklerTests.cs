@@ -27,6 +27,14 @@ namespace Ibasa.Pikala.Tests
             RoundTrip.Assert(pickler, value);
         }
 
+        [Fact]
+        public void TestNull()
+        {
+            var pickler = new Pickler();
+            var result = RoundTrip.Do<object>(pickler, null);
+            Assert.Null(result);
+        }
+
         [Property]
         public Property TestIntArray()
         {
