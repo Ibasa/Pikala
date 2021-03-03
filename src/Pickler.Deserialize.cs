@@ -432,21 +432,21 @@ namespace Ibasa.Pikala
                 var propertyBuilder = typeBuilder.DefineProperty(propertyName, propertyAttributes, propertyType.Type, propertyParameters);
                 ReadCustomAttributes(state, propertyBuilder.SetCustomAttribute, constructingType.GenericParameters, null);
 
-                var getMethod = state.Reader.ReadString();
-                var setMethod = state.Reader.ReadString();
+                var getMethod = state.Reader.ReadNullableString();
+                var setMethod = state.Reader.ReadNullableString();
                 foreach (var method in constructingType.Methods)
                 {
-                    if (getMethod == "" && setMethod == "") break;
+                    if (getMethod == null && setMethod == null) break;
 
                     if (method.GetSignature() == getMethod)
                     {
                         propertyBuilder.SetGetMethod(method.MethodBuilder);
-                        getMethod = "";
+                        getMethod = null;
                     }
                     if (method.GetSignature() == setMethod)
                     {
                         propertyBuilder.SetSetMethod(method.MethodBuilder);
-                        setMethod = "";
+                        setMethod = null;
                     }
                 }
             }

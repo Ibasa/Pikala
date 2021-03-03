@@ -514,20 +514,20 @@ namespace Ibasa.Pikala
 
                 if (property.GetMethod == null)
                 {
-                    state.Writer.Write("");
+                    state.Writer.WriteNullableString(null);
                 }
                 else
                 {
-                    state.Writer.Write(Method.GetSignature(property.GetMethod));
+                    state.Writer.WriteNullableString(Method.GetSignature(property.GetMethod));
                 }
 
                 if (property.SetMethod == null)
                 {
-                    state.Writer.Write("");
+                    state.Writer.WriteNullableString(null);
                 }
                 else
                 {
-                    state.Writer.Write(Method.GetSignature(property.SetMethod));
+                    state.Writer.WriteNullableString(Method.GetSignature(property.SetMethod));
                 }
             }
 
