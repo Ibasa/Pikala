@@ -576,7 +576,7 @@ namespace Ibasa.Pikala
 
             state.Writer.Write((byte)PickleOperation.Array);
             var elementType = objType.GetElementType();
-            Serialize(state, elementType, typeof(object));
+            Serialize(state, elementType, typeof(Type));
 
             // Special case rank 1 with lower bound 0 
             if (obj.Rank == 1 && obj.GetLowerBound(0) == 0)
@@ -731,7 +731,7 @@ namespace Ibasa.Pikala
                     {
                         state.Writer.Write(field.Name);
                         state.Writer.Write((int)field.Attributes);
-                        Serialize(state, field.FieldType, typeof(object), null, null);
+                        Serialize(state, field.FieldType, typeof(Type), null, null);
                     }
 
                     var methods = module.GetMethods();
@@ -990,12 +990,12 @@ namespace Ibasa.Pikala
                 var invocationList = dele.GetInvocationList();
 
                 state.Writer.Write((byte)PickleOperation.Delegate);
-                Serialize(state, objType, typeof(object));
+                Serialize(state, objType, typeof(Type));
                 state.Writer.Write7BitEncodedInt(invocationList.Length);
                 foreach (var invocation in invocationList)
                 {
                     Serialize(state, invocation.Target, typeof(object));
-                    Serialize(state, invocation.Method, typeof(object));
+                    Serialize(state, invocation.Method, typeof(MethodInfo));
                 }
             }
 
@@ -1005,7 +1005,7 @@ namespace Ibasa.Pikala
                 var (method, target, args) = reducer.Reduce(objType, obj);
 
                 state.Writer.Write((byte)PickleOperation.Reducer);
-                Serialize(state, method, typeof(object));
+                Serialize(state, method, typeof(MethodBase));
 
                 // Assert properties of the reduction
                 ConstructorInfo constructorInfo; MethodInfo methodInfo;
@@ -1024,7 +1024,7 @@ namespace Ibasa.Pikala
                     }
 
                     // We don't write target for ConstructorInfo, it must be null.
-                    Serialize(state, args, typeof(object));
+                    Serialize(state, args, typeof(object[]));
                 }
                 else if ((methodInfo = method as MethodInfo) != null)
                 {
@@ -1035,7 +1035,7 @@ namespace Ibasa.Pikala
                     }
 
                     Serialize(state, target, typeof(object));
-                    Serialize(state, args, typeof(object));
+                    Serialize(state, args, typeof(object[]));
                 }
                 else
                 {
@@ -1079,7 +1079,7 @@ namespace Ibasa.Pikala
                 state.Writer.Write((byte)PickleOperation.Object);
                 if (!staticType.IsValueType || staticType != objType)
                 {
-                    Serialize(state, objType, typeof(object));
+                    Serialize(state, objType, typeof(Type));
                 }
                 var fields = GetSerializedFields(objType);
                 state.Writer.Write7BitEncodedInt(fields.Length);
@@ -1122,7 +1122,7 @@ namespace Ibasa.Pikala
                     if (staticType != objType)
                     {
                         state.Writer.Write((byte)PickleOperation.Enum);
-                        Serialize(state, objType, typeof(object));
+                        Serialize(state, objType, typeof(Type));
                     }
                     WriteEnumerationValue(state.Writer, typeCode, obj);
                     return;
