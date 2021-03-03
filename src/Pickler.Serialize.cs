@@ -548,6 +548,17 @@ namespace Ibasa.Pikala
                         SerializeMethodBody(state, genericParameters, method.Module, method.GetGenericArguments(), methodBody);
                     }
                 }
+            }, () =>
+            {
+                var staticFields = type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                foreach (var field in staticFields)
+                {
+                    if (!field.IsInitOnly)
+                    {
+                        state.Writer.Write(field.Name);
+                        Serialize(state, field.GetValue(null), field.FieldType, genericParameters);
+                    }
+                }
             });
         }
 
@@ -735,6 +746,13 @@ namespace Ibasa.Pikala
                         foreach (var method in methods)
                         {
                             SerializeMethodBody(state, null, method.Module, method.GetGenericArguments(), method.GetMethodBody());
+                        }
+                    }, () =>
+                    {
+                        foreach (var field in fields)
+                        {
+                            state.Writer.Write(field.Name);
+                            Serialize(state, field.GetValue(null), field.FieldType, null);
                         }
                     });
                 }

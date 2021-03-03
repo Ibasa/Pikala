@@ -313,7 +313,7 @@ namespace Ibasa.Pikala.Tests
             value.Foo = 124;
             value.Myself = value;
 
-            var exc = Assert.Throws<InvalidOperationException>(() => RoundTrip.Do(pickler, value));
+            var exc = Assert.Throws<MemoException>(() => RoundTrip.Do(pickler, value));
 
             Assert.Equal("Tried to reference object from position 0 in the stream, but that object is not yet created.", exc.Message);
         }

@@ -419,5 +419,56 @@ namespace Ibasa.Pikala.Tests
             var type = result.GetType();
             Assert.True(Microsoft.FSharp.Reflection.FSharpType.IsUnion(type, null));
         }
+
+        [Fact]
+        public void TestReturnRef()
+        {
+            var script = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "let value = ref 123",
+                "let base64 = serializeBase64 value",
+                "printf \"%s\" base64",
+            });
+
+            var result = Base64ToObject(RunFsi(script)) as Microsoft.FSharp.Core.FSharpRef<int>;
+
+            Assert.Equal(123, result.Value);
+        }
+
+        [Fact]
+        public void TestReturnObjectExpression()
+        {
+            var script = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "let value = { new System.IEquatable<int> with member __.Equals i = i = 123 }",
+                "let base64 = serializeBase64 value",
+                "printf \"%s\" base64",
+            });
+
+            var result = Base64ToObject(RunFsi(script)) as IEquatable<int>;
+
+            Assert.True(result.Equals(123));
+            Assert.False(result.Equals(124));
+        }
+
+        [Fact]
+        public void TestReturnReferenceToStatic()
+        {
+            var script = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "let intValue = ref 1",
+                "let value = fun i -> i + !intValue",
+                "intValue := 123",
+                "let base64 = serializeBase64 value",
+                "printf \"%s\" base64",
+            });
+
+            var result = Base64ToObject(RunFsi(script)) as Microsoft.FSharp.Core.FSharpFunc<int, int>;
+
+            Assert.Equal(124, result.Invoke(1));
+        }
     }
 }

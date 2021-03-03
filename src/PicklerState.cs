@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Collections;
 
 namespace Ibasa.Pikala
 { 
@@ -42,11 +43,23 @@ namespace Ibasa.Pikala
         }
     }
 
+    public sealed class MemoException : Exception
+    {
+        public MemoException(long position)
+        {
+            Position = position;
+        }
+
+        public long Position { get; }
+
+        public override string Message => string.Format("Tried to reference object from position {0} in the stream, but that object is not yet created.", Position);
+    }
 
     sealed class PicklerDeserializationState : IDisposable
     {
         Dictionary<long, object> memo;
         Dictionary<long, MemoCallback> memoCallbacks;
+        List<(long, Action<object>)> fixups;
         public BinaryReader Reader { get; private set; }
 
         Dictionary<System.Reflection.Assembly, Dictionary<string, PickledTypeInfoDef>> _constructedTypes;
@@ -55,6 +68,7 @@ namespace Ibasa.Pikala
         {
             memo = new Dictionary<long, object>();
             memoCallbacks = new Dictionary<long, MemoCallback>();
+            fixups = new List<(long, Action<object>)>();
             Reader = new BinaryReader(new PickleStream(stream));
             _constructedTypes = new Dictionary<System.Reflection.Assembly, Dictionary<string, PickledTypeInfoDef>>();
             AppDomain.CurrentDomain.TypeResolve += CurrentDomain_TypeResolve;
@@ -117,6 +131,27 @@ namespace Ibasa.Pikala
             AppDomain.CurrentDomain.TypeResolve -= CurrentDomain_TypeResolve;
         }
 
+
+        public void RegisterFixup(long position, Action<object> fixup)
+        {
+            fixups.Add((position, fixup));
+        }
+
+        public void DoFixups()
+        {
+            foreach (var (position, fixup) in fixups)
+            {
+                if (memo.TryGetValue(position, out var value))
+                {
+                    fixup(value);
+                }
+                else
+                {
+                    throw new MemoException(position);
+                }
+            }
+        }
+
         public T SetMemo<T>(long position, T value)
         {
             memo.Add(position, value);
@@ -140,9 +175,8 @@ namespace Ibasa.Pikala
                 return result;
             }
             else
-            { 
-                throw new InvalidOperationException(string.Format(
-                    "Tried to reference object from position {0} in the stream, but that object is not yet created.", position));
+            {
+                throw new MemoException(position);
             }
         }
 
@@ -187,20 +221,20 @@ namespace Ibasa.Pikala
 
             if (depth == 0)
             {
-                var footers = new List<Action>();
+                var postTrailers = new List<Action>();
                 while (trailers.Count > 0)
                 {
-                    var (trailer, footer) = trailers.Pop();
-                    if (trailer != null)
+                    var (preTrailer, postTrailer) = trailers.Pop();
+                    if (preTrailer != null)
                     {
-                        trailer();
+                        preTrailer();
                     }
-                    footers.Add(footer);
+                    postTrailers.Add(postTrailer);
                 }
 
-                foreach (var footer in footers)
+                foreach (var postTrailer in postTrailers)
                 {
-                    footer();
+                    postTrailer();
                 }
             }
             --trailerDepth;
@@ -245,14 +279,14 @@ namespace Ibasa.Pikala
             return false;
         }
 
-        Stack<Action> trailers = new Stack<Action>();
+        Stack<(Action, Action)> trailers = new Stack<(Action, Action)>();
         int trailerDepth = 0;
 
         public void CheckTrailers()
         {
             if(trailers.Count != 0)
             {
-                throw new Exception("Serializatino trailers count should of been zero");
+                throw new Exception("Serialization trailers count should of been zero");
             }
         }
 
@@ -264,19 +298,29 @@ namespace Ibasa.Pikala
 
             if (depth == 0)
             {
+                var postTrailers = new List<Action>();
                 while (trailers.Count > 0)
                 {
-                    var trailer = trailers.Pop();
-                    trailer();
+                    var (preTrailer, postTrailer) = trailers.Pop();
+                    if (preTrailer != null)
+                    {
+                        preTrailer();
+                    }
+                    postTrailers.Add(postTrailer);
+                }
+
+                foreach (var postTrailer in postTrailers)
+                {
+                    postTrailer();
                 }
             }
 
             --trailerDepth;
         }
 
-        public void PushTrailer(Action action)
+        public void PushTrailer(Action preTrailer, Action postTrailer)
         {
-            trailers.Push(action);
+            trailers.Push((preTrailer, postTrailer));
         }
     }
 }

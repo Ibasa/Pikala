@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Linq;
 
 namespace Ibasa.Pikala
 {
@@ -475,7 +476,44 @@ namespace Ibasa.Pikala
 
                 constructingType.FullyDefined = true;
 
-            }, () => constructingType.CreateType());
+            }, 
+            () =>
+            {
+                var type = constructingType.CreateType();
+
+                var staticFields =
+                    type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                    .Where(field => !field.IsInitOnly)
+                    .ToArray();
+
+                for (int i = 0; i < staticFields.Length; ++i)
+                {
+                    var fieldName = state.Reader.ReadString();
+                    FieldInfo fieldInfo = null;
+                    for (int j = 0; j < staticFields.Length; ++j)
+                    {
+                        if (fieldName == staticFields[j].Name)
+                        {
+                            fieldInfo = staticFields[j];
+                        }
+                    }
+
+                    if (fieldInfo == null)
+                    {
+                        throw new Exception(string.Format("Could not find static field '{0}' on type '{1}'", fieldName, type.Name));
+                    }
+
+                    try
+                    {
+                        var fieldValue = Deserialize(state, fieldInfo.FieldType, null, null);
+                        fieldInfo.SetValue(null, fieldValue);
+                    }
+                    catch (MemoException exc)
+                    {
+                        state.RegisterFixup(exc.Position, value => fieldInfo.SetValue(null, value));
+                    }
+            }
+            });
         }
 
         private PickledTypeInfoDef ConstructingTypeForTypeDef(TypeDef typeDef, string typeName, TypeAttributes typeAttributes, Func<string, TypeAttributes, Type, TypeBuilder> defineType)
@@ -927,6 +965,7 @@ namespace Ibasa.Pikala
                 var fieldName = state.Reader.ReadString();
                 var fieldAttributes = (FieldAttributes)state.Reader.ReadInt32();
                 var fieldType = (PickledTypeInfo)Deserialize(state, typeof(Type), null, null);
+                throw new NotImplementedException();
                 //constructingModule.Fields[i] = new PickledFieldInfoDef(constructingModule, typeBuilder.DefineField(fieldName, fieldType.Type, fieldAttributes));
             }
 
@@ -945,7 +984,38 @@ namespace Ibasa.Pikala
                     var ilGenerator = method.MethodBuilder.GetILGenerator();
                     DeserializeMethodBody(state, null, method.GenericParameters, method.Locals, ilGenerator);
                 }
-            }, () => moduleBuilder.CreateGlobalFunctions());
+            },
+            () => {
+                moduleBuilder.CreateGlobalFunctions();
+
+                for (int i = 0; i < fields.Length; ++i)
+                {
+                    var fieldName = state.Reader.ReadString();
+                    FieldInfo fieldInfo = null;
+                    for (int j = 0; j < fields.Length; ++j)
+                    {
+                        if (fieldName == fields[j].FieldInfo.Name)
+                        {
+                            fieldInfo = fields[j].FieldInfo;
+                        }
+                    }
+
+                    if (fieldInfo == null)
+                    {
+                        throw new Exception();
+                    }
+
+                    try
+                    {
+                        var fieldValue = Deserialize(state, fieldInfo.FieldType, null, null);
+                        fieldInfo.SetValue(null, fieldValue);
+                    }
+                    catch (MemoException exc)
+                    {
+                        state.RegisterFixup(exc.Position, value => fieldInfo.SetValue(null, value));
+                    }
+                }
+            });
 
             return moduleBuilder;
         }
@@ -1387,6 +1457,7 @@ namespace Ibasa.Pikala
             {
                 return ((PickledObject)result).Get();
             }
+            state.DoFixups();
             return result;
         }
     }
