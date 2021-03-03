@@ -39,7 +39,6 @@ namespace Ibasa.Pikala.Tests
         {
             var pickler = new Pickler();
             pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
-            var obj = Tuple.Create(1, 42.634);
 
             Func<Tuple<int, double>, string> func = obj =>
             {
@@ -50,6 +49,7 @@ namespace Ibasa.Pikala.Tests
 
             var result = RoundTrip.Do<Delegate>(pickler, func);
 
+            var obj = Tuple.Create(1, 42.634);
             Assert.Equal(func(obj), result.DynamicInvoke(obj));
         }
     }
