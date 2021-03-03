@@ -413,15 +413,8 @@ namespace Ibasa.Pikala
             state.Writer.Write((byte)0xFF);
         }
 
-        private void SerializeType(PicklerSerializationState state, Type type)
+        private void SerializeType(PicklerSerializationState state, Type type, Type[] genericParameters)
         {
-            var genericParameters = type.GetGenericArguments();
-            state.Writer.Write7BitEncodedInt(genericParameters.Length);
-            foreach (var parameter in genericParameters)
-            {
-                state.Writer.Write(parameter.Name);
-            }
-
             if (type.IsValueType)
             {
                 // Value types don't ever have any base class
@@ -875,6 +868,17 @@ namespace Ibasa.Pikala
                             state.Writer.Write((byte)TypeDef.Class);
                         }
 
+                        Type[] genericParameters = null;
+                        if (!type.IsEnum)
+                        {
+                            // Enums never have generic parameters so we don't even write out a count for them
+                            genericParameters = type.GetGenericArguments();
+                            state.Writer.Write7BitEncodedInt(genericParameters.Length);
+                            foreach (var parameter in genericParameters)
+                            {
+                                state.Writer.Write(parameter.Name);
+                            }
+                        }
 
                         if (type.DeclaringType != null)
                         {
@@ -906,13 +910,6 @@ namespace Ibasa.Pikala
                         else if (type.IsAssignableTo(typeof(Delegate)))
                         {
                             // delegates are a name, optionally generic parameters, a return type and parameter types
-                            var genericParameters = type.GetGenericArguments();
-                            state.Writer.Write7BitEncodedInt(genericParameters.Length);
-                            foreach (var parameter in genericParameters)
-                            {
-                                state.Writer.Write(parameter.Name);
-                            }
-
                             var invoke = type.GetMethod("Invoke");
                             Serialize(state, invoke.ReturnType, typeof(Type));
                             var parameters = invoke.GetParameters();
@@ -925,7 +922,7 @@ namespace Ibasa.Pikala
                         }
                         else
                         {
-                            SerializeType(state, type);
+                            SerializeType(state, type, genericParameters);
                         }
                     });
                 }

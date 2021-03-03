@@ -332,17 +332,6 @@ namespace Ibasa.Pikala
             var isValueType = constructingType.TypeDef == TypeDef.Struct;
             var typeBuilder = constructingType.TypeBuilder;
 
-            var genericParameterCount = state.Reader.Read7BitEncodedInt();
-            if (genericParameterCount != 0)
-            {
-                var genericParameterNames = new string[genericParameterCount];
-                for (int i = 0; i < genericParameterCount; ++i)
-                {
-                    genericParameterNames[i] = state.Reader.ReadString();
-                }
-                constructingType.GenericParameters = typeBuilder.DefineGenericParameters(genericParameterNames);
-            }
-
             if (!isValueType)
             {
                 var baseType = (PickledTypeInfo)Deserialize(state, typeof(Type), constructingType.GenericParameters, null);
@@ -518,6 +507,7 @@ namespace Ibasa.Pikala
 
         private PickledTypeInfoDef ConstructingTypeForTypeDef(TypeDef typeDef, string typeName, TypeAttributes typeAttributes, Func<string, TypeAttributes, Type, TypeBuilder> defineType)
         {
+
             switch (typeDef)
             {
                 case TypeDef.Enum:
@@ -577,17 +567,6 @@ namespace Ibasa.Pikala
                     constructorBuilder.DefineParameter(2, ParameterAttributes.None, "method"),
                 };
                 constructingType.Constructors = new PickledConstructorInfoDef[] { constructingConstructor };
-
-                var genericParameterCount = state.Reader.Read7BitEncodedInt();
-                if (genericParameterCount != 0)
-                {
-                    var genericParameterNames = new string[genericParameterCount];
-                    for (int i = 0; i < genericParameterCount; ++i)
-                    {
-                        genericParameterNames[i] = state.Reader.ReadString();
-                    }
-                    constructingType.GenericParameters = typeBuilder.DefineGenericParameters(genericParameterNames);
-                }
 
                 var returnType = (PickledTypeInfo)Deserialize(state, typeof(Type), constructingType.GenericParameters, null);
                 var parameterCount = state.Reader.Read7BitEncodedInt();
@@ -1091,6 +1070,20 @@ namespace Ibasa.Pikala
                 var typeName = state.Reader.ReadString();
                 var typeAttributes = (TypeAttributes)state.Reader.ReadInt32();
                 var typeDef = (TypeDef)state.Reader.ReadByte();
+                string[] genericParameters = null;
+                if (typeDef != TypeDef.Enum)
+                {
+                    // Enums never have generic parameters, but anything else might
+                    var genericParameterCount = state.Reader.Read7BitEncodedInt();
+                    if (genericParameterCount != 0)
+                    {
+                        genericParameters = new string[genericParameterCount];
+                        for (int i = 0; i < genericParameterCount; ++i)
+                        {
+                            genericParameters[i] = state.Reader.ReadString();
+                        }
+                    }
+                }
 
                 var (callback, _) = DeserializeWithMemo(state, position, (object parent) =>
                 {
@@ -1109,6 +1102,12 @@ namespace Ibasa.Pikala
                         throw new Exception(string.Format(
                             "Unexpected parent '{0} : {1}' for type '{2}'", parent, parent.GetType().FullName, typeName));
                     }
+
+                    if (genericParameters != null)
+                    {
+                        result.GenericParameters = result.TypeBuilder.DefineGenericParameters(genericParameters);
+                    }
+
                     state.AddTypeDef(result);
                     return state.SetMemo(position, result);
                 }, typeof(object), genericTypeParameters, genericMethodParameters);

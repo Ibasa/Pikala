@@ -434,7 +434,8 @@ namespace Ibasa.Pikala
             else
             {
                 var constructingType = (PickledTypeInfoDef)GenericType;
-                return (constructingType.Type.MakeGenericType(genericArguments), isComplete & constructingType.IsCreated);
+                var typeInfo = constructingType.Type;
+                return (typeInfo.MakeGenericType(genericArguments), isComplete & constructingType.IsCreated);
             }
         }
 

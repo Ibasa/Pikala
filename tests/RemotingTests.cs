@@ -470,5 +470,26 @@ namespace Ibasa.Pikala.Tests
 
             Assert.Equal(124, result.Invoke(1));
         }
+
+        [Fact]
+        public void TestReturnComplexObject()
+        {
+            var script = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "let prov() =",
+                "    printfn \"Testing testing 123...\"",
+                "    42",
+                "type Comp<'T> = | Prov of (unit -> 'T) | Value of 'T",
+                "let value = Prov prov",
+                "let base64 = serializeBase64 value",
+                "printf \"%s\" base64",
+            });
+
+            var result = Base64ToObject(RunFsi(script));
+
+            var type = result.GetType();
+            Assert.True(Microsoft.FSharp.Reflection.FSharpType.IsUnion(type, null));
+        }
     }
 }
