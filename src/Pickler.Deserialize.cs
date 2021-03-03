@@ -702,7 +702,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private object DeserializeObject(PicklerDeserializationState state, Type type, Action<object> onConstructed, Type[] genericTypeParameters, Type[] genericMethodParameters)
+        private void DeserializeObject(PicklerDeserializationState state, object uninitializedObject, Type type, Type[] genericTypeParameters, Type[] genericMethodParameters)
         {
             var fields = GetSerializedFields(type);
             var fieldCount = state.Reader.Read7BitEncodedInt();
@@ -711,12 +711,6 @@ namespace Ibasa.Pikala
                 throw new Exception(string.Format(
                     "Can not deserialize type '{0}', serialised {1} fields but type expects {2}",
                     type, fieldCount, fields.Length));
-            }
-
-            var result = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(type);
-            if (onConstructed != null)
-            {
-                onConstructed(result);
             }
 
             for (int i = 0; i < fieldCount; ++i)
@@ -741,10 +735,8 @@ namespace Ibasa.Pikala
 
                 object value = ReducePickle(Deserialize(state, toSet.FieldType, genericTypeParameters, genericMethodParameters));
 
-                toSet.SetValue(result, value);
+                toSet.SetValue(uninitializedObject, value);
             }
-
-            return result;
         }
 
         // TODO It would be good to only return PickledObject things as part of typedef construction and not have that recurse through Deserialize
@@ -819,7 +811,7 @@ namespace Ibasa.Pikala
         private PickledConstructorInfo DeserializeConstructorInfo(PicklerDeserializationState state, long position, Type[] genericTypeParameters, Type[] genericMethodParameters)
         {
             var signature = state.Reader.ReadString();
-            var callback = DeserializeWithMemo(state, position, (PickledTypeInfo type) =>
+            var (callback, _) = DeserializeWithMemo(state, position, (PickledTypeInfo type) =>
             {
                 var constructorInfo = type.GetConstructor(signature);
                 return state.SetMemo(position, constructorInfo);
@@ -840,7 +832,7 @@ namespace Ibasa.Pikala
                     genericArguments[i] = (PickledTypeInfo)Deserialize(state, typeof(Type), genericTypeParameters, genericMethodParameters);
                 }
             }
-            var callback = DeserializeWithMemo(state, position, (PickledTypeInfo type) =>
+            var (callback, _) = DeserializeWithMemo(state, position, (PickledTypeInfo type) =>
             {
                 var methodInfo = type.GetMethod(signature);
 
@@ -944,7 +936,7 @@ namespace Ibasa.Pikala
         private ModuleBuilder DeserializeModuleDef(PicklerDeserializationState state, long position, Type[] genericTypeParameters, Type[] genericMethodParameters)
         {
             var name = state.Reader.ReadString();
-            var callback = DeserializeWithMemo(state, position, (AssemblyBuilder assembly) =>
+            var (callback, _) = DeserializeWithMemo(state, position, (AssemblyBuilder assembly) =>
             {
                 var module = assembly.DefineDynamicModule(name);
                 if (module == null)
@@ -1100,7 +1092,7 @@ namespace Ibasa.Pikala
                 var typeAttributes = (TypeAttributes)state.Reader.ReadInt32();
                 var typeDef = (TypeDef)state.Reader.ReadByte();
 
-                var callback = DeserializeWithMemo(state, position, (object parent) =>
+                var (callback, _) = DeserializeWithMemo(state, position, (object parent) =>
                 {
                     PickledTypeInfoDef result;
                     ModuleBuilder module; PickledTypeInfoDef declaringType;
@@ -1210,8 +1202,15 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.Object:
                     {
-                        var objType = (PickledTypeInfo)Deserialize(state, typeof(Type), genericTypeParameters, genericMethodParameters);
-                        return DeserializeObject(state, objType.Type, obj => state.SetMemo(position, obj), genericTypeParameters, genericMethodParameters);
+                        var (callback, objType) = DeserializeWithMemo(state, position, (PickledTypeInfo objType) =>
+                        {
+                            var result = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objType.Type);
+                            return state.SetMemo(position, result);
+                        }, typeof(Type), genericTypeParameters, genericMethodParameters);
+
+                        var uninitalizedObject = callback.Invoke();
+                        DeserializeObject(state, uninitalizedObject, objType.Type, genericTypeParameters, genericMethodParameters);
+                        return uninitalizedObject;
                     }
 
                 default:
@@ -1223,11 +1222,11 @@ namespace Ibasa.Pikala
             }
         }
 
-        private MemoCallback<R> DeserializeWithMemo<T, R>(PicklerDeserializationState state, long position, Func<T, R> callback, Type staticType, Type[] genericTypeParameters, Type[] genericMethodParameters) where T : class
+        private (MemoCallback<R>, T) DeserializeWithMemo<T, R>(PicklerDeserializationState state, long position, Func<T, R> callback, Type staticType, Type[] genericTypeParameters, Type[] genericMethodParameters) where T : class
         {
             var memo = state.RegisterMemoCallback(position, callback);
-            var _ = Deserialize(state, staticType, genericTypeParameters, genericMethodParameters);
-            return memo;
+            var result = Deserialize(state, staticType, genericTypeParameters, genericMethodParameters);
+            return (memo, result as T);
         }
 
         private object Deserialize(PicklerDeserializationState state, Type staticType, Type[] genericTypeParameters, Type[] genericMethodParameters)
@@ -1316,7 +1315,9 @@ namespace Ibasa.Pikala
                             return DeserializeISerializable(state, staticType, genericTypeParameters, genericMethodParameters);
 
                         case PickleOperation.Object:
-                            return DeserializeObject(state, staticType, null, genericTypeParameters, genericMethodParameters);
+                            var uninitializedObject = Activator.CreateInstance(staticType);
+                            DeserializeObject(state, uninitializedObject, staticType, genericTypeParameters, genericMethodParameters);
+                            return uninitializedObject;
 
                         default:
                             throw new Exception(string.Format(
