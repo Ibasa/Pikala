@@ -311,7 +311,8 @@ namespace Ibasa.Pikala
                             state.Writer.Write(length);
                             for (int i = 0; i < length; ++i)
                             {
-                                state.Writer.Write(ilReader.ReadInt32());
+                                var offset = ilReader.ReadInt32();
+                                state.Writer.Write(offset);
                             }
                             break;
                         }

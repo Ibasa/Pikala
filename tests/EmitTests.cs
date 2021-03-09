@@ -261,5 +261,20 @@ namespace Ibasa.Pikala.Tests
 
             Assert.Equal(value().Result, result().Result);
         }
+
+        [Fact]
+        public void TestClassWithSwitch()
+        {
+            var pickler = new Pickler();
+            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+
+            Func<int, string> value = TestTypes.StaticClass.SwitchMethod;
+            var result = RoundTrip.Do(pickler, value);
+
+            Assert.Equal(value(0), result(0));
+            Assert.Equal(value(1), result(1));
+            Assert.Equal(value(2), result(2));
+            Assert.Equal(value(3), result(3));
+        }
     }
 }

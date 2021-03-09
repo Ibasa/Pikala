@@ -371,5 +371,21 @@ namespace Ibasa.Pikala.Tests
                 return i + 1;
             }
         }
+
+        public static class StaticClass
+        {
+            public static string SwitchMethod(int i)
+            {
+                switch(i)
+                {
+                    case 0: return "Hello";
+                    case 1: return " ";
+                    case 2: return "World";
+                    case 3: return "!";
+                }
+
+                throw new Exception("i out of range");
+            }
+        }
     }
 }

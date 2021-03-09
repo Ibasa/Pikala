@@ -196,8 +196,22 @@ namespace Ibasa.Pikala
                 ilGenerator.DeclareLocal(local.Type);
             }
 
+            var ilLabels = new Dictionary<int, Label>();
+            Label GetLabel(int offset)
+            {
+                if (ilLabels.TryGetValue(offset, out var label))
+                {
+                    return label;
+                }
+                label = ilGenerator.DefineLabel();
+                ilLabels[offset] = label;
+                return label;
+            }
+
             while (true)
             {
+                ilGenerator.MarkLabel(GetLabel(ilGenerator.ILOffset));
+
                 var opCodeByte = state.Reader.ReadByte();
                 OpCode opCode;
                 if (opCodeByte == 0xFF)
@@ -223,7 +237,16 @@ namespace Ibasa.Pikala
 
                     case OperandType.InlineSwitch:
                         {
-                            throw new NotImplementedException("InlineSwitch not yet deserialisable");
+                            Label[] labels = new Label[state.Reader.ReadInt32()];
+                            // These targets are represented as offsets (positive or negative) from the beginning of the instruction following this switch instruction.
+                            var offset = ilGenerator.ILOffset + opCode.Size + 4 + 4 * labels.Length;
+                            for (int i = 0; i < labels.Length; ++i)
+                            {
+                                var target = state.Reader.ReadInt32();
+                                labels[i] = GetLabel(offset + target);
+                            }
+                            ilGenerator.Emit(opCode, labels);
+                            break;
                         }
 
                     case OperandType.InlineSig:
@@ -235,8 +258,8 @@ namespace Ibasa.Pikala
                         {
                             var memberInfo = (PickledMemberInfo)Deserialize(state, typeof(MemberInfo), genericTypeParameters, genericMethodParameters);
                             memberInfo.Emit(ilGenerator, opCode);
+                            break;
                         }
-                        break;
 
                     case OperandType.InlineType:
                         {
