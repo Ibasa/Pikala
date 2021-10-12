@@ -1247,6 +1247,11 @@ namespace Ibasa.Pikala
         public void Serialize(Stream stream, object rootObject)
         {
             var state = new PicklerSerializationState(stream);
+
+            // Always start the pickler stream with a header for sanity checking inputs
+            state.Writer.Write(_header);
+            state.Writer.Write(_version);
+
             Serialize(state, rootObject, typeof(object));
             state.CheckTrailers();
         }

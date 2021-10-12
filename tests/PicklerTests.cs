@@ -323,7 +323,7 @@ namespace Ibasa.Pikala.Tests
 
             var exc = Assert.Throws<MemoException>(() => RoundTrip.Do(pickler, value));
 
-            Assert.Equal("Tried to reference object from position 0 in the stream, but that object is not yet created.", exc.Message);
+            Assert.Equal("Tried to reference object from position 8 in the stream, but that object is not yet created.", exc.Message);
         }
 
         [Fact]
@@ -381,6 +381,39 @@ namespace Ibasa.Pikala.Tests
 
             Assert.Equal(lazyValue.IsValueCreated, lazyResult.IsValueCreated);
             Assert.Equal(lazyValue.Value, lazyResult.Value);
+        }
+
+        [Fact]
+        public void TestReadmeExample()
+        {
+            // This test checks that the string in README.md matches what the Pickler currently generates
+
+            var pickler = new Pickler();
+            var stream = new MemoryStream();
+            pickler.Serialize(stream, (Func<int, int>)Math.Abs);
+            var actual = Convert.ToBase64String(stream.ToArray());
+
+            // Look for the README.md
+            string FindReadme(DirectoryInfo directoryInfo)
+            {
+                var path = Path.Combine(directoryInfo.FullName, "README.md");
+                if (File.Exists(path))
+                {
+                    return path;
+                }
+                return FindReadme(directoryInfo.Parent);
+            }
+
+            var readmePath = FindReadme(new DirectoryInfo(Environment.CurrentDirectory));
+            var readmeText = File.ReadAllText(readmePath);
+            // Look for the example line using Convert.FromBase64String
+            var match = System.Text.RegularExpressions.Regex.Match(readmeText, "Convert\\.FromBase64String\\(\\\"(.+)\\\"\\)");
+
+            Assert.True(match.Success, "Could not find Base64 example in README.md");
+
+            var expected = match.Groups[1].Value;
+
+            Assert.True(expected == actual, string.Format("README.md needs updating with string \"{0}\"", actual));
         }
     }
 }

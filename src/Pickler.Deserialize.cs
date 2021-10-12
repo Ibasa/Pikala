@@ -1476,6 +1476,18 @@ namespace Ibasa.Pikala
         public object Deserialize(Stream stream)
         {
             using var state = new PicklerDeserializationState(stream);
+            // Firstly read the header to make sure it looks like a Pikala stream
+            var header = state.Reader.ReadUInt32();
+            if (header != _header)
+            {
+                throw new InvalidDataException("Input stream does not start with PKLA");
+            }
+            var version = state.Reader.ReadUInt32();
+            if (version != _version)
+            {
+                throw new InvalidDataException(string.Format("Input stream does not match expected version. Got {0}, expected {1}", version, _version));
+            }
+
             var result = Deserialize(state, typeof(object), null, null);
             if (result is PickledObject)
             {
