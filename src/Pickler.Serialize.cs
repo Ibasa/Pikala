@@ -10,12 +10,12 @@ namespace Ibasa.Pikala
 {
     public sealed partial class Pickler
     {
-        private bool IsReferanceableAssembly(Assembly assembly)
+        private bool PickleByValue(Assembly assembly)
         {
             return
-                !_unreferanceableAssemblies.Contains(assembly) &&
-                !assembly.IsDynamic &&
-                (assembly.Location != "");
+                _pickleByValueFilter.Contains(assembly) ||
+                assembly.IsDynamic ||
+                assembly.Location == "";
         }
 
         private static void WriteEnumerationValue(BinaryWriter writer, TypeCode typeCode, object value)
@@ -683,19 +683,19 @@ namespace Ibasa.Pikala
                 // This is an assembly, we need to emit an assembly name so it can be reloaded
                 var assembly = (Assembly)obj;
 
-                // Is this assembly one we can reference?
-                if (IsReferanceableAssembly(assembly))
-                {
-                    // Just write out an assembly refernce
-                    state.Writer.Write((byte)PickleOperation.AssemblyRef);
-                    state.Writer.Write(assembly.FullName);
-                }
-                else
+                // Is this assembly one we should save by value?
+                if (PickleByValue(assembly))
                 {
                     // Write out an assembly definition, we'll build a dynamic assembly for this on the other side
                     state.Writer.Write((byte)PickleOperation.AssemblyDef);
                     state.Writer.Write(assembly.FullName);
                     WriteCustomAttributes(state, assembly.CustomAttributes.ToArray());
+                }
+                else
+                {
+                    // Just write out an assembly refernce
+                    state.Writer.Write((byte)PickleOperation.AssemblyRef);
+                    state.Writer.Write(assembly.FullName);
                 }
             }
 
@@ -704,14 +704,8 @@ namespace Ibasa.Pikala
                 // This is a module, we need to emit a reference to the assembly it's found in and it's name
                 var module = (Module)obj;
 
-                // Is this module in an assembly we we can reference?
-                if (IsReferanceableAssembly(module.Assembly))
-                {
-                    state.Writer.Write((byte)PickleOperation.ModuleRef);
-                    state.Writer.Write(module.Name);
-                    Serialize(state, module.Assembly, typeof(Assembly));
-                }
-                else
+                // Is this assembly one we should save by value?
+                if (PickleByValue(module.Assembly))
                 {
                     state.Writer.Write((byte)PickleOperation.ModuleDef);
                     state.Writer.Write(module.Name);
@@ -749,6 +743,12 @@ namespace Ibasa.Pikala
                             Serialize(state, field.GetValue(null), field.FieldType, null);
                         }
                     });
+                }
+                else
+                {
+                    state.Writer.Write((byte)PickleOperation.ModuleRef);
+                    state.Writer.Write(module.Name);
+                    Serialize(state, module.Assembly, typeof(Assembly));
                 }
             }
 
@@ -803,31 +803,8 @@ namespace Ibasa.Pikala
                     state.Writer.Write7BitEncodedInt(type.GenericParameterPosition);
                 }
 
-                // Is this assembly one we can reference?
-                else if (IsReferanceableAssembly(type.Assembly))
-                {
-                    // Just write out a refernce to the type
-                    state.Writer.Write((byte)PickleOperation.TypeRef);
-
-                    if (type.DeclaringType != null)
-                    {
-                        Serialize(state, type.DeclaringType, typeof(Type));
-                        state.Writer.Write(type.Name);
-                    }
-                    else
-                    {
-                        Serialize(state, type.Module, typeof(Module));
-                        if (string.IsNullOrEmpty(type.Namespace))
-                        {
-                            state.Writer.Write(type.Name);
-                        }
-                        else
-                        {
-                            state.Writer.Write(type.Namespace + "." + type.Name);
-                        }
-                    }
-                }
-                else
+                // Is this assembly one we should save by value?
+                else if (PickleByValue(type.Assembly))
                 {
                     state.RunWithTrailers(() =>
                     {
@@ -926,6 +903,29 @@ namespace Ibasa.Pikala
                             SerializeType(state, type, genericParameters);
                         }
                     });
+                }
+                else
+                {
+                    // Just write out a refernce to the type
+                    state.Writer.Write((byte)PickleOperation.TypeRef);
+
+                    if (type.DeclaringType != null)
+                    {
+                        Serialize(state, type.DeclaringType, typeof(Type));
+                        state.Writer.Write(type.Name);
+                    }
+                    else
+                    {
+                        Serialize(state, type.Module, typeof(Module));
+                        if (string.IsNullOrEmpty(type.Namespace))
+                        {
+                            state.Writer.Write(type.Name);
+                        }
+                        else
+                        {
+                            state.Writer.Write(type.Namespace + "." + type.Name);
+                        }
+                    }
                 }
             }
 

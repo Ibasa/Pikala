@@ -4,16 +4,21 @@ using Xunit;
 namespace Ibasa.Pikala.Tests
 {
     /// <summary>
-    /// This test is all by itself because the lamda generates a type in the test and so we have to serialize the whole test class. 
-    /// While serialising the whole test class should work for Pikala having this by itself makes investigation into just lamdas much easier.
+    /// This test is all by itself because the lambda generates a type in the test and so we have to serialize the whole test class. 
+    /// While serialising the whole test class should work for Pikala having this by itself makes investigation into just lambdas much easier.
     /// </summary>
     public class EmitLambdaTest
     {
+        private Pickler CreatePickler()
+        {
+            var filter = new InclusiveAssemblyFilter() { System.Reflection.Assembly.GetExecutingAssembly() };
+            return new Pickler(filter);
+        }
+
         [Fact]
         public void TestLamda()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             Func<int, string> value = i => (i * 2).ToString();
 
@@ -24,8 +29,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestGenericLambda()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             TestTypes.GenericDelegateType<int> value = i => Math.Abs(i) + 1;
 
@@ -37,8 +41,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestFSharpPrintfFormat()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             Func<Tuple<int, double>, string> func = obj =>
             {
@@ -59,11 +62,16 @@ namespace Ibasa.Pikala.Tests
     /// </summary>
     public class EmitTests
     {
+        private Pickler CreatePickler()
+        {
+            var filter = new InclusiveAssemblyFilter() { System.Reflection.Assembly.GetExecutingAssembly() };
+            return new Pickler(filter);
+        }
+
         [Fact]
         public void TestStruct()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             var value = new TestTypes.StructureType();
             value.Bar = 2.3;
@@ -77,8 +85,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestClass()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             var value = new TestTypes.ClassType("hello");
             value.Foo = 5;
@@ -91,8 +98,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestGenericMethods()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             Func<double, int, string> func1 = TestTypes.GenericMethods.DoIt<double>;
 
@@ -110,8 +116,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestSimpleNested()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             var value = TestTypes.NestingClass.NestedEnum.Xs;
 
@@ -123,8 +128,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestProperties()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             var value = new TestTypes.ClassTypeWithProperties("boo");
 
@@ -136,8 +140,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestNestedClass()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             var innerValue = new TestTypes.ClassTypeWithNestedClass.InnerClass() { Foo = 42 };
             var innerResult = RoundTrip.Do<object>(pickler, innerValue);
@@ -151,8 +154,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestCircularClasses()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             var aValue = new TestTypes.CircularClassA();
             var bValue = new TestTypes.CircularClassB();
@@ -170,8 +172,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestGenericDelegate()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             TestTypes.GenericDelegateType<int> value = Math.Abs;
 
@@ -183,8 +184,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestNestedStruct()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             var innerValue = new TestTypes.ClassTypeWithNestedStruct.InnerStruct() { Foo = 42 };
             var innerResult = RoundTrip.Do<object>(pickler, innerValue);
@@ -198,8 +198,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestStaticCtor()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             var value = new TestTypes.StaticCtorClass();
             value.Foo = 123.443;
@@ -211,8 +210,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestReferenceToType()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             var obj = new TestTypes.ClassType("baaa");
             Func<int, int> func = obj.DoInvoke;
@@ -229,8 +227,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestSelfReferenceAttribute()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             var value = typeof(TestTypes.SelfReferencingAttribute);
             var result = RoundTrip.Do(pickler, value);
@@ -241,8 +238,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestConcreteClass()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             var value = new TestTypes.ConcreteClass();
             var result = RoundTrip.Do<object>(pickler, value);
@@ -253,8 +249,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestAsyncClass()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             Func<System.Threading.Tasks.Task<int>> value = TestTypes.AsyncClasss.GetIntAsync;
             var result = RoundTrip.Do(pickler, value);
@@ -265,8 +260,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestClassWithSwitch()
         {
-            var pickler = new Pickler();
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = CreatePickler();
 
             Func<int, string> value = TestTypes.StaticClass.SwitchMethod;
             var result = RoundTrip.Do(pickler, value);

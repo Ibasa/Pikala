@@ -1,11 +1,7 @@
 ﻿using System;
 using Xunit;
-using FsCheck;
-using FsCheck.Xunit;
 using System.IO;
 using System.Text;
-using System.Collections.Generic;
-using System.Collections;
 
 namespace Ibasa.Pikala.Tests
 {
@@ -82,9 +78,9 @@ namespace Ibasa.Pikala.Tests
 
         private string Base64FromObject(object obj)
         {
-            var pickler = new Pickler();
             // Remoting tests can't refernce this test assembly
-            pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+            var filter = new InclusiveAssemblyFilter() { System.Reflection.Assembly.GetExecutingAssembly() };
+            var pickler = new Pickler(filter);
             var memoryStream = new MemoryStream();
             pickler.Serialize(memoryStream, obj);
             return Convert.ToBase64String(memoryStream.ToArray());
