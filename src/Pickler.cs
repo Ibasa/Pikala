@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Reflection;
 using System.Linq;
-using System.Text;
 using System.Reflection.Emit;
 
 namespace Ibasa.Pikala
@@ -102,22 +100,21 @@ namespace Ibasa.Pikala
             }
         }
 
+        private AssemblyFilter _pickleByValueFilter;
         private Dictionary<Type, IReducer> _reducers;
-        private HashSet<Assembly> _unreferanceableAssemblies;
 
         // Variables that are written to the start of the Pikala stream for framing checks
         private const uint _header = ((byte)'P' << 24 | (byte)'K' << 16 | (byte)'L' << 8 | (byte)'A');
         private const uint _version = 1U;
 
-        public Pickler()
+        public Pickler(AssemblyFilter pickleByValueFilter = null)
         {
+            // By default assume nothing needs to be pickled by value
+            _pickleByValueFilter = pickleByValueFilter ?? new InclusiveAssemblyFilter();
             _reducers = new Dictionary<Type, IReducer>();
-            _unreferanceableAssemblies = new HashSet<Assembly>();
 
             RegisterReducer(new DictionaryReducer());
         }
-
-        public ISet<Assembly> UnreferanceableAssemblies => _unreferanceableAssemblies;
 
         public bool RegisterReducer(IReducer reducer)
         {
