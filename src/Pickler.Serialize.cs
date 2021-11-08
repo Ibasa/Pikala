@@ -10,12 +10,16 @@ namespace Ibasa.Pikala
 {
     public sealed partial class Pickler
     {
+        private static readonly Assembly mscorlib = typeof(int).Assembly;
+
         private bool PickleByValue(Assembly assembly)
         {
             return
-                _pickleByValueFilter.Contains(assembly) ||
+                // We never pickle mscorlib by value, even if _pickleByValuePredicate returns true for it
+                assembly != mscorlib && (
                 assembly.IsDynamic ||
-                assembly.Location == "";
+                assembly.Location == "" ||
+                _pickleByValuePredicate(assembly));
         }
 
         private static void WriteEnumerationValue(BinaryWriter writer, TypeCode typeCode, object value)
