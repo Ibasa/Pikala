@@ -11,8 +11,7 @@ namespace Ibasa.Pikala.Tests
     {
         private Pickler CreatePickler()
         {
-            var filter = new InclusiveAssemblyFilter() { System.Reflection.Assembly.GetExecutingAssembly() };
-            return new Pickler(filter);
+            return new Pickler(assembly => assembly == System.Reflection.Assembly.GetExecutingAssembly());
         }
 
         [Fact]
@@ -64,8 +63,7 @@ namespace Ibasa.Pikala.Tests
     {
         private Pickler CreatePickler()
         {
-            var filter = new InclusiveAssemblyFilter() { System.Reflection.Assembly.GetExecutingAssembly() };
-            return new Pickler(filter);
+            return new Pickler(assembly => assembly == System.Reflection.Assembly.GetExecutingAssembly());
         }
 
         [Fact]
