@@ -56,7 +56,7 @@ namespace Ibasa.Pikala
             throw new Exception($"Invalid type code '{typeCode}' for enumeration");
         }
 
-        private void SerializeConstructorHeader(PicklerSerializationState state, Type[] genericTypeParameters, ConstructorInfo constructor)
+        private void SerializeConstructorHeader(PicklerSerializationState state, Type[]? genericTypeParameters, ConstructorInfo constructor)
         {
             state.Writer.Write((int)constructor.Attributes);
             state.Writer.Write((int)constructor.CallingConvention);
@@ -93,7 +93,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeMethodHeader(PicklerSerializationState state, Type[] genericTypeParameters, MethodInfo method)
+        private void SerializeMethodHeader(PicklerSerializationState state, Type[]? genericTypeParameters, MethodInfo method)
         {
             state.Writer.Write(method.Name);
             state.Writer.Write((int)method.Attributes);
@@ -162,7 +162,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private HashSet<Type> CollectTypes(Type[] genericTypeParameters, Module methodModule, Type[] genericMethodParameters, MethodBody methodBody)
+        private HashSet<Type> CollectTypes(Type[]? genericTypeParameters, Module methodModule, Type[]? genericMethodParameters, MethodBody methodBody)
         {
             var types = new HashSet<Type>();
             var ilStream = new MemoryStream(methodBody.GetILAsByteArray());
@@ -281,7 +281,7 @@ namespace Ibasa.Pikala
             return types;
         }
 
-        private void SerializeMethodBody(PicklerSerializationState state, Type[] genericTypeParameters, Module methodModule, Type[] genericMethodParameters, MethodBody methodBody)
+        private void SerializeMethodBody(PicklerSerializationState state, Type[]? genericTypeParameters, Module methodModule, Type[]? genericMethodParameters, MethodBody methodBody)
         {
             var ilStream = new MemoryStream(methodBody.GetILAsByteArray());
             var ilReader = new BinaryReader(ilStream);
@@ -418,7 +418,7 @@ namespace Ibasa.Pikala
             state.Writer.Write((byte)0xFF);
         }
 
-        private void SerializeType(PicklerSerializationState state, Type type, Type[] genericParameters)
+        private void SerializeType(PicklerSerializationState state, Type type, Type[]? genericParameters)
         {
             if (type.IsValueType)
             {
@@ -649,7 +649,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeObject(PicklerSerializationState state, object obj, Type objType, Type staticType, Type[] genericTypeParameters, Type[] genericMethodParameters)
+        private void SerializeObject(PicklerSerializationState state, object obj, Type objType, Type staticType, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             // If we call this we know obj is not memoised or null or an enum 
             // or any of the types explictly in System.TypeCode
@@ -848,7 +848,7 @@ namespace Ibasa.Pikala
                             state.Writer.Write((byte)TypeDef.Class);
                         }
 
-                        Type[] genericParameters = null;
+                        Type[]? genericParameters = null;
                         if (!type.IsEnum)
                         {
                             // Enums never have generic parameters so we don't even write out a count for them
@@ -1086,7 +1086,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void Serialize(PicklerSerializationState state, object obj, Type staticType, Type[] genericTypeParameters = null, Type[] genericMethodParameters = null)
+        private void Serialize(PicklerSerializationState state, object obj, Type staticType, Type[]? genericTypeParameters = null, Type[]? genericMethodParameters = null)
         {
             if (Object.ReferenceEquals(obj, null))
             {
