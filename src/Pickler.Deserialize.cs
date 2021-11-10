@@ -671,8 +671,7 @@ namespace Ibasa.Pikala
 
             var result = ctor.Invoke(new object[] { info, context });
 
-            System.Runtime.Serialization.IDeserializationCallback deserializationCallback;
-            if ((deserializationCallback = result as System.Runtime.Serialization.IDeserializationCallback) != null)
+            if (result is System.Runtime.Serialization.IDeserializationCallback deserializationCallback)
             {
                 deserializationCallback.OnDeserialization(this);
             }
@@ -683,13 +682,12 @@ namespace Ibasa.Pikala
         private object DeserializeReducer(PicklerDeserializationState state, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             var method = (PickledMethodBase)Deserialize(state, typeof(MethodBase), genericTypeParameters, genericMethodParameters);
-            PickledConstructorInfo constructorInfo; PickledMethodInfo methodInfo;
-            if ((constructorInfo = method as PickledConstructorInfo) != null)
+            if (method is PickledConstructorInfo constructorInfo)
             {
                 var args = ReducePickle((object[])Deserialize(state, typeof(object[]), genericTypeParameters, genericMethodParameters));
                 return constructorInfo.Invoke(args);
             }
-            else if ((methodInfo = method as PickledMethodInfo) != null)
+            else if (method is PickledMethodInfo methodInfo)
             {
                 var target = ReducePickle(Deserialize(state, typeof(object), genericTypeParameters, genericMethodParameters));
                 var args = ReducePickle((object[])Deserialize(state, typeof(object[]), genericTypeParameters, genericMethodParameters));
@@ -735,18 +733,18 @@ namespace Ibasa.Pikala
         }
 
         // TODO It would be good to only return PickledObject things as part of typedef construction and not have that recurse through Deserialize
-        private object ReducePickle(object obj)
+        private object? ReducePickle(object? obj)
         {
-            if (obj is PickledObject)
+            if (obj is PickledObject pickledObject)
             {
-                return ((PickledObject)obj).Get();
+                return pickledObject.Get();
             }
             return obj;
         }
 
-        private object[] ReducePickle(object[] obj)
+        private object?[] ReducePickle(object?[] obj)
         {
-            object[] result = new object[obj.Length];
+            object?[] result = new object?[obj.Length];
             for (int i = 0; i < result.Length; ++i)
             {
                 result[i] = ReducePickle(obj[i]);
@@ -768,8 +766,7 @@ namespace Ibasa.Pikala
             var name = state.Reader.ReadString();
 
             PropertyInfo result;
-            PickledTypeInfoRef typeInfo; PickledTypeInfoDef constructingType;
-            if ((constructingType = type as PickledTypeInfoDef) != null)
+            if (type is PickledTypeInfoDef constructingType)
             {
                 result = null;
                 foreach (var property in constructingType.Properties)
@@ -785,7 +782,7 @@ namespace Ibasa.Pikala
                     throw new Exception($"Could not load property '{name}' from type '{constructingType.TypeBuilder.FullName}'");
                 }
             }
-            else if ((typeInfo = type as PickledTypeInfoRef) != null)
+            else if (type is PickledTypeInfoRef typeInfo)
             {
                 result = typeInfo.Type.GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
                 if (result == null)
@@ -1025,9 +1022,8 @@ namespace Ibasa.Pikala
             var parent = Deserialize(state, typeof(object), genericTypeParameters, genericMethodParameters);
             var typeName = state.Reader.ReadString();
 
-            PickledTypeInfoRef result;
-            Module module; PickledTypeInfoRef declaringType; PickledMethodInfoRef declaringMethod;
-            if ((module = parent as Module) != null)
+            PickledTypeInfoRef? result;
+            if (parent is Module module)
             {
                 result = new PickledTypeInfoRef(module.GetType(typeName));
                 if (result == null)
@@ -1035,7 +1031,7 @@ namespace Ibasa.Pikala
                     throw new Exception($"Could not load type '{typeName}' from module '{module.FullyQualifiedName}'");
                 }
             }
-            else if ((declaringType = parent as PickledTypeInfoRef) != null)
+            else if (parent is PickledTypeInfoRef declaringType)
             {
                 result = new PickledTypeInfoRef(declaringType.Type.GetNestedType(typeName, BindingFlags.Public | BindingFlags.NonPublic));
                 if (result == null)
@@ -1043,7 +1039,7 @@ namespace Ibasa.Pikala
                     throw new Exception($"Could not load type '{typeName}' from type '{declaringType}'");
                 }
             }
-            else if ((declaringMethod = parent as PickledMethodInfoRef) != null)
+            else if (parent is PickledMethodInfoRef declaringMethod)
             {
                 var generics = declaringMethod.MethodInfo.GetGenericArguments();
 
@@ -1094,12 +1090,11 @@ namespace Ibasa.Pikala
                 var (callback, _) = DeserializeWithMemo(state, position, (object parent) =>
                 {
                     PickledTypeInfoDef result;
-                    ModuleBuilder module; PickledTypeInfoDef declaringType;
-                    if ((module = parent as ModuleBuilder) != null)
+                    if (parent is ModuleBuilder module)
                     {
                         result = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, module.DefineType);
                     }
-                    else if ((declaringType = parent as PickledTypeInfoDef) != null)
+                    else if (parent is PickledTypeInfoDef declaringType)
                     {
                         result = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, declaringType.TypeBuilder.DefineNestedType);
                     }
@@ -1231,7 +1226,7 @@ namespace Ibasa.Pikala
             return (memo, result as T);
         }
 
-        private object Deserialize(PicklerDeserializationState state, Type staticType, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
+        private object? Deserialize(PicklerDeserializationState state, Type staticType, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             var position = state.Reader.BaseStream.Position;
 
@@ -1451,7 +1446,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        public object Deserialize(Stream stream)
+        public object? Deserialize(Stream stream)
         {
             using var state = new PicklerDeserializationState(stream);
             // Firstly read the header to make sure it looks like a Pikala stream
@@ -1467,9 +1462,9 @@ namespace Ibasa.Pikala
             }
 
             var result = Deserialize(state, typeof(object), null, null);
-            if (result is PickledObject)
+            if (result is PickledObject pickledObject)
             {
-                return ((PickledObject)result).Get();
+                return pickledObject.Get();
             }
             state.DoFixups();
             state.DoStaticFields();

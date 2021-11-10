@@ -597,8 +597,7 @@ namespace Ibasa.Pikala
         private void WriteCustomAttributeValue(PicklerSerializationState state, object value, Type staticType)
         {
             // argument might be a ReadOnlyCollection[CustomAttributeTypedArgument] but we should write that as just an array of values
-            System.Collections.ObjectModel.ReadOnlyCollection<CustomAttributeTypedArgument> collection;
-            if ((collection = value as System.Collections.ObjectModel.ReadOnlyCollection<CustomAttributeTypedArgument>) != null)
+            if (value is System.Collections.ObjectModel.ReadOnlyCollection<CustomAttributeTypedArgument> collection)
             {
                 var result = new object[collection.Count];
                 for (int i = 0; i < result.Length; ++i)
@@ -1008,8 +1007,7 @@ namespace Ibasa.Pikala
                 Serialize(state, method, typeof(MethodBase));
 
                 // Assert properties of the reduction
-                ConstructorInfo constructorInfo; MethodInfo methodInfo;
-                if ((constructorInfo = method as ConstructorInfo) != null)
+                if (method is ConstructorInfo constructorInfo)
                 {
                     if (target != null)
                     {
@@ -1024,7 +1022,7 @@ namespace Ibasa.Pikala
                     // We don't write target for ConstructorInfo, it must be null.
                     Serialize(state, args, typeof(object[]));
                 }
-                else if ((methodInfo = method as MethodInfo) != null)
+                else if (method is MethodInfo methodInfo)
                 {
                     if (methodInfo.ReturnType != objType)
                     {
