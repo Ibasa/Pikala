@@ -159,7 +159,7 @@ namespace Ibasa.Pikala
             TypeBuilder = typeBuilder;
         }
 
-        Type _type = null;
+        Type? _type = null;
         public bool FullyDefined { get; set; }
 
         public Type CreateType()

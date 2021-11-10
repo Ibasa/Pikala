@@ -205,14 +205,14 @@ namespace Ibasa.Pikala
             return memocallback;
         }
 
-        Stack<(Action, Action)> trailers = new Stack<(Action, Action)>();
+        Stack<(Action?, Action)> trailers = new Stack<(Action?, Action)>();
         int trailerDepth = 0;
 
         public void CheckTrailers()
         {
             if (trailers.Count != 0)
             {
-                throw new Exception("Serializatino trailers count should of been zero");
+                throw new Exception("Serialization trailers count should of been zero");
             }
         }
 
@@ -245,7 +245,7 @@ namespace Ibasa.Pikala
             return result;
         }
 
-        public void PushTrailer(Action trailer, Action footer, Action staticField)
+        public void PushTrailer(Action? trailer, Action footer, Action? staticField)
         {
             trailers.Push((trailer, footer));
             if (staticField != null)

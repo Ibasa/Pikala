@@ -528,7 +528,7 @@ namespace Ibasa.Pikala
             });
         }
 
-        private PickledTypeInfoDef ConstructingTypeForTypeDef(TypeDef typeDef, string typeName, TypeAttributes typeAttributes, Func<string, TypeAttributes, Type, TypeBuilder> defineType)
+        private PickledTypeInfoDef ConstructingTypeForTypeDef(TypeDef typeDef, string typeName, TypeAttributes typeAttributes, Func<string, TypeAttributes, Type?, TypeBuilder> defineType)
         {
 
             switch (typeDef)
