@@ -32,7 +32,7 @@ namespace Ibasa.Pikala
                     return reader.ReadUInt64();
             }
 
-            throw new Exception(string.Format("Invalid type code '{0}' for enumeration", typeCode));
+            throw new Exception($"Invalid type code '{typeCode}' for enumeration");
         }
 
         private static Type TypeFromTypeCode(TypeCode typeCode)
@@ -58,7 +58,7 @@ namespace Ibasa.Pikala
                     return typeof(ulong);
             }
 
-            throw new NotImplementedException(string.Format("Unhandled type code '{0}' for TypeFromTypeCode", typeCode));
+            throw new NotImplementedException($"Unhandled type code '{typeCode}' for TypeFromTypeCode");
         }
 
         private void DeserializeConstructorHeader(PicklerDeserializationState state, Type[] genericTypeParameters, PickledTypeInfoDef constructingType, ref PickledConstructorInfoDef constructingConstructor)
@@ -345,7 +345,7 @@ namespace Ibasa.Pikala
 
 
                     default:
-                        throw new NotImplementedException(string.Format("Unknown OpCode.OperandType {0}", opCode.OperandType));
+                        throw new NotImplementedException($"Unknown OpCode.OperandType {opCode.OperandType}");
                 }
             }
         }
@@ -421,8 +421,7 @@ namespace Ibasa.Pikala
 
                 if (targetMethod == null)
                 {
-                    throw new Exception(string.Format(
-                        "Could not find {0}.{1}", typeBuilder, targetMethodSignature));
+                    throw new Exception($"Could not find {typeBuilder}.{targetMethodSignature}");
                 }
 
                 typeBuilder.DefineMethodOverride(targetMethod, interfaceMethod.MethodInfo);
@@ -513,7 +512,7 @@ namespace Ibasa.Pikala
 
                     if (fieldInfo == null)
                     {
-                        throw new Exception(string.Format("Could not find static field '{0}' on type '{1}'", fieldName, type.Name));
+                        throw new Exception($"Could not find static field '{fieldName}' on type '{type.Name}'");
                     }
 
                     try
@@ -547,8 +546,7 @@ namespace Ibasa.Pikala
                     return new PickledTypeInfoDef(typeDef, defineType(typeName, typeAttributes, null));
 
                 default:
-                    throw new Exception(string.Format(
-                        "Unrecgonized TypeDef: {0}", typeDef));
+                    throw new Exception($"Unrecgonized TypeDef: {typeDef}");
             }
         }
 
@@ -668,8 +666,7 @@ namespace Ibasa.Pikala
 
             if (ctor == null)
             {
-                throw new Exception(string.Format(
-                    "Could not deserialize type '{0}' expected a constructor (SerializationInfo, StreamingContext)", type));
+                throw new Exception($"Could not deserialize type '{type}' expected a constructor (SerializationInfo, StreamingContext)");
             }
 
             var result = ctor.Invoke(new object[] { info, context });
@@ -700,8 +697,7 @@ namespace Ibasa.Pikala
             }
             else
             {
-                throw new Exception(string.Format(
-                    "Invalid reduction MethodBase was '{0}'.", method));
+                throw new Exception($"Invalid reduction MethodBase was '{method}'.");
             }
         }
 
@@ -711,9 +707,7 @@ namespace Ibasa.Pikala
             var fieldCount = state.Reader.Read7BitEncodedInt();
             if (fields.Length != fieldCount)
             {
-                throw new Exception(string.Format(
-                    "Can not deserialize type '{0}', serialised {1} fields but type expects {2}",
-                    type, fieldCount, fields.Length));
+                throw new Exception($"Can not deserialize type '{type}', serialised {fieldCount} fields but type expects {fields.Length}");
             }
 
             for (int i = 0; i < fieldCount; ++i)
@@ -731,9 +725,7 @@ namespace Ibasa.Pikala
 
                 if (toSet == null)
                 {
-                    throw new Exception(string.Format(
-                        "Can not deserialize type '{0}', could not find expected field '{1}'",
-                        type, name));
+                    throw new Exception($"Can not deserialize type '{type}', could not find expected field '{name}'");
                 }
 
                 object value = ReducePickle(Deserialize(state, toSet.FieldType, genericTypeParameters, genericMethodParameters));
@@ -790,8 +782,7 @@ namespace Ibasa.Pikala
                 }
                 if (result == null)
                 {
-                    throw new Exception(string.Format(
-                        "Could not load property '{0}' from type '{1}'", name, constructingType.TypeBuilder.FullName));
+                    throw new Exception($"Could not load property '{name}' from type '{constructingType.TypeBuilder.FullName}'");
                 }
             }
             else if ((typeInfo = type as PickledTypeInfoRef) != null)
@@ -799,14 +790,12 @@ namespace Ibasa.Pikala
                 result = typeInfo.Type.GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
                 if (result == null)
                 {
-                    throw new Exception(string.Format(
-                        "Could not load property '{0}' from type '{1}'", name, typeInfo.Type.FullName));
+                    throw new Exception($"Could not load property '{name}' from type '{typeInfo.Type.FullName}'");
                 }
             }
             else
             {
-                throw new Exception(string.Format(
-                    "Unexpected parent '{0}' for property '{1}'", type, name));
+                throw new Exception($"Unexpected parent '{type}' for property '{name}'");
             }
             return state.SetMemo(position, result);
         }
@@ -867,8 +856,7 @@ namespace Ibasa.Pikala
             var assembly = Assembly.Load(assemblyName);
             if (assembly == null)
             {
-                throw new Exception(string.Format(
-                    "Could not load assembly '{0}'", assemblyName));
+                throw new Exception($"Could not load assembly '{assemblyName}'");
             }
             return state.SetMemo(position, assembly);
         }
@@ -916,7 +904,7 @@ namespace Ibasa.Pikala
             var assembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.RunAndCollect, assemblyAttributes);
             if (assembly == null)
             {
-                throw new Exception(string.Format("Could not define assembly '{0}'", assemblyName));
+                throw new Exception($"Could not define assembly '{assemblyName}'");
             }
             state.SetMemo(position, assembly);
             ReadCustomAttributes(state, assembly.SetCustomAttribute, genericTypeParameters, genericMethodParameters);
@@ -930,8 +918,7 @@ namespace Ibasa.Pikala
             var module = assembly.GetModule(name);
             if (module == null)
             {
-                throw new Exception(string.Format(
-                    "Could not load module '{0}' from assembly '{1}'", name, assembly));
+                throw new Exception($"Could not load module '{name}' from assembly '{assembly}'");
             }
             return state.SetMemo(position, module);
         }
@@ -944,8 +931,7 @@ namespace Ibasa.Pikala
                 var module = assembly.DefineDynamicModule(name);
                 if (module == null)
                 {
-                    throw new Exception(string.Format(
-                        "Could not create module '{0}' in assembly '{1}'", name, assembly));
+                    throw new Exception($"Could not create module '{name}' in assembly '{assembly}'");
                 }
                 return state.SetMemo(position, module);
             }, typeof(Assembly), genericTypeParameters, genericMethodParameters);
@@ -1046,8 +1032,7 @@ namespace Ibasa.Pikala
                 result = new PickledTypeInfoRef(module.GetType(typeName));
                 if (result == null)
                 {
-                    throw new Exception(string.Format(
-                        "Could not load type '{0}' from module '{1}'", typeName, module.FullyQualifiedName));
+                    throw new Exception($"Could not load type '{typeName}' from module '{module.FullyQualifiedName}'");
                 }
             }
             else if ((declaringType = parent as PickledTypeInfoRef) != null)
@@ -1055,8 +1040,7 @@ namespace Ibasa.Pikala
                 result = new PickledTypeInfoRef(declaringType.Type.GetNestedType(typeName, BindingFlags.Public | BindingFlags.NonPublic));
                 if (result == null)
                 {
-                    throw new Exception(string.Format(
-                        "Could not load type '{0}' from type '{1}'", typeName, declaringType));
+                    throw new Exception($"Could not load type '{typeName}' from type '{declaringType}'");
                 }
             }
             else if ((declaringMethod = parent as PickledMethodInfoRef) != null)
@@ -1075,14 +1059,12 @@ namespace Ibasa.Pikala
 
                 if (result == null)
                 {
-                    throw new Exception(string.Format(
-                        "Could not load generic parameter '{0}' from type '{1}'", typeName, declaringMethod));
+                    throw new Exception($"Could not load generic parameter '{typeName}' from type '{declaringMethod}'");
                 }
             }
             else
             {
-                throw new Exception(string.Format(
-                    "Unexpected parent '{0}' for type '{1}'", parent, typeName));
+                throw new Exception($"Unexpected parent '{parent}' for type '{typeName}'");
             }
             return state.SetMemo(position, result);
         }
@@ -1123,8 +1105,7 @@ namespace Ibasa.Pikala
                     }
                     else
                     {
-                        throw new Exception(string.Format(
-                            "Unexpected parent '{0} : {1}' for type '{2}'", parent, parent.GetType().FullName, typeName));
+                        throw new Exception($"Unexpected parent '{parent} : {parent.GetType().FullName}' for type '{typeName}'");
                     }
 
                     if (genericParameters != null)
@@ -1238,9 +1219,7 @@ namespace Ibasa.Pikala
 
                 default:
                     {
-                        throw new Exception(string.Format(
-                            "Unhandled PickleOperation '{0}'",
-                                operation));
+                        throw new Exception($"Unhandled PickleOperation '{operation}'");
                     }
             }
         }
@@ -1343,8 +1322,7 @@ namespace Ibasa.Pikala
                             return uninitializedObject;
 
                         default:
-                            throw new Exception(string.Format(
-                                "Unexpected operation {0} in a static type context of {1}", operation, staticType));
+                            throw new Exception($"Unexpected operation {operation} in a static type context of {staticType}");
                     }
                 }
             }
@@ -1485,7 +1463,7 @@ namespace Ibasa.Pikala
             var version = state.Reader.ReadUInt32();
             if (version != _version)
             {
-                throw new InvalidDataException(string.Format("Input stream does not match expected version. Got {0}, expected {1}", version, _version));
+                throw new InvalidDataException($"Input stream does not match expected version. Got {version}, expected {_version}");
             }
 
             var result = Deserialize(state, typeof(object), null, null);
