@@ -1219,7 +1219,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private (MemoCallback<R>, T) DeserializeWithMemo<T, R>(PicklerDeserializationState state, long position, Func<T, R> callback, Type staticType, Type[]? genericTypeParameters, Type[]? genericMethodParameters) where T : class
+        private (MemoCallback<R>, T?) DeserializeWithMemo<T, R>(PicklerDeserializationState state, long position, Func<T, R> callback, Type staticType, Type[]? genericTypeParameters, Type[]? genericMethodParameters) where T : class where R : class
         {
             var memo = state.RegisterMemoCallback(position, callback);
             var result = Deserialize(state, staticType, genericTypeParameters, genericMethodParameters);

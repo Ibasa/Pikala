@@ -1,32 +1,30 @@
 ﻿using System;
 using System.IO;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Ibasa.Pikala
 { 
     abstract class MemoCallback
     {
-        public abstract object? InvokeUntyped();
+        public abstract object InvokeUntyped();
     }
 
-    sealed class MemoCallback<T> : MemoCallback
+    sealed class MemoCallback<T> : MemoCallback where T : class
     {
         Func<T>? _handler;
-        [MaybeNull]
-        T _result;
+        T? _result;
 
         public MemoCallback(Func<T> handler)
         {
             _handler = handler;
         }
 
-        [return:MaybeNull]
         public T Invoke()
         {
             if (_handler == null)
             {
-                return _result;
+                // We know if _handler is null we must of called it and it will of returned a value for _result.
+                return _result!;
             }
             else
             {
@@ -36,7 +34,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        public override object? InvokeUntyped()
+        public override object InvokeUntyped()
         {
             return Invoke();
         }
@@ -186,7 +184,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        public MemoCallback<R> RegisterMemoCallback<T, R>(long offset, Func<T, R> callback) where T : class
+        public MemoCallback<R> RegisterMemoCallback<T, R>(long offset, Func<T, R> callback) where T : class where R : class
         {
             var objectOffset = Reader.BaseStream.Position;
             Func<R> handler = () => {
