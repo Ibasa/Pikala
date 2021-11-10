@@ -24,6 +24,11 @@ namespace Ibasa.Pikala.Tests
                 }
                 return false;
             }
+
+            public override int GetHashCode()
+            {
+                return HashCode.Combine(X, Y, Z);
+            }
         }
 
         public class NestingClass
@@ -125,6 +130,11 @@ namespace Ibasa.Pikala.Tests
                     return Equals((StructureTypeWithGeneric<T>)obj);
                 }
                 return false;
+            }
+
+            public override int GetHashCode()
+            {
+                return Foo.GetHashCode();
             }
 
             public override string ToString()
