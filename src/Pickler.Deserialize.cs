@@ -765,7 +765,7 @@ namespace Ibasa.Pikala
             var type = Deserialize(state, typeof(Type), genericTypeParameters, genericMethodParameters);
             var name = state.Reader.ReadString();
 
-            PropertyInfo result;
+            PropertyInfo? result;
             if (type is PickledTypeInfoDef constructingType)
             {
                 result = null;
