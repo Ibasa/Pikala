@@ -9,7 +9,7 @@ namespace Ibasa.Pikala
     public interface IReducer
     {
         public Type Type { get; }
-        public (MethodBase, object, object[]) Reduce(Type type, object obj);
+        public (MethodBase, object?, object[]) Reduce(Type type, object obj);
     }
 
     enum PickleOperation : byte
@@ -107,7 +107,7 @@ namespace Ibasa.Pikala
         private const uint _header = ((byte)'P' << 24 | (byte)'K' << 16 | (byte)'L' << 8 | (byte)'A');
         private const uint _version = 1U;
 
-        public Pickler(Func<Assembly, bool> pickleByValuePredicate = null)
+        public Pickler(Func<Assembly, bool>? pickleByValuePredicate = null)
         {
             // By default assume nothing needs to be pickled by value
             _pickleByValuePredicate = pickleByValuePredicate ?? (_ => false);

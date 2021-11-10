@@ -1,21 +1,19 @@
 ﻿using System;
 using System.IO;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Ibasa.Pikala
 { 
     abstract class MemoCallback
     {
-        public abstract object InvokeUntyped();
+        public abstract object? InvokeUntyped();
     }
 
     sealed class MemoCallback<T> : MemoCallback
     {
         Func<T> _handler;
+        [MaybeNull]
         T _result;
 
         public MemoCallback(Func<T> handler)
@@ -23,6 +21,7 @@ namespace Ibasa.Pikala
             _handler = handler;
         }
 
+        [return:MaybeNull]
         public T Invoke()
         {
             if (_handler == null)
@@ -37,7 +36,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        public override object InvokeUntyped()
+        public override object? InvokeUntyped()
         {
             return Invoke();
         }

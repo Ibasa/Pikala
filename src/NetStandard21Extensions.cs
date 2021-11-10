@@ -49,7 +49,7 @@ namespace Ibasa.Pikala
             return type.IsAssignableFrom(self);
         }
 
-        public static void WriteNullableString(this BinaryWriter self, string value)
+        public static void WriteNullableString(this BinaryWriter self, string? value)
         {
             if (value == null)
             {
@@ -62,7 +62,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        public static string ReadNullableString(this BinaryReader self)
+        public static string? ReadNullableString(this BinaryReader self)
         {
             var length = self.Read7BitEncodedInt();
             if (length == -1)
