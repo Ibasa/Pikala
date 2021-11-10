@@ -67,7 +67,7 @@ namespace Ibasa.Pikala
             var callingConvention = (CallingConventions)state.Reader.ReadInt32();
 
             var parameterCount = state.Reader.Read7BitEncodedInt();
-            Type[] parameterTypes = null;
+            Type[]? parameterTypes = null;
             if (parameterCount != 0)
             {
                 parameterTypes = new Type[parameterCount];
@@ -409,7 +409,7 @@ namespace Ibasa.Pikala
 
             foreach (var (interfaceMethod, targetMethodSignature) in interfaceMap)
             {
-                MethodInfo targetMethod = null;
+                MethodInfo? targetMethod = null;
                 foreach (var method in constructingType.Methods)
                 {
                     if (targetMethodSignature == method.GetSignature())
@@ -501,7 +501,7 @@ namespace Ibasa.Pikala
                 for (int i = 0; i < staticFields.Length; ++i)
                 {
                     var fieldName = state.Reader.ReadString();
-                    FieldInfo fieldInfo = null;
+                    FieldInfo? fieldInfo = null;
                     for (int j = 0; j < staticFields.Length; ++j)
                     {
                         if (fieldName == staticFields[j].Name)
@@ -711,7 +711,7 @@ namespace Ibasa.Pikala
             for (int i = 0; i < fieldCount; ++i)
             {
                 var name = state.Reader.ReadString();
-                FieldInfo toSet = null;
+                FieldInfo? toSet = null;
                 foreach (var field in fields)
                 {
                     if (field.Name == name)
@@ -812,7 +812,7 @@ namespace Ibasa.Pikala
         {
             var signature = state.Reader.ReadString();
             var genericArgumentCount = state.Reader.Read7BitEncodedInt();
-            PickledTypeInfo[] genericArguments = null;
+            PickledTypeInfo[]? genericArguments = null;
             if (genericArgumentCount != 0)
             {
                 genericArguments = new PickledTypeInfo[genericArgumentCount];
@@ -897,7 +897,8 @@ namespace Ibasa.Pikala
         private Assembly DeserializeAsesmblyDef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             var assemblyName = new AssemblyName(state.Reader.ReadString());
-            IEnumerable<CustomAttributeBuilder> assemblyAttributes = null;
+            // TODO Shouldn't we be loading attributes here
+            IEnumerable<CustomAttributeBuilder>? assemblyAttributes = null;
             var assembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.RunAndCollect, assemblyAttributes);
             if (assembly == null)
             {
@@ -969,7 +970,7 @@ namespace Ibasa.Pikala
                 for (int i = 0; i < fields.Length; ++i)
                 {
                     var fieldName = state.Reader.ReadString();
-                    FieldInfo fieldInfo = null;
+                    FieldInfo? fieldInfo = null;
                     for (int j = 0; j < fields.Length; ++j)
                     {
                         if (fieldName == fields[j].FieldInfo.Name)
@@ -1072,7 +1073,7 @@ namespace Ibasa.Pikala
                 var typeName = state.Reader.ReadString();
                 var typeAttributes = (TypeAttributes)state.Reader.ReadInt32();
                 var typeDef = (TypeDef)state.Reader.ReadByte();
-                string[] genericParameters = null;
+                string[]? genericParameters = null;
                 if (typeDef != TypeDef.Enum)
                 {
                     // Enums never have generic parameters, but anything else might
