@@ -53,7 +53,7 @@ namespace Ibasa.Pikala
                     return;
             }
 
-            throw new Exception(string.Format("Invalid type code '{0}' for enumeration", typeCode));
+            throw new Exception($"Invalid type code '{typeCode}' for enumeration");
         }
 
         private void SerializeConstructorHeader(PicklerSerializationState state, Type[] genericTypeParameters, ConstructorInfo constructor)
@@ -274,7 +274,7 @@ namespace Ibasa.Pikala
                         }
 
                     default:
-                        throw new NotImplementedException(string.Format("{0}", opCode.OperandType));
+                        throw new NotImplementedException($"Unknown Opcode.OperandType {opCode.OperandType}");
                 }
             }
 
@@ -410,7 +410,7 @@ namespace Ibasa.Pikala
                         }
 
                     default:
-                        throw new NotImplementedException(string.Format("{0}", opCode.OperandType));
+                        throw new NotImplementedException($"Unknown Opcode.OperandType {opCode.OperandType}");
                 }
             }
 
@@ -568,8 +568,7 @@ namespace Ibasa.Pikala
 
             if (obj.Rank > byte.MaxValue)
             {
-                throw new Exception(
-                    string.Format("Can not serialize array of rank {0}", obj.Rank));
+                throw new Exception($"Can not serialize array of rank {obj.Rank}");
             }
 
             state.Writer.Write((byte)PickleOperation.Array);
@@ -801,8 +800,7 @@ namespace Ibasa.Pikala
                     }
                     else
                     {
-                        throw new Exception(string.Format(
-                            "'{0}' is a generic parameter but is not bound to a type or method", type));
+                        throw new Exception($"'{type}' is a generic parameter but is not bound to a type or method");
                     }
                     state.Writer.Write7BitEncodedInt(type.GenericParameterPosition);
                 }
@@ -1015,14 +1013,12 @@ namespace Ibasa.Pikala
                 {
                     if (target != null)
                     {
-                        throw new Exception(string.Format(
-                            "Invalid reduction for type '{0}'. MethodBase was a ConstructorInfo but Target was not null.", objType));
+                        throw new Exception($"Invalid reduction for type '{objType}'. MethodBase was a ConstructorInfo but Target was not null.");
                     }
 
                     if (constructorInfo.DeclaringType != objType)
                     {
-                        throw new Exception(string.Format(
-                            "Invalid reduction for type '{0}'. MethodBase was a ConstructorInfo for '{0}'.", objType, constructorInfo.DeclaringType));
+                        throw new Exception($"Invalid reduction for type '{objType}'. MethodBase was a ConstructorInfo for '{constructorInfo.DeclaringType}'.");
                     }
 
                     // We don't write target for ConstructorInfo, it must be null.
@@ -1032,8 +1028,7 @@ namespace Ibasa.Pikala
                 {
                     if (methodInfo.ReturnType != objType)
                     {
-                        throw new Exception(string.Format(
-                            "Invalid reduction for type '{0}'. MethodBase was a MethodInfo that returns '{0}'.", objType, methodInfo.ReturnType));
+                        throw new Exception($"Invalid reduction for type '{objType}'. MethodBase was a MethodInfo that returns '{methodInfo.ReturnType}'.");
                     }
 
                     Serialize(state, target, typeof(object));
@@ -1041,8 +1036,7 @@ namespace Ibasa.Pikala
                 }
                 else
                 {
-                    throw new Exception(string.Format(
-                        "Invalid reduction for type '{0}'. MethodBase was '{1}'.", objType, method));
+                    throw new Exception($"Invalid reduction for type '{objType}'. MethodBase was '{method}'.");
                 }
             }
 
@@ -1071,8 +1065,7 @@ namespace Ibasa.Pikala
 
             else if (objType.IsAssignableTo(typeof(MarshalByRefObject)))
             {
-                throw new Exception(string.Format(
-                    "Type '{0}' is not automaticly serializable as it inherits from MarshalByRefObject.", objType));
+                throw new Exception($"Type '{objType}' is not automaticly serializable as it inherits from MarshalByRefObject.");
             }
 
             else
@@ -1109,8 +1102,7 @@ namespace Ibasa.Pikala
                 // used for native sized numbers
                 if (objType.IsPointer || objType == typeof(Pointer))
                 {
-                    throw new Exception(string.Format(
-                        "Pointer types are not serializable: '{0}'", objType));
+                    throw new Exception($"Pointer types are not serializable: '{objType}'");
                 }
 
                 if (state.DoMemo(obj, staticType))
@@ -1242,9 +1234,7 @@ namespace Ibasa.Pikala
                         return;
                 }
 
-                throw new Exception(string.Format(
-                    "Unhandled TypeCode '{0}' for type '{1}'",
-                    typeCode, objType));
+                throw new Exception($"Unhandled TypeCode '{typeCode}' for type '{objType}'");
             }
         }
 

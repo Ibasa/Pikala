@@ -413,7 +413,7 @@ namespace Ibasa.Pikala.Tests
 
             var expected = match.Groups[1].Value;
 
-            Assert.True(expected == actual, string.Format("README.md needs updating with string \"{0}\"", actual));
+            Assert.True(expected == actual, $"README.md needs updating with string \"{actual}\"");
         }
     }
 }

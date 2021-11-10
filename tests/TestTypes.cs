@@ -92,7 +92,7 @@ namespace Ibasa.Pikala.Tests
 
             public override string ToString()
             {
-                return string.Format("{0}, {1}", Foo, Bar);
+                return $"{Foo}, {Bar}";
             }
         }
 
@@ -109,7 +109,7 @@ namespace Ibasa.Pikala.Tests
 
             public override string ToString()
             {
-                return string.Format("{0}, {1}", Foo, Bar);
+                return $"{Foo}, {Bar}";
             }
         }
 
@@ -139,7 +139,7 @@ namespace Ibasa.Pikala.Tests
 
             public override string ToString()
             {
-                return string.Format("{0}", Foo);
+                return Foo.ToString();
             }
         }
 
@@ -162,7 +162,7 @@ namespace Ibasa.Pikala.Tests
 
             public override string ToString()
             {
-                return string.Format("{0}, {1}", Foo, Bar);
+                return $"{Foo}, {Bar}";
             }
         }
 
@@ -304,7 +304,7 @@ namespace Ibasa.Pikala.Tests
 
             public override string ToString()
             {
-                return string.Format("I'm a B with an A.{0}", A?.Foo);
+                return $"I'm a B with an A.{A?.Foo}";
             }
         }
 
@@ -315,7 +315,7 @@ namespace Ibasa.Pikala.Tests
 
             public override string ToString()
             {
-                return string.Format("I'm an A with a B.{0}", B?.Bar);
+                return $"I'm an A with a B.{B?.Bar}";
             }
         }
 
@@ -336,7 +336,7 @@ namespace Ibasa.Pikala.Tests
 
             public override string ToString()
             {
-                return string.Format("Static = {0} Instance = {1}", Setup, Foo);
+                return $"Static = {Setup} Instance = {Foo}";
             }
         }
 
@@ -360,7 +360,7 @@ namespace Ibasa.Pikala.Tests
 
             public override string ToString()
             {
-                return string.Format("{0} {1}", GetSomething(), GetSomethingElse());
+                return $"{GetSomething()}, {GetSomethingElse()}";
             }
         }
 

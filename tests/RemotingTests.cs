@@ -64,8 +64,7 @@ namespace Ibasa.Pikala.Tests
 
                 if (process.ExitCode != 0)
                 {
-                    throw new Exception(string.Format(
-                        "FSI failed with {0}\nstdout: {1}\nstderr: {2}", process.ExitCode, stdout, stderr));
+                    throw new Exception($"FSI failed with {process.ExitCode}\nstdout: {stdout}\nstderr: {stderr}");
                 }
 
                 return stdout.ToString();

@@ -52,7 +52,7 @@ namespace Ibasa.Pikala
 
         public long Position { get; }
 
-        public override string Message => string.Format("Tried to reference object from position {0} in the stream, but that object is not yet created.", Position);
+        public override string Message => $"Tried to reference object from position {Position} in the stream, but that object is not yet created.";
     }
 
     sealed class PicklerDeserializationState : IDisposable
@@ -110,20 +110,17 @@ namespace Ibasa.Pikala
                     }
                     else
                     {
-                        throw new Exception(string.Format(
-                            "Tried to load type '{0}' from assembly '{1}' but it's not yet fully defined", args.Name, args.RequestingAssembly));
+                        throw new Exception($"Tried to load type '{args.Name}' from assembly '{args.RequestingAssembly}' but it's not yet fully defined");
                     }
                 }
                 else
                 {
-                    throw new Exception(string.Format(
-                        "Tried to load type '{0}' from assembly '{1}' but it's not yet defined", args.Name, args.RequestingAssembly));
+                    throw new Exception($"Tried to load type '{args.Name}' from assembly '{args.RequestingAssembly}' but it's not yet defined");
                 }
             }
             else
             {
-                throw new Exception(string.Format(
-                    "Tried to load type '{0}' from assembly '{1}' but assembly isn't known", args.Name, args.RequestingAssembly));
+                throw new Exception($"Tried to load type '{args.Name}' from assembly '{args.RequestingAssembly}' but assembly isn't known");
             }
             return args.RequestingAssembly;
         }
@@ -202,8 +199,7 @@ namespace Ibasa.Pikala
                 }
                 else
                 {
-                    throw new Exception(string.Format(
-                        "Tried to reference object from position {0} in the stream with callback for {1}, but that object is not yet created.", offset, objectOffset));
+                    throw new Exception($"Tried to reference object from position {offset} in the stream with callback for {objectOffset}, but that object is not yet created.");
                 }
             };
 

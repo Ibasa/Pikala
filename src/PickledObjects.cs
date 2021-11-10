@@ -43,7 +43,7 @@ namespace Ibasa.Pikala
                 }
             }
 
-            throw new Exception(string.Format("Could not load constructor '{0}' from type '{1}'", signature, Type.Name));
+            throw new Exception($"Could not load constructor '{signature}' from type '{Type.Name}'");
         }
 
         public override PickledMethodInfo GetMethod(string signature)
@@ -57,7 +57,7 @@ namespace Ibasa.Pikala
                 }
             }
 
-            throw new Exception(string.Format("Could not load method '{0}' from type '{1}'", signature, Type.Name));
+            throw new Exception($"Could not load method '{signature}' from type '{Type.Name}'");
         }
 
         public override PickledFieldInfo GetField(string name)
@@ -65,7 +65,7 @@ namespace Ibasa.Pikala
             var result = Type.GetField(name, BindingsAll);
             if (result == null)
             {
-                throw new Exception(string.Format("Could not load field '{0}' from type '{1}'", name, Type.Name));
+                throw new Exception($"Could not load field '{name}' from type '{Type.Name}'");
             }
             return new PickledFieldInfoRef(result);
         }
@@ -200,7 +200,7 @@ namespace Ibasa.Pikala
                 }
             }
 
-            throw new Exception(string.Format("Could not load constructor '{0}' from type '{1}'", signature, TypeBuilder.Name));
+            throw new Exception($"Could not load constructor '{signature}' from type '{TypeBuilder.Name}'");
         }
 
         public override PickledMethodInfo GetMethod(string signature)
@@ -212,8 +212,8 @@ namespace Ibasa.Pikala
                     return method;
                 }
             }
-            
-            throw new Exception(string.Format("Could not load method '{0}' from type '{1}'", signature, TypeBuilder.Name));
+
+            throw new Exception($"Could not load method '{signature}' from type '{TypeBuilder.Name}'");
         }
 
         public override PickledFieldInfo GetField(string name)
@@ -226,7 +226,7 @@ namespace Ibasa.Pikala
                 }
             }
 
-            throw new Exception(string.Format("Could not load field '{0}' from type '{1}'", name, TypeBuilder.Name));
+            throw new Exception($"Could not load field '{name}' from type '{TypeBuilder.Name}'");
         }
 
         public override PickledTypeInfo GetGenericArgument(int position)
@@ -296,7 +296,7 @@ namespace Ibasa.Pikala
                     }
                 }
 
-                throw new Exception(string.Format("Could not load method '{0}' from type '{1}'", signature, DeclaringType.Type.Name));
+                throw new Exception($"Could not load method '{signature}' from type '{DeclaringType.Type.Name}'");
             }
         }
 
