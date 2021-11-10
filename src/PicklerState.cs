@@ -12,7 +12,7 @@ namespace Ibasa.Pikala
 
     sealed class MemoCallback<T> : MemoCallback
     {
-        Func<T> _handler;
+        Func<T>? _handler;
         [MaybeNull]
         T _result;
 
