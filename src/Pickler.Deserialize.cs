@@ -701,7 +701,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void DeserializeObject(PicklerDeserializationState state, object uninitializedObject, Type type, Type[] genericTypeParameters, Type[] genericMethodParameters)
+        private void DeserializeObject(PicklerDeserializationState state, object uninitializedObject, Type type, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             var fields = GetSerializedFields(type);
             var fieldCount = state.Reader.Read7BitEncodedInt();

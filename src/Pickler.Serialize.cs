@@ -1086,7 +1086,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void Serialize(PicklerSerializationState state, object obj, Type staticType, Type[]? genericTypeParameters = null, Type[]? genericMethodParameters = null)
+        private void Serialize(PicklerSerializationState state, object? obj, Type staticType, Type[]? genericTypeParameters = null, Type[]? genericMethodParameters = null)
         {
             if (Object.ReferenceEquals(obj, null))
             {
@@ -1238,7 +1238,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        public void Serialize(Stream stream, object rootObject)
+        public void Serialize(Stream stream, object? rootObject)
         {
             var state = new PicklerSerializationState(stream);
 
