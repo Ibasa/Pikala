@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Ibasa.Pikala
 { 
@@ -156,7 +157,8 @@ namespace Ibasa.Pikala
             }
         }
 
-        public T SetMemo<T>(long position, T value)
+        [return:NotNull]
+        public T SetMemo<T>(long position, [DisallowNull]T value)
         {
             memo.Add(position, value);
             return value;
@@ -190,7 +192,7 @@ namespace Ibasa.Pikala
             Func<R> handler = () => {
                 if (memo.TryGetValue(objectOffset, out var obj))
                 {
-                    var result = callback(obj as T);
+                    var result = callback((T)obj);
                     memoCallbacks.Remove(offset);
                     return result;
                 }
