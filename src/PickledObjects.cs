@@ -302,10 +302,10 @@ namespace Ibasa.Pikala
 
 
         public MethodBuilder MethodBuilder { get; }
-        public GenericTypeParameterBuilder[] GenericParameters { get; set; }
-        public ParameterBuilder[] Parameters { get; set; }
-        public Type[] ParameterTypes { get; set; }
-        public PickledTypeInfo[] Locals { get; set; }
+        public GenericTypeParameterBuilder[]? GenericParameters { get; set; }
+        public ParameterBuilder[]? Parameters { get; set; }
+        public Type[]? ParameterTypes { get; set; }
+        public PickledTypeInfo[]? Locals { get; set; }
 
         public override PickledTypeInfo GetGenericArgument(int position)
         {
@@ -669,10 +669,13 @@ namespace Ibasa.Pikala
 
     sealed class PickledConstructorInfoDef : PickledConstructorInfo
     {
-        public PickledConstructorInfoDef(PickledTypeInfoDef constructingType, ConstructorBuilder constructorBuilder)
+        public PickledConstructorInfoDef(PickledTypeInfoDef constructingType, ConstructorBuilder constructorBuilder, ParameterBuilder[]? parameters, Type[]? parameterTypes, PickledTypeInfo[]? locals)
         {
             ConstructingType = constructingType;
             ConstructorBuilder = constructorBuilder;
+            Parameters = parameters;
+            ParameterTypes = parameterTypes;
+            Locals = locals;
         }
 
         public override ConstructorInfo ConstructorInfo
@@ -737,9 +740,9 @@ namespace Ibasa.Pikala
 
         public PickledTypeInfoDef ConstructingType { get; }
         public ConstructorBuilder ConstructorBuilder { get; }
-        public ParameterBuilder[] Parameters { get; set; }
-        public Type[] ParameterTypes { get; set; }
-        public PickledTypeInfo[] Locals { get; set; }
+        public ParameterBuilder[]? Parameters { get; }
+        public Type[]? ParameterTypes { get; }
+        public PickledTypeInfo[]? Locals { get; }
     }
 
     abstract class PickledFieldInfo : PickledMemberInfo

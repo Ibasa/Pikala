@@ -62,7 +62,7 @@ namespace Ibasa.Pikala
             throw new NotImplementedException($"Unhandled type code '{typeCode}' for TypeFromTypeCode");
         }
 
-        private void DeserializeConstructorHeader(PicklerDeserializationState state, Type[]? genericTypeParameters, PickledTypeInfoDef constructingType, ref PickledConstructorInfoDef constructingConstructor)
+        private void DeserializeConstructorHeader(PicklerDeserializationState state, Type[]? genericTypeParameters, PickledTypeInfoDef constructingType, out PickledConstructorInfoDef constructingConstructor)
         {
             var methodAttributes = (MethodAttributes)state.Reader.ReadInt32();
             var callingConvention = (CallingConventions)state.Reader.ReadInt32();
@@ -81,17 +81,16 @@ namespace Ibasa.Pikala
 
             var typeBuilder = constructingType.TypeBuilder;
             var constructorBuilder = typeBuilder.DefineConstructor(methodAttributes, callingConvention, parameterTypes);
-            constructingConstructor = new PickledConstructorInfoDef(constructingType, constructorBuilder);
-            constructingConstructor.ParameterTypes = parameterTypes;
 
-            if (parameterCount != 0)
+            ParameterBuilder[]? parameters = null;
+            if (parameterTypes != null)
             {
-                constructingConstructor.Parameters = new ParameterBuilder[parameterCount];
-                for (int j = 0; j < constructingConstructor.ParameterTypes.Length; ++j)
+                parameters = new ParameterBuilder[parameterCount];
+                for (int j = 0; j < parameterTypes.Length; ++j)
                 {
                     var parameterName = state.Reader.ReadNullableString();
                     var parameterAttributes = (ParameterAttributes)state.Reader.ReadInt32();
-                    constructingConstructor.Parameters[j] = constructorBuilder.DefineParameter(1 + j, parameterAttributes, parameterName);
+                    parameters[j] = constructorBuilder.DefineParameter(1 + j, parameterAttributes, parameterName);
                 }
             }
 
@@ -99,8 +98,10 @@ namespace Ibasa.Pikala
 
             constructorBuilder.InitLocals = state.Reader.ReadBoolean();
 
-            constructingConstructor.Locals = new PickledTypeInfo[state.Reader.Read7BitEncodedInt()];
-            for (int j = 0; j < constructingConstructor.Locals.Length; ++j)
+            var locals = new PickledTypeInfo[state.Reader.Read7BitEncodedInt()];
+            constructingConstructor = new PickledConstructorInfoDef(constructingType, constructorBuilder, parameters, parameterTypes, locals);
+
+            for (int j = 0; j < locals.Length; ++j)
             {
                 // We can't actually DECLARE locals here, so store them on the ConstructingMethod till construction time
                 constructingConstructor.Locals[j] = Deserialize<PickledTypeInfo>(state, typeof(Type), genericTypeParameters, null);
@@ -398,7 +399,7 @@ namespace Ibasa.Pikala
             constructingType.Constructors = new PickledConstructorInfoDef[constructorCount];
             for (int i = 0; i < constructorCount; ++i)
             {
-                DeserializeConstructorHeader(state, constructingType.GenericParameters, constructingType, ref constructingType.Constructors[i]);
+                DeserializeConstructorHeader(state, constructingType.GenericParameters, constructingType, out constructingType.Constructors[i]);
             }
 
             var methodCount = state.Reader.Read7BitEncodedInt();
@@ -583,12 +584,12 @@ namespace Ibasa.Pikala
                     MethodAttributes.RTSpecialName | MethodAttributes.HideBySig | MethodAttributes.Public,
                     CallingConventions.Standard, constructorParameters);
                 constructorBuilder.SetImplementationFlags(MethodImplAttributes.Runtime);
-                var constructingConstructor = new PickledConstructorInfoDef(constructingType, constructorBuilder);
-                constructingConstructor.ParameterTypes = constructorParameters;
-                constructingConstructor.Parameters = new ParameterBuilder[] {
+                var parameters = new ParameterBuilder[] {
                     constructorBuilder.DefineParameter(1, ParameterAttributes.None, "object"),
                     constructorBuilder.DefineParameter(2, ParameterAttributes.None, "method"),
                 };
+
+                var constructingConstructor = new PickledConstructorInfoDef(constructingType, constructorBuilder, parameters, constructorParameters, null);
                 constructingType.Constructors = new PickledConstructorInfoDef[] { constructingConstructor };
 
                 var returnType = Deserialize<PickledTypeInfo>(state, typeof(Type), constructingType.GenericParameters, null);
