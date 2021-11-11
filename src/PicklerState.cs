@@ -1,10 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Ibasa.Pikala
 { 
@@ -13,10 +10,10 @@ namespace Ibasa.Pikala
         public abstract object InvokeUntyped();
     }
 
-    sealed class MemoCallback<T> : MemoCallback
+    sealed class MemoCallback<T> : MemoCallback where T : class
     {
-        Func<T> _handler;
-        T _result;
+        Func<T>? _handler;
+        T? _result;
 
         public MemoCallback(Func<T> handler)
         {
@@ -27,7 +24,8 @@ namespace Ibasa.Pikala
         {
             if (_handler == null)
             {
-                return _result;
+                // We know if _handler is null we must of called it and it will of returned a value for _result.
+                return _result!;
             }
             else
             {
@@ -159,7 +157,8 @@ namespace Ibasa.Pikala
             }
         }
 
-        public T SetMemo<T>(long position, T value)
+        [return:NotNull]
+        public T SetMemo<T>(long position, [DisallowNull]T value)
         {
             memo.Add(position, value);
             return value;
@@ -187,13 +186,13 @@ namespace Ibasa.Pikala
             }
         }
 
-        public MemoCallback<R> RegisterMemoCallback<T, R>(long offset, Func<T, R> callback) where T : class
+        public MemoCallback<R> RegisterMemoCallback<T, R>(long offset, Func<T, R> callback) where T : class where R : class
         {
             var objectOffset = Reader.BaseStream.Position;
             Func<R> handler = () => {
                 if (memo.TryGetValue(objectOffset, out var obj))
                 {
-                    var result = callback(obj as T);
+                    var result = callback((T)obj);
                     memoCallbacks.Remove(offset);
                     return result;
                 }
@@ -208,14 +207,14 @@ namespace Ibasa.Pikala
             return memocallback;
         }
 
-        Stack<(Action, Action)> trailers = new Stack<(Action, Action)>();
+        Stack<(Action?, Action)> trailers = new Stack<(Action?, Action)>();
         int trailerDepth = 0;
 
         public void CheckTrailers()
         {
             if (trailers.Count != 0)
             {
-                throw new Exception("Serializatino trailers count should of been zero");
+                throw new Exception("Serialization trailers count should of been zero");
             }
         }
 
@@ -248,7 +247,7 @@ namespace Ibasa.Pikala
             return result;
         }
 
-        public void PushTrailer(Action trailer, Action footer, Action staticField)
+        public void PushTrailer(Action? trailer, Action footer, Action? staticField)
         {
             trailers.Push((trailer, footer));
             if (staticField != null)
