@@ -728,13 +728,14 @@ namespace Ibasa.Pikala
                     throw new Exception($"Can not deserialize type '{type}', could not find expected field '{name}'");
                 }
 
-                object value = ReducePickle(Deserialize(state, toSet.FieldType, genericTypeParameters, genericMethodParameters));
+                object? value = ReducePickle(Deserialize(state, toSet.FieldType, genericTypeParameters, genericMethodParameters));
 
                 toSet.SetValue(uninitializedObject, value);
             }
         }
 
         // TODO It would be good to only return PickledObject things as part of typedef construction and not have that recurse through Deserialize
+        [return:NotNullIfNotNull("obj")]
         private object? ReducePickle(object? obj)
         {
             if (obj is PickledObject pickledObject)
