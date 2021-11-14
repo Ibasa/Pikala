@@ -902,9 +902,7 @@ namespace Ibasa.Pikala
         private Assembly DeserializeAsesmblyDef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             var assemblyName = new AssemblyName(state.Reader.ReadString());
-            // TODO Shouldn't we be loading attributes here
-            IEnumerable<CustomAttributeBuilder>? assemblyAttributes = null;
-            var assembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.RunAndCollect, assemblyAttributes);
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.RunAndCollect, null);
             if (assembly == null)
             {
                 throw new Exception($"Could not define assembly '{assemblyName}'");

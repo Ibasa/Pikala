@@ -511,5 +511,30 @@ namespace Ibasa.Pikala.Tests
 
             Assert.Equal("Read", result.ToString());
         }
+
+        [Fact]
+        public void TestReturnAssembly()
+        {
+            var script = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "[<assembly: System.Reflection.AssemblyCompanyAttribute \"Ibasa\">]",
+                "do ()",
+                "let value = System.Reflection.Assembly.GetExecutingAssembly()",
+                "let base64 = serializeBase64 value",
+                "printf \"%s\" base64",
+            });
+
+            var result = Base64ToObject(RunFsi(script));
+
+            var assembly = Assert.IsAssignableFrom<System.Reflection.Assembly>(result);
+
+            var name = assembly.GetName();
+            Assert.Equal("FSI-ASSEMBLY", name.Name);
+            var companysAttribute =
+                Assert.IsType<System.Reflection.AssemblyCompanyAttribute>(
+                    Assert.Single(assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyCompanyAttribute), false)));
+            Assert.Equal("Ibasa", companysAttribute.Company);
+        }
     }
 }
