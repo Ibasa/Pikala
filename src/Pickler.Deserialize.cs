@@ -571,6 +571,8 @@ namespace Ibasa.Pikala
                     enumerationField.SetConstant(value);
                 }
 
+                ReadCustomAttributes(state, typeBuilder.SetCustomAttribute, null, null);
+
                 constructingType.FullyDefined = true;
 
                 state.PushTrailer(null, () => constructingType.CreateType(), null);
