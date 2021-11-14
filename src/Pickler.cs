@@ -104,7 +104,7 @@ namespace Ibasa.Pikala
         private Dictionary<Type, IReducer> _reducers;
 
         // Variables that are written to the start of the Pikala stream for framing checks
-        private const uint _header = ((byte)'P' << 24 | (byte)'K' << 16 | (byte)'L' << 8 | (byte)'A');
+        private const uint _header = ((byte)'P' << 0 | (byte)'K' << 8 | (byte)'L' << 16 | (byte)'A' << 24);
         private const uint _version = 1U;
 
         public Pickler(Func<Assembly, bool>? pickleByValuePredicate = null)
