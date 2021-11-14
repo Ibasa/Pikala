@@ -38,7 +38,7 @@ Deserialize a `Func<int, int>`:
 using Ibasa.Pikala
 
 // This is a snapshot of serializing `(Func<int, int>)Math.Abs`
-var memoryStream = new MemoryStream(Convert.FromBase64String("QUxLUAEAAAAjHxcWGlN5c3RlbS5Qcml2YXRlLkNvcmVMaWIuZGxsFVlTeXN0ZW0uUHJpdmF0ZS5Db3JlTGliLCBWZXJzaW9uPTUuMC4wLjAsIEN1bHR1cmU9bmV1dHJhbCwgUHVibGljS2V5VG9rZW49N2NlYzg1ZDdiZWE3Nzk4ZQ1TeXN0ZW0uRnVuY2AyAhcUCwAAAAAAAAAMU3lzdGVtLkludDMyFJEAAAAAAAAAAQAaEUFicyhTeXN0ZW0uSW50MzIpABcUCwAAAAAAAAALU3lzdGVtLk1hdGg="));
+var memoryStream = new MemoryStream(Convert.FromBase64String("UEtMQQEAAAAjHxcWGlN5c3RlbS5Qcml2YXRlLkNvcmVMaWIuZGxsFVlTeXN0ZW0uUHJpdmF0ZS5Db3JlTGliLCBWZXJzaW9uPTUuMC4wLjAsIEN1bHR1cmU9bmV1dHJhbCwgUHVibGljS2V5VG9rZW49N2NlYzg1ZDdiZWE3Nzk4ZQ1TeXN0ZW0uRnVuY2AyAhcUCwAAAAAAAAAMU3lzdGVtLkludDMyFJEAAAAAAAAAAQAaEUFicyhTeXN0ZW0uSW50MzIpABcUCwAAAAAAAAALU3lzdGVtLk1hdGg="));
 
 var pickler = new Pickler();
 var function = pickler.Deserialize(memoryStream) as Func<int, int>;
