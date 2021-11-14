@@ -884,7 +884,8 @@ namespace Ibasa.Pikala
                                 WriteEnumerationValue(state.Writer, typeCode, values.GetValue(i));
                             }
 
-                            // TODO We're not saving attributes
+                            var customAttributes = type.CustomAttributes.ToArray();
+                            WriteCustomAttributes(state, customAttributes);
                         }
                         else if (type.IsAssignableTo(typeof(Delegate)))
                         {

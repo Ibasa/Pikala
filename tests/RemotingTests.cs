@@ -485,5 +485,31 @@ namespace Ibasa.Pikala.Tests
             var type = result.GetType();
             Assert.True(Microsoft.FSharp.Reflection.FSharpType.IsUnion(type, null));
         }
+
+        [Fact]
+        public void TestReturnEnumWithCustomAttributes()
+        {
+            var script = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "[<System.FlagsAttribute>]",
+                "type SomeFlags = Read = 1 | Write = 2",
+                "let value = SomeFlags.Read",
+                "let base64 = serializeBase64 value",
+                "printf \"%s\" base64",
+            });
+
+            var result = Base64ToObject(RunFsi(script));
+
+            var type = result.GetType();
+
+            Assert.Equal("SomeFlags", type.Name);
+            var flagsAttribute =
+                Assert.IsType<FlagsAttribute>(
+                    Assert.Single(type.GetCustomAttributes(typeof(FlagsAttribute), false)));
+            Assert.NotNull(flagsAttribute);
+
+            Assert.Equal("Read", result.ToString());
+        }
     }
 }
