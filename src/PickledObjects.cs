@@ -179,11 +179,11 @@ namespace Ibasa.Pikala
             }
         }
         public TypeBuilder TypeBuilder { get; }
-        public GenericTypeParameterBuilder[] GenericParameters { get; set; }
-        public PickledFieldInfoDef[] Fields { get; set; }
-        public PropertyBuilder[] Properties { get; set; }
-        public PickledMethodInfoDef[] Methods { get; set; }
-        public PickledConstructorInfoDef[] Constructors { get; set; }
+        public GenericTypeParameterBuilder[]? GenericParameters { get; set; }
+        public PickledFieldInfoDef[]? Fields { get; set; }
+        public PropertyBuilder[]? Properties { get; set; }
+        public PickledMethodInfoDef[]? Methods { get; set; }
+        public PickledConstructorInfoDef[]? Constructors { get; set; }
 
         public override string ToString()
         {
