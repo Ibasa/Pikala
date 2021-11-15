@@ -241,7 +241,7 @@ namespace Ibasa.Pikala
 
         public abstract MethodInfo MethodInfo { get; }
 
-        public virtual object Invoke(object? target, params object[] parameters)
+        public virtual object Invoke(object? target, params object?[] parameters)
         {
             return MethodInfo.Invoke(target, parameters);
         }
@@ -642,7 +642,7 @@ namespace Ibasa.Pikala
 
         public abstract ConstructorInfo ConstructorInfo { get; }
 
-        public virtual object Invoke(params object[] parameters)
+        public virtual object Invoke(params object?[] parameters)
         {
             return ConstructorInfo.Invoke(parameters);
         }
