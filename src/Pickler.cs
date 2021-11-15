@@ -82,7 +82,7 @@ namespace Ibasa.Pikala
 
         static Pickler()
         {
-            // For converting raw IL bytes back into serialisavble instructions
+            // For converting raw IL bytes back into serialisable instructions
             _oneByteOpCodes = new OpCode[0xe1];
             _twoByteOpCodes = new OpCode[0xef];
             foreach (var field in typeof(OpCodes).GetFields(BindingFlags.Public | BindingFlags.Static))
