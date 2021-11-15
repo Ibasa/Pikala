@@ -35,34 +35,36 @@ namespace Ibasa.Pikala
         DBNull = 16,
 
         // Basic types
-        String,
-        Enum,
-        Array,
+        String = 17,
+        Enum = 18,
+        Array = 19,
 
         // Memoised
-        Memo,
+        Memo = 20,
 
         // Reflection
-        AssemblyRef,
-        ModuleRef,
-        TypeRef,
-        FieldRef,
-        PropertyRef,
-        MethodRef,
-        ConstructorRef,
-        AssemblyDef,
-        ModuleDef,
-        TypeDef,
-        GenericInstantiation,
-        GenericParameter,
-        TVar,
-        MVar,
+        AssemblyRef = 21,
+        ModuleRef = 22,
+        TypeRef = 23,
+        FieldRef = 24,
+        PropertyRef = 25,
+        MethodRef = 26,
+        ConstructorRef = 27,
+        AssemblyDef = 28,
+        ModuleDef = 29,
+        TypeDef = 30,
+        GenericInstantiation = 31,
+        GenericParameter = 32,
+        TVar = 33,
+        MVar = 34,
 
         // Structs and classes
-        Delegate,
-        Reducer,
-        ISerializable,
-        Object,
+        Delegate = 35,
+        Reducer = 36,
+        ISerializable = 37,
+        Object = 38,
+
+        // This is written as a byte so we're limited to 255 operations
     }
 
     enum TypeDef
