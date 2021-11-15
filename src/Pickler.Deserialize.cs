@@ -556,7 +556,7 @@ namespace Ibasa.Pikala
         {
             if (constructingType.TypeDef == TypeDef.Enum)
             {
-                var typeCode = (TypeCode)state.Reader.ReadInt32();
+                var typeCode = (TypeCode)state.Reader.ReadByte();
                 var underlyingType = TypeFromTypeCode(typeCode);
                 var typeBuilder = constructingType.TypeBuilder;
                 typeBuilder.DefineField("value__", underlyingType, FieldAttributes.Private | FieldAttributes.SpecialName);
