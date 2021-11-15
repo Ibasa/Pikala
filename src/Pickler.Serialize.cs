@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Linq;
-using System.Text;
 using System.Reflection.Emit;
 
 namespace Ibasa.Pikala
@@ -872,7 +871,7 @@ namespace Ibasa.Pikala
                         {
                             // enums are nice and simple, just a TypeCode and some string primitive fields
                             var typeCode = Type.GetTypeCode(type);
-                            state.Writer.Write((int)typeCode);
+                            state.Writer.Write((byte)typeCode);
 
                             var values = type.GetEnumValues();
                             var names = type.GetEnumNames();
