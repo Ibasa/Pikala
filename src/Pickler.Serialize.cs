@@ -589,7 +589,23 @@ namespace Ibasa.Pikala
             }
             else
             {
-                throw new NotImplementedException();
+                if (obj.Rank > byte.MaxValue)
+                {
+                    // Who has 256 rank arrays!?
+                    throw new NotImplementedException($"Pikala does not support arrays of rank higher than {byte.MaxValue}");
+                }
+
+                // This might just be rank 1 but with non-normal bounds
+                state.Writer.Write((byte)obj.Rank);
+                for (int dimension = 0; dimension < obj.Rank; ++dimension)
+                {
+                    state.Writer.Write7BitEncodedInt(obj.GetLength(dimension));
+                    state.Writer.Write7BitEncodedInt(obj.GetLowerBound(dimension));
+                }
+                foreach (var item in obj)
+                {
+                    Serialize(state, item, elementType);
+                }
             }
         }
 

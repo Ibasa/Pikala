@@ -415,5 +415,25 @@ namespace Ibasa.Pikala.Tests
 
             Assert.True(expected == actual, $"README.md needs updating with string \"{actual}\"");
         }
+
+        [Property]
+        public Property TestJaggedIntArray()
+        {
+            var pickler = new Pickler();
+
+            return Prop.ForAll(
+                Arb.From<int[][]>(),
+                value => RoundTrip.Assert(pickler, value));
+        }
+
+        [Property]
+        public Property TestMultirankIntArray()
+        {
+            var pickler = new Pickler();
+
+            return Prop.ForAll(
+                Arb.From<int[,]>(),
+                value => RoundTrip.Assert(pickler, value));
+        }
     }
 }

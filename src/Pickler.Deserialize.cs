@@ -646,7 +646,54 @@ namespace Ibasa.Pikala
             }
             else
             {
-                throw new NotImplementedException();
+                var lengths = new int[rank];
+                var lowerBounds = new int[rank];
+                var indices = new int[rank];
+                for (int dimension = 0; dimension < rank; ++dimension)
+                {
+                    lengths[dimension] = state.Reader.Read7BitEncodedInt();
+                    lowerBounds[dimension] = indices[dimension] = state.Reader.Read7BitEncodedInt();
+                }
+                var array = Array.CreateInstance(elementType.Type, lengths, lowerBounds);
+
+                void Iterate()
+                {
+                    // The first time we call into Iterate we know the array is non-empty, and indices is equal to lowerBounds (i.e the first element)
+                    // If we reach the last element we don't call back into Iterate
+
+                    var item = ReducePickle(Deserialize(state, elementType.Type, genericTypeParameters, genericMethodParameters));
+                    array.SetValue(item, indices);
+
+                    // Increment indices to the next position, we work through the dimensions backwards because that matches the order that GetEnumerator returns when we serialise out the items
+                    var didBreak = false;
+                    for (int dimension = rank - 1; dimension >= 0; --dimension)
+                    {
+                        var next = indices[dimension] + 1;
+                        if (next < lowerBounds[dimension] + lengths[dimension])
+                        {
+                            indices[dimension] = next;
+                            didBreak = true;
+                            break;
+                        }
+                        else
+                        {
+                            indices[dimension] = lowerBounds[dimension];
+                        }
+                    }
+
+                    if (didBreak) { Iterate(); }
+                }
+
+                // If the array is empty (any length == 0) we save calling into Iterate
+                bool isEmpty = false;
+                for (int dimension = 0; dimension < rank; ++dimension)
+                {
+                    isEmpty |= lengths[dimension] == 0;
+                }
+
+                if (!isEmpty) { Iterate(); }
+
+                return array;
             }
         }
 
