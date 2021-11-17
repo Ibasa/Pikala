@@ -24,9 +24,9 @@ namespace Ibasa.Pikala
 
         public override bool CanWrite => _stream.CanWrite;
 
-        public override long Length => throw new NotImplementedException();
+        public override long Length => throw new NotImplementedException("Pikala should never need to get the stream length");
 
-        public override long Position { get => _position; set => throw new NotImplementedException(); }
+        public override long Position { get => _position; set => throw new NotImplementedException("Pikala should never need to seek the stream"); }
 
         public override void Flush()
         {
@@ -42,12 +42,12 @@ namespace Ibasa.Pikala
 
         public override long Seek(long offset, SeekOrigin origin)
         {
-            throw new NotImplementedException();
+            throw new NotImplementedException("Pikala should never need to seek the stream");
         }
 
         public override void SetLength(long value)
         {
-            throw new NotImplementedException();
+            throw new NotImplementedException("Pikala should never need to set the stream length");
         }
 
         public override void Write(byte[] buffer, int offset, int count)
