@@ -146,7 +146,7 @@ namespace Ibasa.Pikala
                     return DeclaringType.Type.GenericTypeArguments[Position];
                 }
 
-                return DeclaringType.GenericParameters[Position];
+                return DeclaringType.GenericParameters![Position];
             }
         }
     }
@@ -192,11 +192,14 @@ namespace Ibasa.Pikala
 
         public override PickledConstructorInfo GetConstructor(string signature)
         {
-            foreach (var constructor in Constructors)
+            if (Constructors != null)
             {
-                if (constructor.GetSignature() == signature)
+                foreach (var constructor in Constructors)
                 {
-                    return constructor;
+                    if (constructor.GetSignature() == signature)
+                    {
+                        return constructor;
+                    }
                 }
             }
 
@@ -205,11 +208,14 @@ namespace Ibasa.Pikala
 
         public override PickledMethodInfo GetMethod(string signature)
         {
-            foreach (var method in Methods)
+            if (Methods != null)
             {
-                if (method.GetSignature() == signature)
+                foreach (var method in Methods)
                 {
-                    return method;
+                    if (method.GetSignature() == signature)
+                    {
+                        return method;
+                    }
                 }
             }
 
@@ -218,11 +224,14 @@ namespace Ibasa.Pikala
 
         public override PickledFieldInfo GetField(string name)
         {
-            foreach (var field in Fields)
+            if (Fields != null)
             {
-                if (field.FieldBuilder.Name == name)
+                foreach (var field in Fields)
                 {
-                    return field;
+                    if (field.FieldBuilder.Name == name)
+                    {
+                        return field;
+                    }
                 }
             }
 
