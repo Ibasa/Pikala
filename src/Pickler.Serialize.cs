@@ -1123,12 +1123,6 @@ namespace Ibasa.Pikala
             // mscorlib gets saved as a single token
             if (Object.ReferenceEquals(obj, mscorlib)) { return false; }
 
-            // If this is the manifest module it's a single token
-            if (obj is Module module)
-            {
-                return module != module.Assembly.ManifestModule;
-            }
-
             return true;
         }
 
