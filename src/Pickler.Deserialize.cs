@@ -963,6 +963,12 @@ namespace Ibasa.Pikala
             return assembly;
         }
 
+        private Module DeserializeManifestModuleRef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
+        {
+            var assembly = DeserializeNonNull<Assembly>(state, typeof(Assembly), genericTypeParameters, genericMethodParameters);
+            return state.SetMemo(position, assembly.ManifestModule);
+        }
+
         private Module DeserializeModuleRef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             var name = state.Reader.ReadString();
@@ -1193,6 +1199,9 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.AssemblyDef:
                     return DeserializeAsesmblyDef(state, position, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.ManifestModuleRef:
+                    return DeserializeManifestModuleRef(state, position, genericTypeParameters, genericMethodParameters);
 
                 case PickleOperation.ModuleRef:
                     return DeserializeModuleRef(state, position, genericTypeParameters, genericMethodParameters);

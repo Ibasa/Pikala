@@ -766,8 +766,17 @@ namespace Ibasa.Pikala
                 }
                 else
                 {
-                    state.Writer.Write((byte)PickleOperation.ModuleRef);
-                    state.Writer.Write(module.Name);
+                    // We can just write a ref here, lets check if this is the ONLY module on the assembly (i.e. the ManifestModule)
+                    // because we can then write out a token instead of a name
+                    if (module == module.Assembly.ManifestModule)
+                    {
+                        state.Writer.Write((byte)PickleOperation.ManifestModuleRef);
+                    }
+                    else
+                    {
+                        state.Writer.Write((byte)PickleOperation.ModuleRef);
+                        state.Writer.Write(module.Name);
+                    }
                     Serialize(state, module.Assembly, typeof(Assembly));
                 }
             }
@@ -1103,6 +1112,27 @@ namespace Ibasa.Pikala
             }
         }
 
+        /// <summary>
+        /// There are some objects that we shouldn't bother to memoise because it's cheaper to just write their tokens.
+        /// </summary>
+        private bool ShouldMemo(object obj, Type staticType)
+        {
+            // If the static type is a value type we shouldn't memo because this is a value not a reference
+            if (staticType.IsValueType) { return false; }
+
+            // mscorlib gets saved as a single token
+            if (Object.ReferenceEquals(obj, mscorlib)) { return false; }
+
+            // If this is the manifest module it's a single token
+            if (obj is Module module)
+            {
+                return module != module.Assembly.ManifestModule;
+            }
+
+            return true;
+        }
+
+
         private void Serialize(PicklerSerializationState state, object? obj, Type staticType, Type[]? genericTypeParameters = null, Type[]? genericMethodParameters = null)
         {
             if (Object.ReferenceEquals(obj, null))
@@ -1122,7 +1152,7 @@ namespace Ibasa.Pikala
                     throw new Exception($"Pointer types are not serializable: '{objType}'");
                 }
 
-                if (state.DoMemo(obj, staticType))
+                if (ShouldMemo(obj, staticType) && state.DoMemo(obj))
                 {
                     return;
                 }

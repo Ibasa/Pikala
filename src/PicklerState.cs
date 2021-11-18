@@ -268,22 +268,19 @@ namespace Ibasa.Pikala
             Writer = new BinaryWriter(new PickleStream(stream));
         }
 
-        public bool DoMemo(object value, Type staticType)
+        public bool DoMemo(object value)
         {
-            if (!staticType.IsValueType)
+            if (memo.TryGetValue(value, out var offset))
             {
-                if (memo.TryGetValue(value, out var offset))
-                {
-                    Writer.Write((byte)PickleOperation.Memo);
-                    Writer.Write(offset);
-                    return true;
-                }
-                else
-                {
-                    // If this isn't a value type save it in the memo for any later (or self) references
-                    memo.Add(value, Writer.BaseStream.Position);
-                    return false;
-                }
+                Writer.Write((byte)PickleOperation.Memo);
+                Writer.Write(offset);
+                return true;
+            }
+            else
+            {
+                // If this isn't a value type save it in the memo for any later (or self) references
+                memo.Add(value, Writer.BaseStream.Position);
+                return false;
             }
             return false;
         }
