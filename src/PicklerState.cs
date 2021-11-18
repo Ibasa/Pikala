@@ -276,12 +276,9 @@ namespace Ibasa.Pikala
                 Writer.Write(offset);
                 return true;
             }
-            else
-            {
-                // If this isn't a value type save it in the memo for any later (or self) references
-                memo.Add(value, Writer.BaseStream.Position);
-                return false;
-            }
+
+            // Save it in the memo for any later (or self) references
+            memo.Add(value, Writer.BaseStream.Position);
             return false;
         }
 
