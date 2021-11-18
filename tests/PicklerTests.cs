@@ -499,5 +499,22 @@ namespace Ibasa.Pikala.Tests
                 return (value.Length, value[0], value[value.Length - 1]);
             });
         }
+
+        [FactSkip32Bit]
+        public void Test3GBArray()
+        {
+            LargeArrayTest(() =>
+            {
+                var value = (long[])Array.CreateInstance(typeof(long), 402653184);
+                value[0] = 1L;
+                value[value.Length - 1] = 100L;
+                return value;
+            },
+            value =>
+            {
+                // These are huge arrays so we just check that the lengths, first, and last elements are correct.
+                return (value.Length, value[0], value[value.Length - 1]);
+            });
+        }
     }
 }
