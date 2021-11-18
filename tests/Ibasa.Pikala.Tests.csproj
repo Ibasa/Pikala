@@ -28,4 +28,12 @@
     <ProjectReference Include="..\src\Ibasa.Pikala.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- This is so that the tests can run with gcAllowVeryLargeObjects enabled -->
+    <None Update="Ibasa.Pikala.Tests.config">
+      <Link>testhost.dll.config</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
