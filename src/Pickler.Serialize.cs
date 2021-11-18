@@ -1123,6 +1123,9 @@ namespace Ibasa.Pikala
             // mscorlib gets saved as a single token
             if (Object.ReferenceEquals(obj, mscorlib)) { return false; }
 
+            // The manifest module for mscorlib gets saved as two tokens, no worse than a memo and probably better
+            if (Object.ReferenceEquals(obj, mscorlib.ManifestModule)) { return false; }
+
             return true;
         }
 
