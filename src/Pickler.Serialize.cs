@@ -9,8 +9,6 @@ namespace Ibasa.Pikala
 {
     public sealed partial class Pickler
     {
-        private static readonly Assembly mscorlib = typeof(int).Assembly;
-
         private bool PickleByValue(Assembly assembly)
         {
             return
@@ -700,8 +698,13 @@ namespace Ibasa.Pikala
                 // This is an assembly, we need to emit an assembly name so it can be reloaded
                 var assembly = (Assembly)obj;
 
+                // Is this mscorlib? If so we write out a single token for it
+                if (assembly == mscorlib)
+                {
+                    state.Writer.Write((byte)PickleOperation.Mscorlib);
+                }
                 // Is this assembly one we should save by value?
-                if (PickleByValue(assembly))
+                else if (PickleByValue(assembly))
                 {
                     // Write out an assembly definition, we'll build a dynamic assembly for this on the other side
                     state.Writer.Write((byte)PickleOperation.AssemblyDef);

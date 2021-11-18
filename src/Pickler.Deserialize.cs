@@ -1184,6 +1184,10 @@ namespace Ibasa.Pikala
                 case PickleOperation.Array:
                     return DeserializeArray(state, position, genericTypeParameters, genericMethodParameters);
 
+                case PickleOperation.Mscorlib:
+                    // We don't memo mscorlib, it's cheaper to just have the single byte token
+                    return mscorlib;
+
                 case PickleOperation.AssemblyRef:
                     return DeserializeAsesmblyRef(state, position);
 
