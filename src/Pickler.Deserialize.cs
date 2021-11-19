@@ -628,12 +628,11 @@ namespace Ibasa.Pikala
             }
         }
 
-        private Array DeserializeArray(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
+        private Array DeserializeArray(PicklerDeserializationState state, bool isSZArray, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             var elementType = DeserializeNonNull<PickledTypeInfo>(state, typeof(Type), genericTypeParameters, genericMethodParameters);
-            var rank = state.Reader.ReadByte();
 
-            if (rank == 0)
+            if (isSZArray)
             {
                 var length = state.Reader.Read7BitEncodedInt();
                 var array = Array.CreateInstance(elementType.Type, length);
@@ -646,6 +645,7 @@ namespace Ibasa.Pikala
             }
             else
             {
+                var rank = state.Reader.ReadByte();
                 var lengths = new int[rank];
                 var lowerBounds = new int[rank];
                 var indices = new int[rank];
@@ -1187,8 +1187,9 @@ namespace Ibasa.Pikala
 
             switch (operation)
             {
+                case PickleOperation.SZArray:
                 case PickleOperation.Array:
-                    return DeserializeArray(state, position, genericTypeParameters, genericMethodParameters);
+                    return DeserializeArray(state, operation == PickleOperation.SZArray, position, genericTypeParameters, genericMethodParameters);
 
                 case PickleOperation.Mscorlib:
                     // We don't memo mscorlib, it's cheaper to just have the single byte token

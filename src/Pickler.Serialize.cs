@@ -565,34 +565,29 @@ namespace Ibasa.Pikala
 
             if (obj.Rank > byte.MaxValue)
             {
-                throw new Exception($"Can not serialize array of rank {obj.Rank}");
+                // Who has 256 rank arrays!? The runtime specification says this can be at most 32.
+                throw new NotImplementedException($"Pikala does not support arrays of rank higher than {byte.MaxValue}");
             }
 
-            state.Writer.Write((byte)PickleOperation.Array);
-            var elementType = objType.GetElementType();
-            Serialize(state, elementType, typeof(Type));
-
-            // Special case rank 1 with lower bound 0 
-            if (obj.Rank == 1 && obj.GetLowerBound(0) == 0)
+            // Special case szarray (i.e. Rank 1, lower bound 0)
+            if (objType.IsSZArray)
             {
-                // Rank 1 really but we use rank 0 as a special marker 
-                // for a "normal" array, that is one dimension and a lower 
-                // bound of zero.
-                state.Writer.Write((byte)0);
-                state.Writer.Write7BitEncodedInt(obj.Length);
-                foreach (var item in obj)
-                {
-                    Serialize(state, item, elementType);
-                }
+                state.Writer.Write((byte)PickleOperation.SZArray);
             }
             else
             {
-                if (obj.Rank > byte.MaxValue)
-                {
-                    // Who has 256 rank arrays!?
-                    throw new NotImplementedException($"Pikala does not support arrays of rank higher than {byte.MaxValue}");
-                }
+                state.Writer.Write((byte)PickleOperation.Array);
+            }
 
+            var elementType = objType.GetElementType();
+            Serialize(state, elementType, typeof(Type));
+
+            if (objType.IsSZArray)
+            {
+                state.Writer.Write7BitEncodedInt(obj.Length);
+            }
+            else
+            {
                 // This might just be rank 1 but with non-normal bounds
                 state.Writer.Write((byte)obj.Rank);
                 for (int dimension = 0; dimension < obj.Rank; ++dimension)
@@ -600,10 +595,10 @@ namespace Ibasa.Pikala
                     state.Writer.Write7BitEncodedInt(obj.GetLength(dimension));
                     state.Writer.Write7BitEncodedInt(obj.GetLowerBound(dimension));
                 }
-                foreach (var item in obj)
-                {
-                    Serialize(state, item, elementType);
-                }
+            }
+            foreach (var item in obj)
+            {
+                Serialize(state, item, elementType);
             }
         }
 
