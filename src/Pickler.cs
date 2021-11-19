@@ -43,26 +43,28 @@ namespace Ibasa.Pikala
         Memo = 20,
 
         // Reflection
-        AssemblyRef = 21,
-        ModuleRef = 22,
-        TypeRef = 23,
-        FieldRef = 24,
-        PropertyRef = 25,
-        MethodRef = 26,
-        ConstructorRef = 27,
-        AssemblyDef = 28,
-        ModuleDef = 29,
-        TypeDef = 30,
-        GenericInstantiation = 31,
-        GenericParameter = 32,
-        TVar = 33,
-        MVar = 34,
+        Mscorlib = 21,
+        AssemblyRef = 22,
+        ManifestModuleRef = 23,
+        ModuleRef = 24,
+        TypeRef = 25,
+        FieldRef = 26,
+        PropertyRef = 27,
+        MethodRef = 28,
+        ConstructorRef = 29,
+        AssemblyDef = 30,
+        ModuleDef = 31,
+        TypeDef = 32,
+        GenericInstantiation = 33,
+        GenericParameter = 34,
+        TVar = 35,
+        MVar = 36,
 
         // Structs and classes
-        Delegate = 35,
-        Reducer = 36,
-        ISerializable = 37,
-        Object = 38,
+        Delegate = 37,
+        Reducer = 38,
+        ISerializable = 39,
+        Object = 40,
 
         // This is written as a byte so we're limited to 255 operations
     }
@@ -77,6 +79,8 @@ namespace Ibasa.Pikala
 
     public sealed partial class Pickler
     {
+        private static readonly Assembly mscorlib = typeof(int).Assembly;
+
         private static OpCode[] _oneByteOpCodes;
         private static OpCode[] _twoByteOpCodes;
 
