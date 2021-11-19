@@ -323,7 +323,7 @@ namespace Ibasa.Pikala.Tests
             Assert.Equal("FSI_0001+Frober", result.FullName);
 
             var obj = System.Activator.CreateInstance(result, 4, 23.1);
-            Assert.Equal("{Foo = 4;\n Bar = 23.1;}", obj.ToString());
+            Assert.Equal("{ Foo = 4\n  Bar = 23.1 }", obj.ToString());
         }
 
         [Fact]
@@ -341,7 +341,7 @@ namespace Ibasa.Pikala.Tests
             var result = Base64ToObject(RunFsi(script));
 
             Assert.Equal("FSI_0001+Frober", result.GetType().FullName);
-            Assert.Equal("{Foo = 3;\n Bar = 2.3;}", result.ToString());
+            Assert.Equal("{ Foo = 3\n  Bar = 2.3 }", result.ToString());
         }
 
         [Fact]
