@@ -4,6 +4,7 @@ using Xunit;
 using FsCheck;
 using FsCheck.Xunit;
 using System.IO;
+using System.Collections.Generic;
 
 namespace Ibasa.Pikala.Tests
 {
@@ -433,6 +434,16 @@ namespace Ibasa.Pikala.Tests
 
             return Prop.ForAll(
                 Arb.From<int[,]>(),
+                value => RoundTrip.Assert(pickler, value));
+        }
+
+        [Property]
+        public Property TestVariablesizeIntArray()
+        {
+            var pickler = new Pickler();
+
+            return Prop.ForAll(
+                Utils.ArbitraryArray(Arb.Default.Int32().Generator),
                 value => RoundTrip.Assert(pickler, value));
         }
     }
