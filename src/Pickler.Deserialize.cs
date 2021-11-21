@@ -636,7 +636,7 @@ namespace Ibasa.Pikala
             {
                 var length = state.Reader.Read7BitEncodedInt();
                 var array = Array.CreateInstance(elementType.Type, length);
-                state.SetMemo(position, array);
+                state.SetMemo(position, false, array);
                 for (int index = 0; index < length; ++index)
                 {
                     array.SetValue(ReducePickle(Deserialize(state, elementType.Type, genericTypeParameters, genericMethodParameters)), index);
@@ -655,6 +655,7 @@ namespace Ibasa.Pikala
                     lowerBounds[dimension] = indices[dimension] = state.Reader.Read7BitEncodedInt();
                 }
                 var array = Array.CreateInstance(elementType.Type, lengths, lowerBounds);
+                state.SetMemo(position, false, array);
 
                 void Iterate()
                 {
@@ -809,7 +810,7 @@ namespace Ibasa.Pikala
         {
             var type = DeserializeNonNull<PickledTypeInfo>(state, typeof(Type), genericTypeParameters, genericMethodParameters);
             var name = state.Reader.ReadString();
-            return state.SetMemo(position, type.GetField(name));
+            return state.SetMemo(position, false, type.GetField(name));
         }
 
         private PropertyInfo DeserializePropertyInfo(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
@@ -850,7 +851,7 @@ namespace Ibasa.Pikala
             {
                 throw new Exception($"Unexpected parent '{type}' for property '{name}'");
             }
-            return state.SetMemo(position, result);
+            return state.SetMemo(position, false, result);
         }
 
         private PickledConstructorInfo DeserializeConstructorInfo(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
@@ -859,7 +860,7 @@ namespace Ibasa.Pikala
             var (callback, _) = DeserializeWithMemo(state, position, (PickledTypeInfo type) =>
             {
                 var constructorInfo = type.GetConstructor(signature);
-                return state.SetMemo(position, constructorInfo);
+                return state.SetMemo(position, false, constructorInfo);
             }, typeof(Type), genericTypeParameters, genericMethodParameters);
             return callback.Invoke();
         }
@@ -883,9 +884,9 @@ namespace Ibasa.Pikala
 
                 if (genericArguments != null)
                 {
-                    return state.SetMemo(position, new ConstructingGenericMethod(methodInfo, genericArguments));
+                    return state.SetMemo(position, false, new ConstructingGenericMethod(methodInfo, genericArguments));
                 }
-                return state.SetMemo(position, methodInfo);
+                return state.SetMemo(position, false, methodInfo);
             }, typeof(Type), genericTypeParameters, genericMethodParameters);
             return callback.Invoke();
         }
@@ -900,7 +901,7 @@ namespace Ibasa.Pikala
                 var method = DeserializeNonNull<PickledMethodInfo>(state, typeof(MethodInfo), genericTypeParameters, genericMethodParameters);
                 invocationList[i] = Delegate.CreateDelegate(objType.Type, target, method.MethodInfo);
             }
-            return state.SetMemo(position, Delegate.Combine(invocationList));
+            return state.SetMemo(position, false, Delegate.Combine(invocationList));
         }
 
         private Assembly DeserializeAsesmblyRef(PicklerDeserializationState state, long position)
@@ -911,7 +912,7 @@ namespace Ibasa.Pikala
             {
                 throw new Exception($"Could not load assembly '{assemblyName}'");
             }
-            return state.SetMemo(position, assembly);
+            return state.SetMemo(position, false, assembly);
         }
 
         private void ReadCustomAttributes(PicklerDeserializationState state, Action<CustomAttributeBuilder> setCustomAttribute, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
@@ -958,7 +959,7 @@ namespace Ibasa.Pikala
             {
                 throw new Exception($"Could not define assembly '{assemblyName}'");
             }
-            state.SetMemo(position, assembly);
+            state.SetMemo(position, false, assembly);
             ReadCustomAttributes(state, assembly.SetCustomAttribute, genericTypeParameters, genericMethodParameters);
             return assembly;
         }
@@ -966,7 +967,7 @@ namespace Ibasa.Pikala
         private Module DeserializeManifestModuleRef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             var assembly = DeserializeNonNull<Assembly>(state, typeof(Assembly), genericTypeParameters, genericMethodParameters);
-            return state.SetMemo(position, assembly.ManifestModule);
+            return state.SetMemo(position, false, assembly.ManifestModule);
         }
 
         private Module DeserializeModuleRef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
@@ -978,7 +979,7 @@ namespace Ibasa.Pikala
             {
                 throw new Exception($"Could not load module '{name}' from assembly '{assembly}'");
             }
-            return state.SetMemo(position, module);
+            return state.SetMemo(position, false, module);
         }
 
         private ModuleBuilder DeserializeModuleDef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
@@ -991,7 +992,7 @@ namespace Ibasa.Pikala
                 {
                     throw new Exception($"Could not create module '{name}' in assembly '{assembly}'");
                 }
-                return state.SetMemo(position, module);
+                return state.SetMemo(position, false, module);
             }, typeof(Assembly), genericTypeParameters, genericMethodParameters);
             var moduleBuilder = callback.Invoke();
 
@@ -1068,14 +1069,14 @@ namespace Ibasa.Pikala
             {
                 genericArguments[i] = DeserializeNonNull<PickledTypeInfo>(state, typeof(Type), genericTypeParameters, genericMethodParameters);
             }
-            return state.SetMemo(position, new PickledGenericType(genericType, genericArguments));
+            return state.SetMemo(position, false, new PickledGenericType(genericType, genericArguments));
         }
 
         private PickledTypeInfo DeserializeGenericParameter(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             var genericTypeOrMethod = DeserializeNonNull<PickledMemberInfo>(state, typeof(MemberInfo), genericTypeParameters, genericMethodParameters);
             var genericParameter = state.Reader.Read7BitEncodedInt();
-            return state.SetMemo(position, genericTypeOrMethod.GetGenericArgument(genericParameter));
+            return state.SetMemo(position, false, genericTypeOrMethod.GetGenericArgument(genericParameter));
         }
 
         private PickledTypeInfoRef DeserializeTypeRef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
@@ -1123,7 +1124,7 @@ namespace Ibasa.Pikala
             {
                 throw new Exception($"Unexpected parent '{parent}' for type '{typeName}'");
             }
-            return state.SetMemo(position, result);
+            return state.SetMemo(position, false, result);
         }
 
         private PickledTypeInfoDef DeserializeTypeDef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
@@ -1170,7 +1171,7 @@ namespace Ibasa.Pikala
                     }
 
                     state.AddTypeDef(result);
-                    return state.SetMemo(position, result);
+                    return state.SetMemo(position, false, result);
                 }, typeof(object), genericTypeParameters, genericMethodParameters);
                 var constructingType = callback.Invoke();
                 DeserializeTypeDef(state, constructingType);
@@ -1223,7 +1224,7 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an MVar operation without a current method context");
                         }
-                        return state.SetMemo(position, new PickledTypeInfoRef(genericMethodParameters[genericParameterPosition]));
+                        return state.SetMemo(position, false, new PickledTypeInfoRef(genericMethodParameters[genericParameterPosition]));
                     }
 
                 case PickleOperation.TVar:
@@ -1233,7 +1234,7 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an TVar operation without a current type context");
                         }
-                        return state.SetMemo(position, new PickledTypeInfoRef(genericTypeParameters[genericParameterPosition]));
+                        return state.SetMemo(position, false, new PickledTypeInfoRef(genericTypeParameters[genericParameterPosition]));
                     }
 
                 case PickleOperation.TypeRef:
@@ -1259,25 +1260,45 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.Reducer:
                     {
-                        return state.SetMemo(position, DeserializeReducer(state, genericTypeParameters, genericMethodParameters));
+                        return state.SetMemo(position, staticType.IsValueType, DeserializeReducer(state, genericTypeParameters, genericMethodParameters));
                     }
 
                 case PickleOperation.ISerializable:
                     {
-                        var objType = DeserializeNonNull<PickledTypeInfo>(state, typeof(Type), genericTypeParameters, genericMethodParameters);
-                        return state.SetMemo(position, DeserializeISerializable(state, objType.Type, genericTypeParameters, genericMethodParameters));
+                        Type objType;
+                        if (staticType.IsValueType)
+                        {
+                            objType = staticType;
+                        }
+                        else
+                        {
+                            var pickledObjType = DeserializeNonNull<PickledTypeInfo>(state, typeof(Type), genericTypeParameters, genericMethodParameters);
+                            objType = pickledObjType.Type;
+                        }
+                        return state.SetMemo(position, staticType.IsValueType, DeserializeISerializable(state, objType, genericTypeParameters, genericMethodParameters));
                     }
 
                 case PickleOperation.Object:
                     {
-                        var (callback, objType) = DeserializeWithMemo(state, position, (PickledTypeInfo objType) =>
+                        object uninitalizedObject;
+                        Type objectType;
+                        if (staticType.IsValueType)
                         {
-                            var result = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objType.Type);
-                            return state.SetMemo(position, result);
-                        }, typeof(Type), genericTypeParameters, genericMethodParameters);
+                            objectType = staticType;
+                            uninitalizedObject = state.SetMemo(position, staticType.IsValueType, System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objectType));
+                        }
+                        else
+                        {
+                            var (callback, objType) = DeserializeWithMemo(state, position, (PickledTypeInfo objType) =>
+                            {
+                                var result = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objType.Type);
+                                return state.SetMemo(position, staticType.IsValueType, result);
+                            }, typeof(Type), genericTypeParameters, genericMethodParameters);
 
-                        var uninitalizedObject = callback.Invoke();
-                        DeserializeObject(state, uninitalizedObject, objType.Type, genericTypeParameters, genericMethodParameters);
+                            objectType = objType.Type;
+                            uninitalizedObject = callback.Invoke();
+                        }
+                        DeserializeObject(state, uninitalizedObject, objectType, genericTypeParameters, genericMethodParameters);
                         return uninitalizedObject;
                     }
 
@@ -1314,224 +1335,224 @@ namespace Ibasa.Pikala
             return result;
         }
 
+        private PickleOperation? InferOperationFromStaticType(Type staticType)
+        {
+            if (staticType.IsValueType)
+            {
+                // This is a static value type, we probably didn't write an operation out for this
+
+                if (staticType.IsEnum)
+                {
+                    return PickleOperation.Enum;
+                }
+                else if (staticType == typeof(bool))
+                {
+                    return PickleOperation.Boolean;
+                }
+                else if (staticType == typeof(char))
+                {
+                    return PickleOperation.Char;
+                }
+                else if (staticType == typeof(sbyte))
+                {
+                    return PickleOperation.SByte;
+                }
+                else if (staticType == typeof(short))
+                {
+                    return PickleOperation.Int16;
+                }
+                else if (staticType == typeof(int))
+                {
+                    return PickleOperation.Int32;
+                }
+                else if (staticType == typeof(long))
+                {
+                    return PickleOperation.Int64;
+                }
+                else if (staticType == typeof(byte))
+                {
+                    return PickleOperation.Byte;
+                }
+                else if (staticType == typeof(ushort))
+                {
+                    return PickleOperation.UInt16;
+                }
+                else if (staticType == typeof(uint))
+                {
+                    return PickleOperation.UInt32;
+                }
+                else if (staticType == typeof(ulong))
+                {
+                    return PickleOperation.UInt64;
+                }
+                else if (staticType == typeof(float))
+                {
+                    return PickleOperation.Single;
+                }
+                else if (staticType == typeof(double))
+                {
+                    return PickleOperation.Double;
+                }
+                else if (staticType == typeof(decimal))
+                {
+                    return PickleOperation.Decimal;
+                }
+                else if (staticType == typeof(IntPtr))
+                {
+                    return PickleOperation.IntPtr;
+                }
+                else if (staticType == typeof(UIntPtr))
+                {
+                    return PickleOperation.UIntPtr;
+                }
+            }
+
+            return null;
+        }
+
         private object? Deserialize(PicklerDeserializationState state, Type staticType, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             var position = state.Reader.BaseStream.Position;
 
-            if (staticType.IsValueType)
+            var maybeOperation = InferOperationFromStaticType(staticType);
+            PickleOperation operation;
+            if (maybeOperation.HasValue)
             {
-                // This is a static value type, we probably didn't write an operation out for this
-                if (staticType.IsEnum)
-                {
-                    var enumTypeCode = Type.GetTypeCode(staticType);
-                    var result = Enum.ToObject(staticType, ReadEnumerationValue(state.Reader, enumTypeCode));
-                    return result;
-                }
-                else if (staticType == typeof(bool))
-                {
-                    return state.Reader.ReadBoolean();
-                }
-                else if (staticType == typeof(char))
-                {
-                    return state.Reader.ReadChar();
-                }
-                else if (staticType == typeof(sbyte))
-                {
-                    return state.Reader.ReadSByte();
-                }
-                else if (staticType == typeof(short))
-                {
-                    return state.Reader.ReadInt16();
-                }
-                else if (staticType == typeof(int))
-                {
-                    return state.Reader.ReadInt32();
-                }
-                else if (staticType == typeof(long))
-                {
-                    return state.Reader.ReadInt64();
-                }
-                else if (staticType == typeof(byte))
-                {
-                    return state.Reader.ReadByte();
-                }
-                else if (staticType == typeof(ushort))
-                {
-                    return state.Reader.ReadUInt16();
-                }
-                else if (staticType == typeof(uint))
-                {
-                    return state.Reader.ReadUInt32();
-                }
-                else if (staticType == typeof(ulong))
-                {
-                    return state.Reader.ReadUInt64();
-                }
-                else if (staticType == typeof(float))
-                {
-                    return state.Reader.ReadSingle();
-                }
-                else if (staticType == typeof(double))
-                {
-                    return state.Reader.ReadDouble();
-                }
-                else if (staticType == typeof(decimal))
-                {
-                    return state.Reader.ReadDecimal();
-                }
-                else if (staticType == typeof(IntPtr))
-                {
-                    return new IntPtr(state.Reader.ReadInt64());
-                }
-                else if (staticType == typeof(UIntPtr))
-                {
-                    return new UIntPtr(state.Reader.ReadUInt64());
-                }
-                else
-                {
-                    // A more complex type, but we know the type already and don't need memoisation
-                    var operation = (PickleOperation)state.Reader.ReadByte();
-                    switch (operation)
-                    {
-                        case PickleOperation.Reducer:
-                            return DeserializeReducer(state, genericTypeParameters, genericMethodParameters);
-
-                        case PickleOperation.ISerializable:
-                            return DeserializeISerializable(state, staticType, genericTypeParameters, genericMethodParameters);
-
-                        case PickleOperation.Object:
-                            var uninitializedObject = Activator.CreateInstance(staticType);
-                            DeserializeObject(state, uninitializedObject, staticType, genericTypeParameters, genericMethodParameters);
-                            return uninitializedObject;
-
-                        default:
-                            throw new Exception($"Unexpected operation {operation} in a static type context of {staticType}");
-                    }
-                }
+                operation = maybeOperation.Value;
             }
             else
             {
-                var operation = (PickleOperation)state.Reader.ReadByte();
-                switch (operation)
-                {
-                    case PickleOperation.Null:
-                        return null;
+                // Could not infer operation from static type, read the operation token
+                operation = (PickleOperation)state.Reader.ReadByte();
+            }
 
-                    case PickleOperation.Memo:
-                            return state.DoMemo();
+            switch (operation)
+            {
+                case PickleOperation.Null:
+                    return null;
 
-                    case PickleOperation.Boolean:
-                        {
-                            var result = (object)state.Reader.ReadBoolean();
-                            state.SetMemo(position, result);
-                            return result;
-                        }
-                    case PickleOperation.Char:
-                        {
-                            var result = (object)state.Reader.ReadChar();
-                            state.SetMemo(position, result);
-                            return result;
-                        }
-                    case PickleOperation.Byte:
-                        {
-                            var result = (object)state.Reader.ReadByte();
-                            state.SetMemo(position, result);
-                            return result;
-                        }
-                    case PickleOperation.Int16:
-                        {
-                            var result = (object)state.Reader.ReadInt16();
-                            state.SetMemo(position, result);
-                            return result;
-                        }
-                    case PickleOperation.Int32:
-                        {
-                            var result = (object)state.Reader.ReadInt32();
-                            state.SetMemo(position, result);
-                            return result;
-                        }
-                    case PickleOperation.Int64:
-                        {
-                            var result = (object)state.Reader.ReadInt64();
-                            state.SetMemo(position, result);
-                            return result;
-                        }
-                    case PickleOperation.SByte:
-                        {
-                            var result = (object)state.Reader.ReadSByte();
-                            state.SetMemo(position, result);
-                            return result;
-                        }
-                    case PickleOperation.UInt16:
-                        {
-                            var result = (object)state.Reader.ReadUInt16();
-                            state.SetMemo(position, result);
-                            return result;
-                        }
-                    case PickleOperation.UInt32:
-                        {
-                            var result = (object)state.Reader.ReadUInt32();
-                            state.SetMemo(position, result);
-                            return result;
-                        }
-                    case PickleOperation.UInt64:
-                        {
-                            var result = (object)state.Reader.ReadUInt64();
-                            state.SetMemo(position, result);
-                            return result;
-                        }
-                    case PickleOperation.Single:
-                        {
-                            var result = (object)state.Reader.ReadSingle();
-                            state.SetMemo(position, result);
-                            return result;
-                        }
-                    case PickleOperation.Double:
-                        {
-                            var result = (object)state.Reader.ReadDouble();
-                            state.SetMemo(position, result);
-                            return result;
-                        }
-                    case PickleOperation.Decimal:
-                        {
-                            var result = (object)state.Reader.ReadDecimal();
-                            state.SetMemo(position, result);
-                            return result;
-                        }
-                    case PickleOperation.DBNull:
-                        return DBNull.Value;
-                    case PickleOperation.String:
-                        {
-                            var result = state.Reader.ReadString();
-                            state.SetMemo(position, result);
-                            return result;
-                        }
-                    case PickleOperation.IntPtr:
-                        {
-                            var result = new IntPtr(state.Reader.ReadInt64());
-                            state.SetMemo(position, result);
-                            return result;
-                        }
-                    case PickleOperation.UIntPtr:
-                        {
-                            var result = new UIntPtr(state.Reader.ReadUInt64());
-                            state.SetMemo(position, result);
-                            return result;
-                        }
+                case PickleOperation.Memo:
+                        return state.DoMemo();
 
-                    case PickleOperation.Enum:
+                case PickleOperation.Boolean:
+                    {
+                        var result = (object)state.Reader.ReadBoolean();
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+                case PickleOperation.Char:
+                    {
+                        var result = (object)state.Reader.ReadChar();
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+                case PickleOperation.Byte:
+                    {
+                        var result = (object)state.Reader.ReadByte();
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+                case PickleOperation.Int16:
+                    {
+                        var result = (object)state.Reader.ReadInt16();
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+                case PickleOperation.Int32:
+                    {
+                        var result = (object)state.Reader.ReadInt32();
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+                case PickleOperation.Int64:
+                    {
+                        var result = (object)state.Reader.ReadInt64();
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+                case PickleOperation.SByte:
+                    {
+                        var result = (object)state.Reader.ReadSByte();
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+                case PickleOperation.UInt16:
+                    {
+                        var result = (object)state.Reader.ReadUInt16();
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+                case PickleOperation.UInt32:
+                    {
+                        var result = (object)state.Reader.ReadUInt32();
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+                case PickleOperation.UInt64:
+                    {
+                        var result = (object)state.Reader.ReadUInt64();
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+                case PickleOperation.Single:
+                    {
+                        var result = (object)state.Reader.ReadSingle();
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+                case PickleOperation.Double:
+                    {
+                        var result = (object)state.Reader.ReadDouble();
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+                case PickleOperation.Decimal:
+                    {
+                        var result = (object)state.Reader.ReadDecimal();
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+                case PickleOperation.DBNull:
+                    return DBNull.Value;
+                case PickleOperation.String:
+                    {
+                        var result = state.Reader.ReadString();
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+                case PickleOperation.IntPtr:
+                    {
+                        var result = new IntPtr(state.Reader.ReadInt64());
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+                case PickleOperation.UIntPtr:
+                    {
+                        var result = new UIntPtr(state.Reader.ReadUInt64());
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
+
+                case PickleOperation.Enum:
+                    {
+                        Type enumType;
+                        if (staticType.IsValueType)
+                        {
+                            enumType = staticType;
+                        }
+                        else
                         {
                             var pickledEnumType = DeserializeNonNull<PickledTypeInfo>(state, typeof(Type), genericTypeParameters, genericMethodParameters);
-                            var enumType = pickledEnumType.Type; 
-                            var enumTypeCode = Type.GetTypeCode(enumType);
-                            var result = Enum.ToObject(enumType, ReadEnumerationValue(state.Reader, enumTypeCode));
-                            state.SetMemo(position, result);
-                            return result;
+                            enumType = pickledEnumType.Type;
                         }
-                }
-
-                return DeserializeComplex(state, operation, staticType, genericTypeParameters, genericMethodParameters);
+                        var enumTypeCode = Type.GetTypeCode(enumType);
+                        var result = Enum.ToObject(enumType, ReadEnumerationValue(state.Reader, enumTypeCode));
+                        state.SetMemo(position, staticType.IsValueType, result);
+                        return result;
+                    }
             }
+
+            return DeserializeComplex(state, operation, staticType, genericTypeParameters, genericMethodParameters);
         }
 
         public object? Deserialize(Stream stream)
