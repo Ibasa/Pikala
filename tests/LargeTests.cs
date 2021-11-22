@@ -1,6 +1,7 @@
 ﻿using System;
 using Xunit;
 using System.IO;
+using Ibasa.Pikala.Tests.TestTypes;
 
 namespace Ibasa.Pikala.Tests
 {
@@ -54,7 +55,7 @@ namespace Ibasa.Pikala.Tests
         }
 
         [FactSkip32Bit]
-        public void Test2GBArray()
+        public void Test2GBPrimitiveArray()
         {
             LargeArrayTest(() =>
             {
@@ -71,13 +72,55 @@ namespace Ibasa.Pikala.Tests
         }
 
         [FactSkip32Bit]
-        public void Test3GBArray()
+        public void Test3GBPrimitiveArray()
         {
             LargeArrayTest(() =>
             {
                 var value = (long[])Array.CreateInstance(typeof(long), 402653184);
                 value[0] = 1L;
                 value[value.Length - 1] = 100L;
+                return value;
+            },
+            value =>
+            {
+                // These are huge arrays so we just check that the lengths, first, and last elements are correct.
+                return (value.Length, value[0], value[value.Length - 1]);
+            });
+        }
+
+        [FactSkip32Bit]
+        public void Test2GBComplexArray()
+        {
+            var gb2 = 2L * 1024L * 1024L * 1024L;
+            var sizeofT = System.Runtime.InteropServices.Marshal.SizeOf<StructureType>();
+            var length = gb2 / sizeofT;
+
+            LargeArrayTest(() =>
+            {
+                var value = (StructureType[])Array.CreateInstance(typeof(StructureType), length);
+                value[0] = new StructureType() { Foo = 2, Bar = 3.14 };
+                value[value.Length - 1] = new StructureType() { Foo = -14, Bar = double.NegativeInfinity };
+                return value;
+            },
+            value =>
+            {
+                // These are huge arrays so we just check that the lengths, first, and last elements are correct.
+                return (value.Length, value[0], value[value.Length - 1]);
+            });
+        }
+
+        [FactSkip32Bit]
+        public void Test3GBComplexArray()
+        {
+            var gb2 = 3L * 1024L * 1024L * 1024L;
+            var sizeofT = System.Runtime.InteropServices.Marshal.SizeOf<StructureType>();
+            var length = gb2 / sizeofT;
+
+            LargeArrayTest(() =>
+            {
+                var value = (StructureType[])Array.CreateInstance(typeof(StructureType), length);
+                value[0] = new StructureType() { Foo = 2, Bar = 3.14 };
+                value[value.Length - 1] = new StructureType() { Foo = -14, Bar = double.NegativeInfinity };
                 return value;
             },
             value =>
