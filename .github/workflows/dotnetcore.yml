@@ -22,7 +22,7 @@ jobs:
     - name: Build with dotnet
       run: dotnet build --configuration Release
     - name: Test with dotnet
-      run: dotnet test --configuration Release --no-build --results-directory tests/TestResults --blame-hang --blame-hang-timeout 10m --diag tests/TestResults/diagnostics.txt
+      run: dotnet test --configuration Release --no-build --results-directory tests/TestResults --blame-hang --blame-hang-timeout 20m --diag tests/TestResults/diagnostics.txt
     - name: Archive test results
       if: ${{ ! cancelled() }}
       uses: actions/upload-artifact@v2
