@@ -11,7 +11,7 @@ namespace Ibasa.Pikala.Tests
     {
         private Pickler CreatePickler()
         {
-            return new Pickler(assembly => assembly == System.Reflection.Assembly.GetExecutingAssembly());
+            return new Pickler(assembly => assembly == System.Reflection.Assembly.GetExecutingAssembly() ? AssemblyPickleMode.PickleByValue : AssemblyPickleMode.Default);
         }
 
         [Fact]
@@ -63,7 +63,7 @@ namespace Ibasa.Pikala.Tests
     {
         private Pickler CreatePickler()
         {
-            return new Pickler(assembly => assembly == System.Reflection.Assembly.GetExecutingAssembly());
+            return new Pickler(assembly => assembly == System.Reflection.Assembly.GetExecutingAssembly() ? AssemblyPickleMode.PickleByValue : AssemblyPickleMode.Default);
         }
 
         [Fact]

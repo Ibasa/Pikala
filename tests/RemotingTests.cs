@@ -78,7 +78,7 @@ namespace Ibasa.Pikala.Tests
         private string Base64FromObject(object obj)
         {
             // Remoting tests can't refernce this test assembly
-            var pickler = new Pickler(assembly => assembly == System.Reflection.Assembly.GetExecutingAssembly());
+            var pickler = new Pickler(assembly => assembly == System.Reflection.Assembly.GetExecutingAssembly() ? AssemblyPickleMode.PickleByValue : AssemblyPickleMode.Default);
             var memoryStream = new MemoryStream();
             pickler.Serialize(memoryStream, obj);
             return Convert.ToBase64String(memoryStream.ToArray());

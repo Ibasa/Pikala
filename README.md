@@ -50,8 +50,7 @@ Assert.Equal(123, result);
 Tell Pikala to serialize type definitions not references for the current assembly:
 ```csharp
 using Ibasa.Pikala
-var pickler = new Pickler();
-pickler.UnreferanceableAssemblies.Add(System.Reflection.Assembly.GetExecutingAssembly());
+var pickler = new Pickler(assembly => assembly == System.Reflection.Assembly.GetExecutingAssembly() ? AssemblyPickleMode.PickleByValue : AssemblyPickleMode.Default);
 ```
 
 Customize how Pikala serializes a type:

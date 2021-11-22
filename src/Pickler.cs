@@ -78,6 +78,19 @@ namespace Ibasa.Pikala
         Class,
     }
 
+    /// <summary>
+    /// How the assembly should be pickled, either explictly by reference or by value or the implict default.
+    /// </summary>
+    /// <remarks>
+    /// The default behaviour is to pickle dynamic assemblies by value and all other assemblies by reference.
+    /// </remarks>
+    public enum AssemblyPickleMode
+    {
+        Default = 0,
+        PickleByReference,
+        PickleByValue,
+    }
+
     public sealed partial class Pickler
     {
         private static readonly Assembly mscorlib = typeof(int).Assembly;
@@ -107,17 +120,17 @@ namespace Ibasa.Pikala
             }
         }
 
-        private Func<Assembly, bool> _pickleByValuePredicate;
+        private Func<Assembly, AssemblyPickleMode> _assemblyPickleMode;
         private Dictionary<Type, IReducer> _reducers;
 
         // Variables that are written to the start of the Pikala stream for framing checks
         private const uint _header = ((byte)'P' << 0 | (byte)'K' << 8 | (byte)'L' << 16 | (byte)'A' << 24);
         private const uint _version = 1U;
 
-        public Pickler(Func<Assembly, bool>? pickleByValuePredicate = null)
+        public Pickler(Func<Assembly, AssemblyPickleMode>? assemblyPickleMode = null)
         {
             // By default assume nothing needs to be pickled by value
-            _pickleByValuePredicate = pickleByValuePredicate ?? (_ => false);
+            _assemblyPickleMode = assemblyPickleMode ?? (_ => AssemblyPickleMode.Default);
             _reducers = new Dictionary<Type, IReducer>();
 
             RegisterReducer(new DictionaryReducer());

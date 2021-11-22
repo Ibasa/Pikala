@@ -11,12 +11,18 @@ namespace Ibasa.Pikala
     {
         private bool PickleByValue(Assembly assembly)
         {
-            return
-                // We never pickle mscorlib by value, even if _pickleByValuePredicate returns true for it
-                assembly != mscorlib && (
-                assembly.IsDynamic ||
-                assembly.Location == "" ||
-                _pickleByValuePredicate(assembly));
+            // We never pickle mscorlib by value, don't even give the user a choice
+            if (assembly == mscorlib) { return false; }
+
+            var mode = _assemblyPickleMode(assembly);
+
+            switch (mode)
+            {
+                case AssemblyPickleMode.PickleByValue: return true;
+                case AssemblyPickleMode.PickleByReference: return false;
+                default:
+                    return assembly.IsDynamic || assembly.Location == "";
+            }
         }
 
         private static void WriteEnumerationValue(BinaryWriter writer, TypeCode typeCode, object value)
