@@ -630,73 +630,118 @@ namespace Ibasa.Pikala
 
         private Array DeserializeArray(PicklerDeserializationState state, bool isSZArray, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
-            var elementType = DeserializeNonNull<PickledTypeInfo>(state, typeof(Type), genericTypeParameters, genericMethodParameters);
+            var pickledTypeInfo = DeserializeNonNull<PickledTypeInfo>(state, typeof(Type), genericTypeParameters, genericMethodParameters);
+            var elementType = pickledTypeInfo.Type;
 
+            Array array;
             if (isSZArray)
             {
                 var length = state.Reader.Read7BitEncodedInt();
-                var array = Array.CreateInstance(elementType.Type, length);
+                array = Array.CreateInstance(elementType, length);
                 state.SetMemo(position, false, array);
-                for (int index = 0; index < length; ++index)
-                {
-                    array.SetValue(ReducePickle(Deserialize(state, elementType.Type, genericTypeParameters, genericMethodParameters)), index);
-                }
-                return array;
             }
             else
             {
                 var rank = state.Reader.ReadByte();
                 var lengths = new int[rank];
                 var lowerBounds = new int[rank];
-                var indices = new int[rank];
                 for (int dimension = 0; dimension < rank; ++dimension)
                 {
                     lengths[dimension] = state.Reader.Read7BitEncodedInt();
-                    lowerBounds[dimension] = indices[dimension] = state.Reader.Read7BitEncodedInt();
+                    lowerBounds[dimension] =  state.Reader.Read7BitEncodedInt();
                 }
-                var array = Array.CreateInstance(elementType.Type, lengths, lowerBounds);
-                state.SetMemo(position, false, array);
+                array = Array.CreateInstance(elementType, lengths, lowerBounds);
+                state.SetMemo(position, false, array);                
+            }
 
-                void Iterate()
+            // If this is a primitive type just block copy it across to the stream, excepting endianness (Which dotnet
+            // currently only supports little endian anyway, and mono on big endian is probably a fringe use?) this is
+            // safe. We could extend this to also consider product types with static layout but:
+            // A) Currently I don't think any mscorlib types are defined with a strict layout so they would never hit this
+            // B) We wouldn't do this for user defined type because they might change layout been write and read
+            if (elementType.IsPrimitive)
+            {
+                unsafe
                 {
-                    // The first time we call into Iterate we know the array is non-empty, and indices is equal to lowerBounds (i.e the first element)
-                    // If we reach the last element we don't call back into Iterate
-
-                    var item = ReducePickle(Deserialize(state, elementType.Type, genericTypeParameters, genericMethodParameters));
-                    array.SetValue(item, indices);
-
-                    // Increment indices to the next position, we work through the dimensions backwards because that matches the order that GetEnumerator returns when we serialise out the items
-                    var didBreak = false;
-                    for (int dimension = rank - 1; dimension >= 0; --dimension)
+                    var arrayHandle = System.Runtime.InteropServices.GCHandle.Alloc(array, System.Runtime.InteropServices.GCHandleType.Pinned);
+                    try
                     {
-                        var next = indices[dimension] + 1;
-                        if (next < lowerBounds[dimension] + lengths[dimension])
+                        var pin = arrayHandle.AddrOfPinnedObject();
+                        var byteCount = System.Runtime.InteropServices.Marshal.SizeOf(elementType) * array.LongLength;
+
+                        while (byteCount > 0)
                         {
-                            indices[dimension] = next;
-                            didBreak = true;
-                            break;
-                        }
-                        else
-                        {
-                            indices[dimension] = lowerBounds[dimension];
+                            // Read 4k at a time
+                            var bufferSize = 4096L;
+                            var length = (int)(byteCount < bufferSize ? byteCount : bufferSize);
+
+                            var span = new Span<byte>(pin.ToPointer(), length);
+                            state.Reader.Read(span);
+
+                            pin = IntPtr.Add(pin, length);
+                            byteCount -= length;
                         }
                     }
+                    finally
+                    {
+                        arrayHandle.Free();
 
-                    if (didBreak) { Iterate(); }
+                    }
                 }
-
-                // If the array is empty (any length == 0) we save calling into Iterate
-                bool isEmpty = false;
-                for (int dimension = 0; dimension < rank; ++dimension)
+            }
+            else
+            {
+                if (isSZArray)
                 {
-                    isEmpty |= lengths[dimension] == 0;
+                    for (int index = 0; index < array.Length; ++index)
+                    {
+                        array.SetValue(ReducePickle(Deserialize(state, elementType, genericTypeParameters, genericMethodParameters)), index);
+                    }
                 }
+                else
+                {
+                    var indices = new int[array.Rank];
+                    bool isEmpty = false;
+                    for (int dimension = 0; dimension < array.Rank; ++dimension)
+                    {
+                        indices[dimension] = array.GetLowerBound(dimension);
+                        isEmpty |= array.GetLength(dimension) == 0;
+                    }
 
-                if (!isEmpty) { Iterate(); }
+                    // If the array is empty (any length == 0) no need to loop
+                    if (!isEmpty)
+                    {
+                        var didBreak = true;
+                        while (didBreak)
+                        {
+                            // The first time we call into Iterate we know the array is non-empty, and indices is equal to lowerBounds (i.e the first element)
+                            // If we reach the last element we don't call back into Iterate
 
+                            var item = ReducePickle(Deserialize(state, elementType, genericTypeParameters, genericMethodParameters));
+                            array.SetValue(item, indices);
+
+                            // Increment indices to the next position, we work through the dimensions backwards because that matches the order that GetEnumerator returns when we serialise out the items
+                            didBreak = false;
+                            for (int dimension = array.Rank - 1; dimension >= 0; --dimension)
+                            {
+                                var next = indices[dimension] + 1;
+                                if (next < array.GetLowerBound(dimension) + array.GetLength(dimension))
+                                {
+                                    indices[dimension] = next;
+                                    didBreak = true;
+                                    break;
+                                }
+                                else
+                                {
+                                    indices[dimension] = array.GetLowerBound(dimension);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
                 return array;
             }
-        }
 
         private object DeserializeISerializable(PicklerDeserializationState state, Type type, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {

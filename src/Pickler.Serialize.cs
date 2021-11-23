@@ -602,9 +602,43 @@ namespace Ibasa.Pikala
                     state.Writer.Write7BitEncodedInt(obj.GetLowerBound(dimension));
                 }
             }
-            foreach (var item in obj)
+            // If this is a primitive type just block copy it across to the stream
+            if (elementType.IsPrimitive)
             {
-                Serialize(state, item, elementType);
+                unsafe
+                {
+                    var arrayHandle = System.Runtime.InteropServices.GCHandle.Alloc(obj, System.Runtime.InteropServices.GCHandleType.Pinned);
+                    try
+                    {
+                        var pin = arrayHandle.AddrOfPinnedObject();
+                        var byteCount = System.Runtime.InteropServices.Marshal.SizeOf(elementType) * obj.LongLength;
+
+                        while (byteCount > 0)
+                        {
+                            // Write 4k at a time
+                            var bufferSize = 4096L;
+                            var length = (int)(byteCount < bufferSize ? byteCount : bufferSize);
+
+                            var span = new ReadOnlySpan<byte>(pin.ToPointer(), length);
+                            state.Writer.Write(span);
+
+                            pin = IntPtr.Add(pin, length);
+                            byteCount -= length;
+                        }
+                    }
+                    finally
+                    {
+                        arrayHandle.Free();
+
+                    }
+                }
+            }
+            else
+            {
+                foreach (var item in obj)
+                {
+                    Serialize(state, item, elementType);
+                }
             }
         }
 
