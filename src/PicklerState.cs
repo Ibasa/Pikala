@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Ibasa.Pikala
-{ 
+{
     abstract class MemoCallback
     {
         public abstract object InvokeUntyped();
@@ -157,8 +157,8 @@ namespace Ibasa.Pikala
             }
         }
 
-        [return:NotNull]
-        public T SetMemo<T>(long position, bool isStaticValueType, [DisallowNull]T value)
+        [return: NotNull]
+        public T SetMemo<T>(long position, bool isStaticValueType, [DisallowNull] T value)
         {
             // If the static type is a value type we should not save it in the memo dictionary
             if (isStaticValueType) return value;
@@ -177,7 +177,7 @@ namespace Ibasa.Pikala
                 memo.Add(memoPosition, value);
                 return value;
             }
-            else if(memoCallbacks.TryGetValue(position, out var callback))
+            else if (memoCallbacks.TryGetValue(position, out var callback))
             {
                 var result = callback.InvokeUntyped();
                 memo.Add(memoPosition, result);
@@ -192,7 +192,8 @@ namespace Ibasa.Pikala
         public MemoCallback<R> RegisterMemoCallback<T, R>(long offset, Func<T, R> callback) where T : class where R : class
         {
             var objectOffset = Reader.BaseStream.Position;
-            Func<R> handler = () => {
+            Func<R> handler = () =>
+            {
                 if (memo.TryGetValue(objectOffset, out var obj))
                 {
                     var result = callback((T)obj);
@@ -291,7 +292,7 @@ namespace Ibasa.Pikala
 
         public void CheckTrailers()
         {
-            if(trailers.Count != 0)
+            if (trailers.Count != 0)
             {
                 throw new Exception("Serialization trailers count should of been zero");
             }
