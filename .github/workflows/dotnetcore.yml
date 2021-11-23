@@ -9,7 +9,8 @@ on:
     - main
 
 jobs:
-  build:
+  lint:
+    # We lint in a seperate job so we can use the dotnet 6.0 sdk which has dotnet format
 
     runs-on: ubuntu-latest
 
@@ -21,6 +22,18 @@ jobs:
         dotnet-version: 6.0.100
     - name: Lint with dotnet format
       run: dotnet format --verify-no-changes
+
+  build:
+    # Build and test with net5.0, we should eventually matrix this to test net5.0 and net6.0.
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET Core 6.0
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 5.0.100
     - name: Build with dotnet
       run: dotnet build --configuration Release
     - name: Test with dotnet
