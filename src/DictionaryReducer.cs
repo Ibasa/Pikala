@@ -35,7 +35,7 @@ namespace Ibasa.Pikala
             var moveNext = enumeratorType.GetMethod("MoveNext");
 
             var index = 0;
-            while((bool)(moveNext.Invoke(enumerator, null)))
+            while ((bool)(moveNext.Invoke(enumerator, null)))
             {
                 var value = getCurrent.Invoke(enumerator, null);
                 items.SetValue(value, index++);

@@ -125,7 +125,7 @@ namespace Ibasa.Pikala.Tests
 
             public override bool Equals(object obj)
             {
-                if(obj is StructureTypeWithGeneric<T>)
+                if (obj is StructureTypeWithGeneric<T>)
                 {
                     return Equals((StructureTypeWithGeneric<T>)obj);
                 }
@@ -147,7 +147,7 @@ namespace Ibasa.Pikala.Tests
         public class ClassType
         {
             public int Foo;
-            private string Bar; 
+            private string Bar;
 
             public ClassType(string bar)
             {
@@ -386,7 +386,7 @@ namespace Ibasa.Pikala.Tests
         {
             public static string SwitchMethod(int i)
             {
-                switch(i)
+                switch (i)
                 {
                     case 0: return "Hello";
                     case 1: return " ";

@@ -145,7 +145,7 @@ namespace Ibasa.Pikala
         {
             var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
-            return fields.Where(field => !field.IsLiteral && !field.IsNotSerialized).ToArray();                
+            return fields.Where(field => !field.IsLiteral && !field.IsNotSerialized).ToArray();
         }
     }
 }

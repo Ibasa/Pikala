@@ -59,7 +59,7 @@ namespace Ibasa.Pikala.Tests
                     // n can be divided by current prime, so do so and add to factor list
                     n /= primes.Current;
                     factors.Add(primes.Current);
-                } 
+                }
                 else
                 {
                     primes.MoveNext();

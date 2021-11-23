@@ -489,7 +489,7 @@ namespace Ibasa.Pikala
 
                 constructingType.FullyDefined = true;
 
-            }, 
+            },
             () => constructingType.CreateType(),
             () =>
             {
@@ -526,7 +526,7 @@ namespace Ibasa.Pikala
                     {
                         state.RegisterFixup(exc.Position, value => fieldInfo.SetValue(null, value));
                     }
-            }
+                }
             });
         }
 
@@ -648,10 +648,10 @@ namespace Ibasa.Pikala
                 for (int dimension = 0; dimension < rank; ++dimension)
                 {
                     lengths[dimension] = state.Reader.Read7BitEncodedInt();
-                    lowerBounds[dimension] =  state.Reader.Read7BitEncodedInt();
+                    lowerBounds[dimension] = state.Reader.Read7BitEncodedInt();
                 }
                 array = Array.CreateInstance(elementType, lengths, lowerBounds);
-                state.SetMemo(position, false, array);                
+                state.SetMemo(position, false, array);
             }
 
             // If this is a primitive type just block copy it across to the stream, excepting endianness (Which dotnet
@@ -740,8 +740,8 @@ namespace Ibasa.Pikala
                     }
                 }
             }
-                return array;
-            }
+            return array;
+        }
 
         private object DeserializeISerializable(PicklerDeserializationState state, Type type, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
@@ -830,7 +830,7 @@ namespace Ibasa.Pikala
         }
 
         // TODO It would be good to only return PickledObject things as part of typedef construction and not have that recurse through Deserialize
-        [return:NotNullIfNotNull("obj")]
+        [return: NotNullIfNotNull("obj")]
         private object? ReducePickle(object? obj)
         {
             if (obj is PickledObject pickledObject)
@@ -1361,7 +1361,7 @@ namespace Ibasa.Pikala
             return (memo, result);
         }
 
-        [return:MaybeNull]
+        [return: MaybeNull]
         private T Deserialize<T>(PicklerDeserializationState state, Type staticType, Type[]? genericTypeParameters, Type[]? genericMethodParameters) where T : class
         {
             var obj = Deserialize(state, staticType, genericTypeParameters, genericMethodParameters);
@@ -1477,7 +1477,7 @@ namespace Ibasa.Pikala
                     return null;
 
                 case PickleOperation.Memo:
-                        return state.DoMemo();
+                    return state.DoMemo();
 
                 case PickleOperation.Boolean:
                     {
