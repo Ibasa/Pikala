@@ -466,6 +466,48 @@ namespace Ibasa.Pikala
             state.Writer.Write((byte)0xFF);
         }
 
+        private void SerializeModuleDef(PicklerSerializationState state, Module module)
+        {
+            state.Writer.Write((byte)PickleOperation.ModuleDef);
+            state.Writer.Write(module.Name);
+            Serialize(state, module.Assembly, MakeInfo(module.Assembly, typeof(Assembly)));
+
+            WriteCustomAttributes(state, module.CustomAttributes.ToArray());
+
+            var fields = module.GetFields();
+            state.Writer.Write7BitEncodedInt(fields.Length);
+            foreach (var field in fields)
+            {
+                state.Writer.Write(field.Name);
+                state.Writer.Write((int)field.Attributes);
+                SerializeType(state, field.FieldType);
+            }
+
+            var methods = module.GetMethods();
+            state.Writer.Write7BitEncodedInt(methods.Length);
+            foreach (var method in methods)
+            {
+                SerializeMethodHeader(state, null, method);
+            }
+
+            state.PushTrailer(() =>
+            {
+                foreach (var method in methods)
+                {
+                    SerializeMethodBody(state, null, method.Module, method.GetGenericArguments(), method.GetMethodBody());
+                }
+            }, () =>
+            {
+                foreach (var field in fields)
+                {
+                    state.Writer.Write(field.Name);
+                    var value = field.GetValue(null);
+                    var fieldInfo = MakeInfo(value, typeof(object), ShouldMemo(value, field.FieldType));
+                    Serialize(state, value, fieldInfo);
+                }
+            });
+        }
+
         private void SerializeTypeDef(PicklerSerializationState state, Type type, Type[]? genericParameters)
         {
             if (type.IsValueType)
@@ -818,44 +860,7 @@ namespace Ibasa.Pikala
                 // Is this assembly one we should save by value?
                 if (PickleByValue(module.Assembly))
                 {
-                    state.Writer.Write((byte)PickleOperation.ModuleDef);
-                    state.Writer.Write(module.Name);
-                    Serialize(state, module.Assembly, MakeInfo(module.Assembly, typeof(Assembly)));
-
-                    WriteCustomAttributes(state, module.CustomAttributes.ToArray());
-
-                    var fields = module.GetFields();
-                    state.Writer.Write7BitEncodedInt(fields.Length);
-                    foreach (var field in fields)
-                    {
-                        state.Writer.Write(field.Name);
-                        state.Writer.Write((int)field.Attributes);
-                        SerializeType(state, field.FieldType);
-                    }
-
-                    var methods = module.GetMethods();
-                    state.Writer.Write7BitEncodedInt(methods.Length);
-                    foreach (var method in methods)
-                    {
-                        SerializeMethodHeader(state, null, method);
-                    }
-
-                    state.PushTrailer(() =>
-                    {
-                        foreach (var method in methods)
-                        {
-                            SerializeMethodBody(state, null, method.Module, method.GetGenericArguments(), method.GetMethodBody());
-                        }
-                    }, () =>
-                    {
-                        foreach (var field in fields)
-                        {
-                            state.Writer.Write(field.Name);
-                            var value = field.GetValue(null);
-                            var fieldInfo = MakeInfo(value, typeof(object), ShouldMemo(value, field.FieldType));
-                            Serialize(state, value, fieldInfo);
-                        }
-                    });
+                    SerializeModuleDef(state, module);
                 }
                 else
                 {
