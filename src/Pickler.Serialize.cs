@@ -709,7 +709,7 @@ namespace Ibasa.Pikala
             }
         }
 
-            private void WriteCustomAttributes(PicklerSerializationState state, CustomAttributeData[] attributes)
+        private void WriteCustomAttributes(PicklerSerializationState state, CustomAttributeData[] attributes)
         {
             state.Writer.Write7BitEncodedInt(attributes.Length);
             foreach (var attribute in attributes)
