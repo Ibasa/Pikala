@@ -1343,7 +1343,7 @@ namespace Ibasa.Pikala
                 case PickleOperation.ISerializable:
                     {
                         Type objType;
-                        if (info.StaticType.IsValueType)
+                        if (IsStaticallyFinal(info.StaticType))
                         {
                             objType = info.StaticType;
                         }
@@ -1359,7 +1359,7 @@ namespace Ibasa.Pikala
                     {
                         object uninitalizedObject;
                         Type objectType;
-                        if (info.StaticType.IsValueType)
+                        if (IsStaticallyFinal(info.StaticType))
                         {
                             objectType = info.StaticType;
                             uninitalizedObject = state.SetMemo(position, info.ShouldMemo, System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objectType));

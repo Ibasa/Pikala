@@ -19,8 +19,6 @@ namespace Ibasa.Pikala
             StaticType = staticType;
             ShouldMemo = shouldMemo;
         }
-
-        public bool NeedsOperationToken { get { return RuntimeType != StaticType; } }
     }
 
     public sealed partial class Pickler
@@ -800,6 +798,7 @@ namespace Ibasa.Pikala
             // or any of the types explictly in System.TypeCode
 
             IReducer reducer;
+            var isStaticlyFinal = IsStaticallyFinal(info.StaticType);
 
             if (info.RuntimeType.IsArray)
             {
@@ -810,7 +809,7 @@ namespace Ibasa.Pikala
             // are also value types.
             else if (info.RuntimeType == typeof(IntPtr))
             {
-                if (info.NeedsOperationToken)
+                if (!isStaticlyFinal)
                 {
                     state.Writer.Write((byte)PickleOperation.IntPtr);
                 }
@@ -818,7 +817,7 @@ namespace Ibasa.Pikala
             }
             else if (info.RuntimeType == typeof(UIntPtr))
             {
-                if (info.NeedsOperationToken)
+                if (!isStaticlyFinal)
                 {
                     state.Writer.Write((byte)PickleOperation.UIntPtr);
                 }
@@ -1177,10 +1176,15 @@ namespace Ibasa.Pikala
                 iserializable.GetObjectData(serializationInfo, context);
 
                 state.Writer.Write((byte)PickleOperation.ISerializable);
-                if (!info.StaticType.IsValueType || info.StaticType != info.RuntimeType)
+                if (!isStaticlyFinal)
                 {
                     SerializeType(state, info.RuntimeType);
                 }
+                else
+                {
+                    System.Diagnostics.Debug.Assert(info.RuntimeType == info.StaticType, $"RuntimeType({info.RuntimeType}) != StaticType({info.StaticType})");
+                }
+
                 state.Writer.Write7BitEncodedInt(serializationInfo.MemberCount);
                 foreach (var member in serializationInfo)
                 {
@@ -1198,10 +1202,15 @@ namespace Ibasa.Pikala
             {
                 // Must be an object, try and dump all it's fields
                 state.Writer.Write((byte)PickleOperation.Object);
-                if (!info.StaticType.IsValueType || info.StaticType != info.RuntimeType)
+                if (!isStaticlyFinal)
                 {
                     SerializeType(state, info.RuntimeType);
                 }
+                else
+                {
+                    System.Diagnostics.Debug.Assert(info.RuntimeType == info.StaticType, $"RuntimeType({info.RuntimeType}) != StaticType({info.StaticType})");
+                }
+
                 var fields = GetSerializedFields(info.RuntimeType);
                 // Sort the fields by name so we serialise in deterministic order
                 Array.Sort(fields, (x, y) => x.Name.CompareTo(y.Name));
@@ -1237,6 +1246,7 @@ namespace Ibasa.Pikala
             {
                 // Rest of the operations will need the type of obj
                 var typeCode = Type.GetTypeCode(info.RuntimeType);
+                var isStaticallyFinal = IsStaticallyFinal(info.StaticType);
 
                 // Most pointers we'll reject but we special case IntPtr and UIntPtr as they're often 
                 // used for native sized numbers
@@ -1254,7 +1264,7 @@ namespace Ibasa.Pikala
                 if (info.RuntimeType.IsEnum)
                 {
                     // If we staticly know this is an enum and it's an mscorlib enum we can be sure that it won't change from an enum and so save writing out a type token
-                    if (!IsStaticallyFinal(info.StaticType) || info.NeedsOperationToken)
+                    if (!isStaticallyFinal)
                     {
                         state.Writer.Write((byte)PickleOperation.Enum);
                         SerializeType(state, info.RuntimeType);
@@ -1266,98 +1276,98 @@ namespace Ibasa.Pikala
                 switch (typeCode)
                 {
                     case TypeCode.Boolean:
-                        if (info.NeedsOperationToken)
+                        if (!isStaticallyFinal)
                         {
                             state.Writer.Write((byte)PickleOperation.Boolean);
                         }
                         state.Writer.Write((bool)obj);
                         return;
                     case TypeCode.Char:
-                        if (info.NeedsOperationToken)
+                        if (!isStaticallyFinal)
                         {
                             state.Writer.Write((byte)PickleOperation.Char);
                         }
                         state.Writer.Write((char)obj);
                         return;
                     case TypeCode.SByte:
-                        if (info.NeedsOperationToken)
+                        if (!isStaticallyFinal)
                         {
                             state.Writer.Write((byte)PickleOperation.SByte);
                         }
                         state.Writer.Write((sbyte)obj);
                         return;
                     case TypeCode.Int16:
-                        if (info.NeedsOperationToken)
+                        if (!isStaticallyFinal)
                         {
                             state.Writer.Write((byte)PickleOperation.Int16);
                         }
                         state.Writer.Write((short)obj);
                         return;
                     case TypeCode.Int32:
-                        if (info.NeedsOperationToken)
+                        if (!isStaticallyFinal)
                         {
                             state.Writer.Write((byte)PickleOperation.Int32);
                         }
                         state.Writer.Write((int)obj);
                         return;
                     case TypeCode.Int64:
-                        if (info.NeedsOperationToken)
+                        if (!isStaticallyFinal)
                         {
                             state.Writer.Write((byte)PickleOperation.Int64);
                         }
                         state.Writer.Write((long)obj);
                         return;
                     case TypeCode.Byte:
-                        if (info.NeedsOperationToken)
+                        if (!isStaticallyFinal)
                         {
                             state.Writer.Write((byte)PickleOperation.Byte);
                         }
                         state.Writer.Write((byte)obj);
                         return;
                     case TypeCode.UInt16:
-                        if (info.NeedsOperationToken)
+                        if (!isStaticallyFinal)
                         {
                             state.Writer.Write((byte)PickleOperation.UInt16);
                         }
                         state.Writer.Write((ushort)obj);
                         return;
                     case TypeCode.UInt32:
-                        if (info.NeedsOperationToken)
+                        if (!isStaticallyFinal)
                         {
                             state.Writer.Write((byte)PickleOperation.UInt32);
                         }
                         state.Writer.Write((uint)obj);
                         return;
                     case TypeCode.UInt64:
-                        if (info.NeedsOperationToken)
+                        if (!isStaticallyFinal)
                         {
                             state.Writer.Write((byte)PickleOperation.UInt64);
                         }
                         state.Writer.Write((ulong)obj);
                         return;
                     case TypeCode.Single:
-                        if (info.NeedsOperationToken)
+                        if (!isStaticallyFinal)
                         {
                             state.Writer.Write((byte)PickleOperation.Single);
                         }
                         state.Writer.Write((float)obj);
                         return;
                     case TypeCode.Double:
-                        if (info.NeedsOperationToken)
+                        if (!isStaticallyFinal)
                         {
                             state.Writer.Write((byte)PickleOperation.Double);
                         }
                         state.Writer.Write((double)obj);
                         return;
                     case TypeCode.Decimal:
-                        if (info.NeedsOperationToken)
+                        if (!isStaticallyFinal)
                         {
                             state.Writer.Write((byte)PickleOperation.Decimal);
                         }
                         state.Writer.Write((decimal)obj);
                         return;
                     case TypeCode.DBNull:
-                        if (info.NeedsOperationToken)
+                        if (!isStaticallyFinal)
                         {
                             state.Writer.Write((byte)PickleOperation.DBNull);
                         }
