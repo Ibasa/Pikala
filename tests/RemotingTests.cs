@@ -108,6 +108,23 @@ namespace Ibasa.Pikala.Tests
                 "",
             });
 
+        private static readonly string ScriptHeader_PickleByReference = string.Join('\n', new[]
+            {
+                "open Ibasa.Pikala",
+                "",
+                "let pickler = Pickler(fun _ -> AssemblyPickleMode.PickleByReference)",
+                "",
+                "let deserializeBase64 (base64 : string) : obj =",
+                "    use stream = new System.IO.MemoryStream(System.Convert.FromBase64String(base64))",
+                "    pickler.Deserialize(stream)",
+                "",
+                "let serializeBase64 (object : obj) : string =",
+                "    use stream = new System.IO.MemoryStream()",
+                "    pickler.Serialize(stream, object)",
+                "    System.Convert.ToBase64String(stream.ToArray())",
+                "",
+            });
+
         private string FsiToStringObject(object obj)
         {
             var script = string.Join('\n', new[]
@@ -535,6 +552,37 @@ namespace Ibasa.Pikala.Tests
                 Assert.IsType<System.Reflection.AssemblyCompanyAttribute>(
                     Assert.Single(assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyCompanyAttribute), false)));
             Assert.Equal("Ibasa", companysAttribute.Company);
+        }
+
+        [Fact]
+        public void TestRoundtripChangingFieldTypeIncompatibly()
+        {
+            // Test that if we serialise an object with a custom type, then reload that object in a new domain where we've changed 
+            // the type of the fields thar we get a sensible error
+
+
+            var scriptA = string.Join('\n', new[]
+            {
+                ScriptHeader_PickleByReference,
+                "type Frober = { Foo : int; Bar : double }",
+                "let frob = { Foo = 3; Bar = 2.3}",
+                "let base64 = serializeBase64 frob",
+                "printf \"%s\" base64",
+            });
+
+            var pickledbase64 = RunFsi(scriptA);
+
+            var scriptB = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "type Frober = { Foo : int64; Bar : single }",
+                "let obj = deserializeBase64 \"" + pickledbase64 + "\" :?> Frober",
+                "printf \"%O\" obj",
+            });
+
+            var exception = Assert.Throws<Exception>(() => RunFsi(scriptB));
+
+            Assert.Contains("Object of type 'System.Double' cannot be converted to type 'System.Single'", exception.Message);
         }
     }
 }

@@ -158,10 +158,9 @@ namespace Ibasa.Pikala
         }
 
         [return: NotNull]
-        public T SetMemo<T>(long position, bool isStaticValueType, [DisallowNull] T value)
+        public T SetMemo<T>(long position, bool shouldMemo, [DisallowNull] T value)
         {
-            // If the static type is a value type we should not save it in the memo dictionary
-            if (isStaticValueType) return value;
+            if (!shouldMemo) return value;
 
             memo.Add(position, value);
             return value;
