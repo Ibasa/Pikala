@@ -1250,10 +1250,11 @@ namespace Ibasa.Pikala
                     return;
                 }
 
+                // typeCode for an enum will be something like Int32 so we have to check for "enumness" first
                 if (info.RuntimeType.IsEnum)
                 {
-                    // typeCode for an enum will be something like Int32
-                    if (info.NeedsOperationToken)
+                    // If we staticly know this is an enum and it's an mscorlib enum we can be sure that it won't change from an enum and so save writing out a type token
+                    if (!IsStaticallyFinal(info.StaticType) || info.NeedsOperationToken)
                     {
                         state.Writer.Write((byte)PickleOperation.Enum);
                         SerializeType(state, info.RuntimeType);

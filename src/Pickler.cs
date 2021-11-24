@@ -147,5 +147,24 @@ namespace Ibasa.Pikala
 
             return fields.Where(field => !field.IsLiteral && !field.IsNotSerialized).ToArray();
         }
+
+        /// <summary>
+        /// Return true if the type is either a value type, or a sealed reference type from mscorlib.
+        /// </summary>
+        /// <remarks>
+        /// This is used when deciding if we need type tokens or not based on static context, if the static type
+        /// is a value type or a sealed type then we know that the runtime type must be equal to that (because there
+        /// are no subtypes). Contrast this with when the static type is a non-sealed reference type, the runtime type
+        /// that we serialise (and then later need to deserialse) could be any subtype of it.
+        ///
+        /// This only applies to types within mscorlib because we don't expect them to change, but they're common enough
+        /// that this gives a good saving of type tokens. Other types might be value type when we serialise them, but by the
+        /// time we come to deserialise the user may of changed them to a reference type leading the deserialiser to think there
+        /// should be a type token.
+        /// </remarks>
+        private bool IsStaticallyFinal(Type staticType)
+        {
+            return staticType.Assembly == mscorlib && (staticType.IsValueType || staticType.IsSealed);
+        }
     }
 }

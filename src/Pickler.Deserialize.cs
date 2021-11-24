@@ -1418,7 +1418,7 @@ namespace Ibasa.Pikala
             {
                 // This is a static value type, we probably didn't write an operation out for this
 
-                if (staticType.IsEnum)
+                if (IsStaticallyFinal(staticType) && staticType.IsEnum)
                 {
                     return PickleOperation.Enum;
                 }
@@ -1613,7 +1613,7 @@ namespace Ibasa.Pikala
                 case PickleOperation.Enum:
                     {
                         Type enumType;
-                        if (info.StaticType.IsValueType)
+                        if (IsStaticallyFinal(info.StaticType) && info.StaticType.IsEnum)
                         {
                             enumType = info.StaticType;
                         }

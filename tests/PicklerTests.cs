@@ -46,6 +46,24 @@ namespace Ibasa.Pikala.Tests
         }
 
         [Property]
+        public Property TestSystemEnumArray()
+        {
+            var pickler = new Pickler();
+            return Prop.ForAll(
+                Arb.From<System.ConsoleColor[]>(),
+                value => RoundTrip.Assert(pickler, value));
+        }
+
+        [Property]
+        public Property TestCustomEnumArray()
+        {
+            var pickler = new Pickler();
+            return Prop.ForAll(
+                Arb.From<TestTypes.EnumurationType[]>(),
+                value => RoundTrip.Assert(pickler, value));
+        }
+
+        [Property]
         public Property TestKeyValuePair()
         {
             var pickler = new Pickler();
