@@ -13,9 +13,9 @@ namespace Ibasa.Pikala
         public Type StaticType { get; }
         public bool ShouldMemo { get; }
 
-        public SerializeInformation(Type runtimeType, Type staticType, bool shouldMemo)
+        public SerializeInformation(Type? runtimeType, Type staticType, bool shouldMemo)
         {
-            RuntimeType = runtimeType;
+            RuntimeType = runtimeType ?? typeof(object);
             StaticType = staticType;
             ShouldMemo = shouldMemo;
         }
@@ -1224,7 +1224,7 @@ namespace Ibasa.Pikala
 
         private void SerializeType(PicklerSerializationState state, Type type, Type[]? genericTypeParameters = null, Type[]? genericMethodParameters = null)
         {
-            Serialize(state, type, new SerializeInformation(type.GetType(), typeof(Type), true), genericTypeParameters, genericMethodParameters);
+            Serialize(state, type, new SerializeInformation(type?.GetType(), typeof(Type), true), genericTypeParameters, genericMethodParameters);
         }
 
         private void Serialize(PicklerSerializationState state, object? obj, SerializeInformation info, Type[]? genericTypeParameters = null, Type[]? genericMethodParameters = null)
