@@ -466,7 +466,7 @@ namespace Ibasa.Pikala
             state.Writer.Write((byte)0xFF);
         }
 
-        private void SerializeType(PicklerSerializationState state, Type type, Type[]? genericParameters)
+        private void SerializeTypeDef(PicklerSerializationState state, Type type, Type[]? genericParameters)
         {
             if (type.IsValueType)
             {
@@ -1022,7 +1022,7 @@ namespace Ibasa.Pikala
                         }
                         else
                         {
-                            SerializeType(state, type, genericParameters);
+                            SerializeTypeDef(state, type, genericParameters);
                         }
                     });
                 }
