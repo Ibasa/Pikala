@@ -652,10 +652,14 @@ namespace Ibasa.Pikala
             }
         }
 
-        private Array DeserializeArray(PicklerDeserializationState state, bool isSZArray, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
+        private Array DeserializeArray(PicklerDeserializationState state, bool isSZArray, long position, DeserializeInformation info, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
-            var pickledTypeInfo = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
-            var elementType = pickledTypeInfo.Type;
+            Type? elementType = info.StaticType.GetElementType();
+            if (elementType == null || !IsStaticallyFinal(elementType))
+            {
+                var pickledTypeInfo = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+                elementType = pickledTypeInfo.Type;
+            }
 
             Array array;
             if (isSZArray)
@@ -1267,7 +1271,7 @@ namespace Ibasa.Pikala
             {
                 case PickleOperation.SZArray:
                 case PickleOperation.Array:
-                    return DeserializeArray(state, operation == PickleOperation.SZArray, position, genericTypeParameters, genericMethodParameters);
+                    return DeserializeArray(state, operation == PickleOperation.SZArray, position, info, genericTypeParameters, genericMethodParameters);
 
                 case PickleOperation.Mscorlib:
                     // We don't memo mscorlib, it's cheaper to just have the single byte token

@@ -650,7 +650,7 @@ namespace Ibasa.Pikala
             });
         }
 
-        private void SerializeArray(PicklerSerializationState state, Array obj, Type objType)
+        private void SerializeArray(PicklerSerializationState state, Array obj, SerializeInformation info)
         {
             // This is an array, write the type then loop over each item.
             // Theres a performance optimisation we could do here with value types,
@@ -663,7 +663,7 @@ namespace Ibasa.Pikala
             }
 
             // Special case szarray (i.e. Rank 1, lower bound 0)
-            if (objType.IsSZArray)
+            if (info.RuntimeType.IsSZArray)
             {
                 state.Writer.Write((byte)PickleOperation.SZArray);
             }
@@ -672,10 +672,14 @@ namespace Ibasa.Pikala
                 state.Writer.Write((byte)PickleOperation.Array);
             }
 
-            var elementType = objType.GetElementType();
-            SerializeType(state, elementType);
+            Type? elementType = info.StaticType.GetElementType();
+            if (elementType == null || !IsStaticallyFinal(elementType))
+            { 
+                elementType = info.RuntimeType.GetElementType();
+                SerializeType(state, elementType);
+            }
 
-            if (objType.IsSZArray)
+            if (info.RuntimeType.IsSZArray)
             {
                 state.Writer.Write7BitEncodedInt(obj.Length);
             }
@@ -802,7 +806,7 @@ namespace Ibasa.Pikala
 
             if (info.RuntimeType.IsArray)
             {
-                SerializeArray(state, (Array)obj, info.RuntimeType);
+                SerializeArray(state, (Array)obj, info);
             }
 
             // This check needs to come before IsValueType, because these 

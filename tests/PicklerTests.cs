@@ -446,6 +446,16 @@ namespace Ibasa.Pikala.Tests
         }
 
         [Property]
+        public Property TestNestedIntArray()
+        {
+            var pickler = new Pickler();
+
+            return Prop.ForAll(
+                Arb.From<int[][][]>(),
+                value => RoundTrip.Assert(pickler, value));
+        }
+
+        [Property]
         public Property TestMultirankIntArray()
         {
             var pickler = new Pickler();
