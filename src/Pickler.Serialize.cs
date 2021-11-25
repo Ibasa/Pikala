@@ -674,7 +674,7 @@ namespace Ibasa.Pikala
 
             Type? elementType = info.StaticType.GetElementType();
             if (elementType == null || !IsStaticallyFinal(elementType))
-            { 
+            {
                 elementType = info.RuntimeType.GetElementType();
                 SerializeType(state, elementType);
             }
