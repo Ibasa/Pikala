@@ -691,7 +691,16 @@ namespace Ibasa.Pikala
                     try
                     {
                         var pin = arrayHandle.AddrOfPinnedObject();
-                        var byteCount = System.Runtime.InteropServices.Marshal.SizeOf(elementType) * array.LongLength;
+                        // TODO We should just use Unsafe.SizeOf here but that's a net5.0 addition
+                        long byteCount;
+                        if (elementType == typeof(char))
+                        {
+                            byteCount = 2 * array.LongLength;
+                        }
+                        else
+                        {
+                            byteCount = System.Runtime.InteropServices.Marshal.SizeOf(elementType) * array.LongLength;
+                        }
 
                         while (byteCount > 0)
                         {

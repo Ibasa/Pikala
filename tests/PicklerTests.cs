@@ -46,6 +46,24 @@ namespace Ibasa.Pikala.Tests
         }
 
         [Property]
+        public Property TestByteArray()
+        {
+            var pickler = new Pickler();
+            return Prop.ForAll(
+                Arb.From<byte[]>(),
+                value => RoundTrip.Assert(pickler, value));
+        }
+
+        [Property]
+        public Property TestCharArray()
+        {
+            var pickler = new Pickler();
+            return Prop.ForAll(
+                Arb.From<char[]>(),
+                value => RoundTrip.Assert(pickler, value));
+        }
+
+        [Property]
         public Property TestKeyValuePair()
         {
             var pickler = new Pickler();
