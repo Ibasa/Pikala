@@ -104,6 +104,14 @@ namespace Ibasa.Pikala.Tests
             }
         }
 
+        [Fact]
+        public void TestEmptyValueTuple()
+        {
+            var pickler = new Pickler();
+            var obj = ValueTuple.Create();
+            RoundTrip.Assert(pickler, obj);
+        }
+
         [Theory]
         [InlineData(2, "test", true)]
         public void TestValueTuple(int i, string s, bool b)

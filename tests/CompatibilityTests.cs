@@ -256,7 +256,11 @@ namespace Ibasa.Pikala.Tests
             try
             {
                 expectedBytes = File.ReadAllBytes(filePath);
-                Assert.Equal(expectedBytes, actualBytes);
+
+                if (!System.Collections.StructuralComparisons.StructuralEqualityComparer.Equals(expectedBytes, actualBytes))
+                {
+                    throw new Exception($"Serialised bytes did not match\nObject: {obj}\nExpected length: {expectedBytes.Length}\nActual length: {actualBytes.Length}");
+                }
             }
             catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException)
             {

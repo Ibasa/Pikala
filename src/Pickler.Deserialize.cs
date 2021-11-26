@@ -778,6 +778,40 @@ namespace Ibasa.Pikala
             return array;
         }
 
+        private object DeserializeTuple(PicklerDeserializationState state, bool isValueTuple, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
+        {
+            var length = state.Reader.ReadByte();
+            // if length == 0 short circuit to just return a new ValueTuple
+            if (length == 0)
+            {
+                System.Diagnostics.Debug.Assert(isValueTuple, "Tuple length was zero but it wasn't a value tuple");
+                return new ValueTuple();
+            }
+
+            var genericParameters = new Type[length];
+            var genericArguments = new Type[length];
+            for (int i = 0; i < length; ++i)
+            {
+                var pickledTypeInfo = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+                genericArguments[i] = pickledTypeInfo.Type;
+                genericParameters[i] = Type.MakeGenericMethodParameter(i);
+            }
+
+            var items = new object?[length];
+            for (int i = 0; i < length; ++i)
+            {
+                items[i] = Deserialize(state, MakeInfo(genericArguments[i]), genericTypeParameters, genericMethodParameters);
+            }
+
+            var tupleTypeName = isValueTuple ? "ValueTuple" : "Tuple";
+            var tupleType = Type.GetType($"System.{tupleTypeName}");
+            var openCreateMethod = tupleType.GetMethod("Create", length, genericParameters);
+            var closedCreateMethod = openCreateMethod.MakeGenericMethod(genericArguments);
+            var tupleObject = closedCreateMethod.Invoke(null, items);
+
+            return state.SetMemo(position, !isValueTuple, tupleObject);
+        }
+
         private object DeserializeISerializable(PicklerDeserializationState state, Type type, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             var memberCount = state.Reader.Read7BitEncodedInt();
@@ -1343,6 +1377,10 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.Delegate:
                     return DeserializeDelegate(state, position, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.Tuple:
+                case PickleOperation.ValueTuple:
+                    return DeserializeTuple(state, operation == PickleOperation.ValueTuple, position, genericTypeParameters, genericMethodParameters);
 
                 case PickleOperation.Reducer:
                     {

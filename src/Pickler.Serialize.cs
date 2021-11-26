@@ -661,7 +661,7 @@ namespace Ibasa.Pikala
             if (obj.Rank > byte.MaxValue)
             {
                 // Who has 256 rank arrays!? The runtime specification says this can be at most 32.
-                throw new NotImplementedException($"Pikala does not support arrays of rank higher than {byte.MaxValue}");
+                throw new NotImplementedException($"Pikala does not support arrays of rank higher than {byte.MaxValue}, got {obj.Rank}");
             }
 
             // Special case szarray (i.e. Rank 1, lower bound 0)
@@ -1130,6 +1130,44 @@ namespace Ibasa.Pikala
                 {
                     Serialize(state, invocation.Target, MakeInfo(invocation.Target, typeof(object), true));
                     Serialize(state, invocation.Method, MakeInfo(invocation.Method, typeof(MethodInfo), true));
+                }
+            }
+
+            // Tuples!
+
+            else if (info.RuntimeType.Assembly == mscorlib && (info.RuntimeType.FullName.StartsWith("System.Tuple") || info.RuntimeType.FullName.StartsWith("System.ValueTuple")))
+            {
+                var tuple = obj as System.Runtime.CompilerServices.ITuple;
+
+                if (info.RuntimeType.FullName.StartsWith("System.Tuple"))
+                {
+                    state.Writer.Write((byte)PickleOperation.Tuple);
+                }
+                else
+                {
+                    state.Writer.Write((byte)PickleOperation.ValueTuple);
+                }
+
+                if (tuple.Length > byte.MaxValue)
+                {
+                    throw new NotImplementedException($"Pikala does not support tuples of length higher than {byte.MaxValue}, got {tuple.Length}");
+                }
+
+                state.Writer.Write((byte)tuple.Length);
+
+                // Write out the static types
+                var genericArguments = info.RuntimeType.GetGenericArguments();
+                for (int i = 0; i < tuple.Length; ++i)
+                {
+                    SerializeType(state, genericArguments[i], genericTypeParameters, genericMethodParameters);
+                }
+
+                // Write out the values
+                for (int i = 0; i < tuple.Length; ++i)
+                {
+                    var item = tuple[i];
+                    var itemInfo = new SerializeInformation(item?.GetType(), genericArguments[i], !genericArguments[i].IsValueType);
+                    Serialize(state, item, itemInfo, genericTypeParameters, genericMethodParameters);
                 }
             }
 
