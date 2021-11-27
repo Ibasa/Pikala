@@ -800,7 +800,7 @@ namespace Ibasa.Pikala
             var items = new object?[length];
             for (int i = 0; i < length; ++i)
             {
-                items[i] = Deserialize(state, MakeInfo(genericArguments[i]), genericTypeParameters, genericMethodParameters);
+                items[i] = ReducePickle(Deserialize(state, MakeInfo(genericArguments[i]), genericTypeParameters, genericMethodParameters));
             }
 
             var tupleTypeName = isValueTuple ? "ValueTuple" : "Tuple";
