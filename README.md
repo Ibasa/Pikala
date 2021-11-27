@@ -38,7 +38,7 @@ Deserialize a `Func<int, int>`:
 using Ibasa.Pikala
 
 // This is a snapshot of serializing `(Func<int, int>)Math.Abs`
-var memoryStream = new MemoryStream(Convert.FromBase64String("UEtMQQEAAAAmIhoYFg1TeXN0ZW0uRnVuY2AyAhoYFgxTeXN0ZW0uSW50MzIVHAAAAAAAAAABAB0RQWJzKFN5c3RlbS5JbnQzMikAGhgWC1N5c3RlbS5NYXRo"));
+var memoryStream = new MemoryStream(Convert.FromBase64String("UEtMQQEAAAAoJBwaGA1TeXN0ZW0uRnVuY2AyAhwaGAxTeXN0ZW0uSW50MzIXHAAAAAAAAAABAB8RQWJzKFN5c3RlbS5JbnQzMikAHBoYC1N5c3RlbS5NYXRo"));
 
 var pickler = new Pickler();
 var function = pickler.Deserialize(memoryStream) as Func<int, int>;
@@ -110,6 +110,11 @@ Pikala makes a best effort to serialize most objects.
 * Pointers will be explicitly failed (this doesn't apply to `System.IntPtr` and `UIntPtr` which are serialized as 64bit integers).
 * Primitive types (like `int` or `string` are explicitly handled and written out by `System.IO.BinaryWriter`.
 * Reflection types like `Type` and `FieldInfo` are explicitly handled and either written out as named references or as full definitions that can be rebuilt into dynamic modules via `System.Reflection.Emit`.
+* The produt types `System.ValueTuple`, `System.Tuple` are explictly handled and written out as length, the type of the tuple, and each item. 
+* Arrays are explictly handled:
+    * Arrays write out their rank, lower bound and length per dimension, the type of array, and then each item.
+    * Single dimension arrays with a zero lower bound are special cased as an SZArray operation and don't write out rank or lower bounds just a single length.
+    * Arrays of primitive types (eg. `int[]`, `double[,]`) are written using fast block memory copy.
 * Otherwise types are handled in the following order:
     1) If the Pickler has an IReducer registered for the object type that is used.
     2) If the type inherits from [`System.Runtime.Serialization.ISerializable `](https://docs.microsoft.com/en-us/dotnet/api/system.runtime.serialization.iserializable) then `ISerializable.GetObjectData` is used to serialize, and the `(SerializationInfo, StreamingContext)` constructor is used to deserialize.
