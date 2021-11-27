@@ -36,6 +36,19 @@ namespace Ibasa.Pikala.Tests
                 return true;
             }
 
+            // If these are lists
+            if (x is System.Collections.IList xl && y is System.Collections.IList yl)
+            {
+                if (xl.Count != yl.Count) return false;
+
+                for (int i = 0; i < xl.Count; ++i)
+                {
+                    if (!Equals(xl[i], yl[i])) return false;
+                }
+
+                return true;
+            }
+
             return x.Equals(y);
         }
 
@@ -181,6 +194,7 @@ namespace Ibasa.Pikala.Tests
             {
                 GenerateArray,
                 GenerateDictionary,
+                GenerateList,
                 GenerateTuple,
                 GenerateValueTuple,
             }).ToArray();
