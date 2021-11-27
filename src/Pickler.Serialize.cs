@@ -909,6 +909,21 @@ namespace Ibasa.Pikala
                     }
                 }
 
+                // Arrays aren't simple generic types, we need to write out the rank and element type
+                else if (type.IsArray)
+                {
+                    state.Writer.Write((byte)PickleOperation.ArrayType);
+                    if (type.IsSZArray)
+                    {
+                        state.Writer.Write((byte)0);
+                    }
+                    else
+                    {
+                        state.Writer.Write((byte)type.GetArrayRank());
+                    }
+                    SerializeType(state, type.GetElementType());
+                }
+
                 else if (type.IsGenericParameter)
                 {
                     if (type.DeclaringMethod != null)

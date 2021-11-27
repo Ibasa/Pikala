@@ -1335,6 +1335,22 @@ namespace Ibasa.Pikala
                 case PickleOperation.ModuleDef:
                     return DeserializeModuleDef(state, position, genericTypeParameters, genericMethodParameters);
 
+                case PickleOperation.ArrayType:
+                    {
+                        var rank = state.Reader.ReadByte();
+                        var elementType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+                        Type arrayType;
+                        if (rank == 0)
+                        {
+                            arrayType = elementType.Type.MakeArrayType();
+                        }
+                        else
+                        {
+                            arrayType = elementType.Type.MakeArrayType(rank);
+                        }
+                        return state.SetMemo(position, true, new PickledTypeInfoRef(arrayType));
+                    }
+
                 case PickleOperation.GenericInstantiation:
                     return DeserializeGenericInstantiation(state, position, genericTypeParameters, genericMethodParameters);
 
