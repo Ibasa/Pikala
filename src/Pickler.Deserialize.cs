@@ -807,8 +807,7 @@ namespace Ibasa.Pikala
                 items[i] = ReducePickle(Deserialize(state, MakeInfo(genericArguments[i]), genericTypeParameters, genericMethodParameters));
             }
 
-            var tupleTypeName = isValueTuple ? "ValueTuple" : "Tuple";
-            var tupleType = Type.GetType($"System.{tupleTypeName}");
+            var tupleType = isValueTuple ? typeof(System.ValueTuple) : typeof(System.Tuple);
             var openCreateMethod = tupleType.GetMethod("Create", length, genericParameters);
             var closedCreateMethod = openCreateMethod.MakeGenericMethod(genericArguments);
             var tupleObject = closedCreateMethod.Invoke(null, items);
