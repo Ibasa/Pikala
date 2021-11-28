@@ -851,21 +851,29 @@ namespace Ibasa.Pikala
         private object DeserializeReducer(PicklerDeserializationState state, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             var method = Deserialize<PickledMethodBase>(state, MakeInfo(typeof(MethodBase)), genericTypeParameters, genericMethodParameters);
-            if (method is PickledConstructorInfo constructorInfo)
+
+            object? target;
+            if (method is PickledConstructorInfo)
             {
-                var args = ReducePickle(DeserializeNonNull<object[]>(state, MakeInfo(typeof(object[])), genericTypeParameters, genericMethodParameters));
-                return constructorInfo.Invoke(args);
+                target = null;
             }
-            else if (method is PickledMethodInfo methodInfo)
+            else if (method is PickledMethodInfo)
             {
-                var target = ReducePickle(Deserialize(state, MakeInfo(typeof(object)), genericTypeParameters, genericMethodParameters));
-                var args = ReducePickle(DeserializeNonNull<object[]>(state, MakeInfo(typeof(object[])), genericTypeParameters, genericMethodParameters));
-                return methodInfo.Invoke(target, args);
+                target = ReducePickle(Deserialize(state, MakeInfo(typeof(object)), genericTypeParameters, genericMethodParameters));
             }
             else
             {
                 throw new Exception($"Invalid reduction MethodBase was '{method}'.");
             }
+
+            var args = new object?[state.Reader.Read7BitEncodedInt()];
+            for (int i = 0; i < args.Length; ++i)
+            {
+                var arg = ReducePickle(Deserialize(state, MakeInfo(typeof(object)), genericTypeParameters, genericMethodParameters));
+                args[i] = arg;
+            }
+
+            return method.Invoke(target, args);
         }
 
         private void DeserializeObject(PicklerDeserializationState state, object uninitializedObject, Type type, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
