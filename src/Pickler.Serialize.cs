@@ -1228,7 +1228,7 @@ namespace Ibasa.Pikala
                 }
 
                 state.Writer.Write7BitEncodedInt(args.Length);
-                foreach(var arg in args)
+                foreach (var arg in args)
                 {
                     Serialize(state, arg, MakeInfo(arg, typeof(object), true), genericTypeParameters, genericMethodParameters);
                 }
