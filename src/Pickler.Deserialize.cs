@@ -693,7 +693,11 @@ namespace Ibasa.Pikala
                         var pin = arrayHandle.AddrOfPinnedObject();
                         // TODO We should just use Unsafe.SizeOf here but that's a net5.0 addition
                         long byteCount;
-                        if (elementType == typeof(char))
+                        if (elementType == typeof(bool))
+                        {
+                            byteCount = array.LongLength;
+                        }
+                        else if (elementType == typeof(char))
                         {
                             byteCount = 2 * array.LongLength;
                         }
@@ -1330,6 +1334,22 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.ModuleDef:
                     return DeserializeModuleDef(state, position, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.ArrayType:
+                    {
+                        var rank = state.Reader.ReadByte();
+                        var elementType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+                        Type arrayType;
+                        if (rank == 0)
+                        {
+                            arrayType = elementType.Type.MakeArrayType();
+                        }
+                        else
+                        {
+                            arrayType = elementType.Type.MakeArrayType(rank);
+                        }
+                        return state.SetMemo(position, true, new PickledTypeInfoRef(arrayType));
+                    }
 
                 case PickleOperation.GenericInstantiation:
                     return DeserializeGenericInstantiation(state, position, genericTypeParameters, genericMethodParameters);

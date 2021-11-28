@@ -156,6 +156,7 @@ namespace Ibasa.Pikala.Tests
         [InlineData(typeof(string[]))]
         [InlineData(typeof(Tuple<int, object>))]
         [InlineData(typeof(PointerStruct))]
+        [InlineData(typeof(List<uint>[]))]
         public void TestType(Type type)
         {
             var pickler = new Pickler();

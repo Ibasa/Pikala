@@ -702,7 +702,11 @@ namespace Ibasa.Pikala
                         var pin = arrayHandle.AddrOfPinnedObject();
                         // TODO We should just use Unsafe.SizeOf here but that's a net5.0 addition
                         long byteCount;
-                        if (elementType == typeof(char))
+                        if (elementType == typeof(bool))
+                        {
+                            byteCount = obj.LongLength;
+                        }
+                        else if (elementType == typeof(char))
                         {
                             byteCount = 2 * obj.LongLength;
                         }
@@ -903,6 +907,21 @@ namespace Ibasa.Pikala
                     {
                         SerializeType(state, arg);
                     }
+                }
+
+                // Arrays aren't simple generic types, we need to write out the rank and element type
+                else if (type.IsArray)
+                {
+                    state.Writer.Write((byte)PickleOperation.ArrayType);
+                    if (type.IsSZArray)
+                    {
+                        state.Writer.Write((byte)0);
+                    }
+                    else
+                    {
+                        state.Writer.Write((byte)type.GetArrayRank());
+                    }
+                    SerializeType(state, type.GetElementType());
                 }
 
                 else if (type.IsGenericParameter)
