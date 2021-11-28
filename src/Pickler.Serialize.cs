@@ -1212,8 +1212,6 @@ namespace Ibasa.Pikala
                     }
 
                     // We don't write target for ConstructorInfo, it must be null.
-                    // Also we've just made this args array, don't memo it
-                    Serialize(state, args, new SerializeInformation(typeof(object[]), typeof(object[]), false));
                 }
                 else if (method is MethodInfo methodInfo)
                 {
@@ -1223,12 +1221,16 @@ namespace Ibasa.Pikala
                     }
 
                     Serialize(state, target, MakeInfo(target, typeof(object), true));
-                    // Also we've just made this args array, don't memo it
-                    Serialize(state, args, new SerializeInformation(typeof(object[]), typeof(object[]), false));
                 }
                 else
                 {
                     throw new Exception($"Invalid reduction for type '{info.RuntimeType}'. MethodBase was '{method}'.");
+                }
+
+                state.Writer.Write7BitEncodedInt(args.Length);
+                foreach(var arg in args)
+                {
+                    Serialize(state, arg, MakeInfo(arg, typeof(object), true), genericTypeParameters, genericMethodParameters);
                 }
             }
 

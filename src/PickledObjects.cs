@@ -250,9 +250,9 @@ namespace Ibasa.Pikala
 
         public abstract MethodInfo MethodInfo { get; }
 
-        public virtual object Invoke(object? target, params object?[] parameters)
+        public override object Invoke(object? target, params object?[] args)
         {
-            return MethodInfo.Invoke(target, parameters);
+            return MethodInfo.Invoke(target, args);
         }
 
         public override void Emit(ILGenerator ilGenerator, OpCode opCode)
@@ -568,6 +568,8 @@ namespace Ibasa.Pikala
 
         public abstract MethodBase MethodBase { get; }
 
+        public abstract object Invoke(object? target, params object?[] args);
+
         public virtual string GetSignature()
         {
             var signature = new StringBuilder();
@@ -651,9 +653,9 @@ namespace Ibasa.Pikala
 
         public abstract ConstructorInfo ConstructorInfo { get; }
 
-        public virtual object Invoke(params object?[] parameters)
+        public override object Invoke(object? target, params object?[] args)
         {
-            return ConstructorInfo.Invoke(parameters);
+            return ConstructorInfo.Invoke(args);
         }
 
         public override void Emit(ILGenerator ilGenerator, OpCode opCode)
