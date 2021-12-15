@@ -584,5 +584,38 @@ namespace Ibasa.Pikala.Tests
 
             Assert.Contains("Object of type 'System.Double' cannot be converted to type 'System.Single'", exception.Message);
         }
+
+        [Fact]
+        public void TestChangeTypeVarNameDoesNotAffectSignatureLookup()
+        {
+            // Test that if we change the name of a type var in a method we can still look that method reference up.
+
+            var scriptA = string.Join('\n', new[]
+            {
+                ScriptHeader_PickleByReference,
+                "module Test =",
+                "   let doWork<'a> (args : 'a list) = args.Length",
+                "let typ = System.Type.GetType(\"FSI_0001+Test\")",
+                "let mi = typ.GetMethod(\"doWork\")",
+                "let base64 = serializeBase64 mi",
+                "printf \"%s\" base64",
+            });
+
+            
+            var pickledbase64 = RunFsi(scriptA);
+            
+            var scriptB = string.Join('\n', new[] 
+            {
+                ScriptHeader,
+                "module Test =",
+                "   let doWork<'T> (args : 'T list) = args.Length",
+                "let mi = deserializeBase64 \"" + pickledbase64 + "\" :?> System.Reflection.MethodInfo",
+                "printf \"%s\" mi.Name",
+            });
+
+            var result = RunFsi(scriptB);
+
+            Assert.Equal("doWork", result);
+        }
     }
 }
