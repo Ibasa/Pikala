@@ -601,10 +601,10 @@ namespace Ibasa.Pikala.Tests
                 "printf \"%s\" base64",
             });
 
-            
+
             var pickledbase64 = RunFsi(scriptA);
-            
-            var scriptB = string.Join('\n', new[] 
+
+            var scriptB = string.Join('\n', new[]
             {
                 ScriptHeader,
                 "module Test =",
