@@ -37,7 +37,9 @@ namespace Ibasa.Pikala
                         signature.Append(", ");
                     }
                     first = false;
-                    signature.Append(param.Name);
+                    // TypeVar names don't make up part of the signature, but when we do the signature
+                    // redesign we probably want to keep them for pretty printing but not for equality checks.
+                    //signature.Append(param.Name);
                 }
                 signature.Append(">");
             }
