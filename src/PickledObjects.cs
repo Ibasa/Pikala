@@ -338,7 +338,8 @@ namespace Ibasa.Pikala
                         signature.Append(", ");
                     }
                     first = false;
-                    signature.Append(param.Name);
+                    // See Method.cs for comment about TypeParam names
+                    //signature.Append(param.Name);
                 }
                 signature.Append(">");
             }
@@ -598,7 +599,8 @@ namespace Ibasa.Pikala
                         signature.Append(", ");
                     }
                     first = false;
-                    signature.Append(param.Name);
+                    // See Method.cs for comment about TypeParam names
+                    //signature.Append(param.Name);
                 }
                 signature.Append(">");
             }
