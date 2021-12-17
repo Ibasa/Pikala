@@ -931,19 +931,19 @@ namespace Ibasa.Pikala
                         if (genericMethodParameters == null)
                         {
                             state.Writer.Write((byte)PickleOperation.GenericParameter);
-                            Serialize(state, type.DeclaringMethod, MakeInfo(type.DeclaringMethod, typeof(MethodInfo), true));
+                            Serialize(state, type.DeclaringMethod, MakeInfo(type.DeclaringMethod, typeof(MemberInfo), true));
                         }
                         else
                         {
                             state.Writer.Write((byte)PickleOperation.MVar);
                         }
                     }
-                    else if (type.DeclaringType != null && genericMethodParameters == null)
+                    else if (type.DeclaringType != null)
                     {
-                        if (genericMethodParameters == null)
+                        if (genericTypeParameters == null)
                         {
                             state.Writer.Write((byte)PickleOperation.GenericParameter);
-                            SerializeType(state, type.DeclaringType);
+                            Serialize(state, type.DeclaringType, MakeInfo(type.DeclaringType, typeof(MemberInfo), true));
                         }
                         else
                         {
