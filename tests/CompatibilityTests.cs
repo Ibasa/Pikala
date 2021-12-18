@@ -280,7 +280,7 @@ namespace Ibasa.Pikala.Tests
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(filePath));
                 File.WriteAllBytes(filePath, actualBytes);
-                expectedBytes = actualBytes;
+                throw new Exception($"Wrote new serialised bytes, rerun test to verify determinism\nObject: {obj}");
             }
 
             // If we're regenerating this will just be the bytes we just wrote, but still worth checking read works
