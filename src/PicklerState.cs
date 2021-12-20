@@ -55,13 +55,61 @@ namespace Ibasa.Pikala
 
     sealed class PicklerDeserializationState : IDisposable
     {
+        static List<PicklerDeserializationState> activeDeserializationStates;
+        static PicklerDeserializationState()
+        {
+            activeDeserializationStates = new List<PicklerDeserializationState>();
+            AppDomain.CurrentDomain.TypeResolve += CurrentDomain_TypeResolve;
+        }
+
+        private static System.Reflection.Assembly CurrentDomain_TypeResolve(object sender, ResolveEventArgs args)
+        {
+            PickledTypeInfoDef? foundType = null;
+            lock (activeDeserializationStates)
+            {
+                foreach (var state in activeDeserializationStates)
+                {
+                    if (state.constructedTypes.TryGetValue(args.RequestingAssembly, out var types))
+                    {
+                        if (types.TryGetValue(args.Name, out var type))
+                        {
+                            if (type.FullyDefined)
+                            {
+                                foundType = type;
+                                break;
+                            }
+                            else
+                            {
+                                throw new Exception($"Tried to load type '{args.Name}' from assembly '{args.RequestingAssembly}' but it's not yet fully defined");
+                            }
+                        }
+                        else
+                        {
+                            throw new Exception($"Tried to load type '{args.Name}' from assembly '{args.RequestingAssembly}' but it's not yet defined");
+                        }
+                    }
+                }
+            }
+
+            if (foundType == null)
+            {
+                throw new Exception($"Tried to load type '{args.Name}' from assembly '{args.RequestingAssembly}' but assembly isn't known");
+            }
+            else
+            {
+                foundType.CreateType();
+                return args.RequestingAssembly;
+            }
+        }
+
+
         Dictionary<long, object> memo;
         Dictionary<long, MemoCallback> memoCallbacks;
         List<(long, Action<object>)> fixups;
         List<Action> staticFields;
         public BinaryReader Reader { get; private set; }
 
-        Dictionary<System.Reflection.Assembly, Dictionary<string, PickledTypeInfoDef>> _constructedTypes;
+        Dictionary<System.Reflection.Assembly, Dictionary<string, PickledTypeInfoDef>> constructedTypes;
 
         public PicklerDeserializationState(Stream stream)
         {
@@ -70,8 +118,11 @@ namespace Ibasa.Pikala
             fixups = new List<(long, Action<object>)>();
             staticFields = new List<Action>();
             Reader = new BinaryReader(new PickleStream(stream));
-            _constructedTypes = new Dictionary<System.Reflection.Assembly, Dictionary<string, PickledTypeInfoDef>>();
-            AppDomain.CurrentDomain.TypeResolve += CurrentDomain_TypeResolve;
+            constructedTypes = new Dictionary<System.Reflection.Assembly, Dictionary<string, PickledTypeInfoDef>>();
+            lock (activeDeserializationStates)
+            {
+                activeDeserializationStates.Add(this);
+            }
         }
 
         public void AddTypeDef(PickledTypeInfoDef type)
@@ -84,7 +135,7 @@ namespace Ibasa.Pikala
             }
 
             Dictionary<string, PickledTypeInfoDef> mapping;
-            if (_constructedTypes.TryGetValue(assembly, out mapping))
+            if (constructedTypes.TryGetValue(assembly, out mapping))
             {
                 mapping.Add(name, type);
             }
@@ -92,40 +143,16 @@ namespace Ibasa.Pikala
             {
                 mapping = new Dictionary<string, PickledTypeInfoDef>();
                 mapping.Add(name, type);
-                _constructedTypes.Add(assembly, mapping);
+                constructedTypes.Add(assembly, mapping);
             }
-        }
-
-        private System.Reflection.Assembly CurrentDomain_TypeResolve(object sender, ResolveEventArgs args)
-        {
-            if (_constructedTypes.TryGetValue(args.RequestingAssembly, out var types))
-            {
-                if (types.TryGetValue(args.Name, out var type))
-                {
-                    if (type.FullyDefined)
-                    {
-                        type.CreateType();
-                    }
-                    else
-                    {
-                        throw new Exception($"Tried to load type '{args.Name}' from assembly '{args.RequestingAssembly}' but it's not yet fully defined");
-                    }
-                }
-                else
-                {
-                    throw new Exception($"Tried to load type '{args.Name}' from assembly '{args.RequestingAssembly}' but it's not yet defined");
-                }
-            }
-            else
-            {
-                throw new Exception($"Tried to load type '{args.Name}' from assembly '{args.RequestingAssembly}' but assembly isn't known");
-            }
-            return args.RequestingAssembly;
         }
 
         public void Dispose()
         {
-            AppDomain.CurrentDomain.TypeResolve -= CurrentDomain_TypeResolve;
+            lock (activeDeserializationStates)
+            {
+                activeDeserializationStates.Remove(this);
+            }
         }
 
 
