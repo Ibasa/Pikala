@@ -175,7 +175,7 @@ namespace Ibasa.Pikala
                 constructingMethod.Parameters = new ParameterBuilder[parameterCount];
                 for (int j = 0; j < constructingMethod.ParameterTypes.Length; ++j)
                 {
-                    var parameterName = state.Reader.ReadString();
+                    var parameterName = state.Reader.ReadNullableString();
                     var parameterAttributes = (ParameterAttributes)state.Reader.ReadInt32();
                     constructingMethod.Parameters[j] = methodBuilder.DefineParameter(1 + j, parameterAttributes, parameterName);
                 }
