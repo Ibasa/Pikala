@@ -1,7 +1,7 @@
-﻿using System;
-using Xunit;
+﻿using Ibasa.Pikala.Tests.TestTypes;
+using System;
 using System.IO;
-using Ibasa.Pikala.Tests.TestTypes;
+using Xunit;
 
 namespace Ibasa.Pikala.Tests
 {

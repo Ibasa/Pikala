@@ -1,7 +1,7 @@
 ﻿using System;
-using Xunit;
 using System.IO;
 using System.Text;
+using Xunit;
 
 namespace Ibasa.Pikala.Tests
 {

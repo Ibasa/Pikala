@@ -1,7 +1,7 @@
-﻿using System;
-using Xunit;
-using FsCheck;
+﻿using FsCheck;
 using FsCheck.Xunit;
+using System;
+using Xunit;
 
 namespace Ibasa.Pikala.Tests
 {
