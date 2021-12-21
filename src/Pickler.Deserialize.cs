@@ -1113,81 +1113,84 @@ namespace Ibasa.Pikala
 
         private ModuleBuilder DeserializeModuleDef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
-            var name = state.Reader.ReadString();
-            var (callback, _) = DeserializeWithMemo(state, position, (AssemblyBuilder assembly) =>
+            return state.RunWithTrailers(() => 
             {
-                var module = assembly.DefineDynamicModule(name);
-                if (module == null)
+                var name = state.Reader.ReadString();
+                var (callback, _) = DeserializeWithMemo(state, position, (AssemblyBuilder assembly) =>
                 {
-                    throw new Exception($"Could not create module '{name}' in assembly '{assembly}'");
-                }
-                return state.SetMemo(position, true, module);
-            }, AssemblyInfo, genericTypeParameters, genericMethodParameters);
-            var moduleBuilder = callback.Invoke();
+                    var module = assembly.DefineDynamicModule(name);
+                    if (module == null)
+                    {
+                        throw new Exception($"Could not create module '{name}' in assembly '{assembly}'");
+                    }
+                    return state.SetMemo(position, true, module);
+                }, AssemblyInfo, genericTypeParameters, genericMethodParameters);
+                var moduleBuilder = callback.Invoke();
 
-            ReadCustomAttributes(state, moduleBuilder.SetCustomAttribute, genericTypeParameters, genericMethodParameters);
+                ReadCustomAttributes(state, moduleBuilder.SetCustomAttribute, genericTypeParameters, genericMethodParameters);
 
-            var fieldCount = state.Reader.Read7BitEncodedInt();
-            var fields = new PickledFieldInfoDef[fieldCount];
-            for (int i = 0; i < fieldCount; ++i)
-            {
-                var fieldName = state.Reader.ReadString();
-                var fieldAttributes = (FieldAttributes)state.Reader.ReadInt32();
-                var fieldType = Deserialize<PickledTypeInfo>(state, TypeInfo, null, null);
-                throw new NotImplementedException();
-                //constructingModule.Fields[i] = new PickledFieldInfoDef(constructingModule, typeBuilder.DefineField(fieldName, fieldType.Type, fieldAttributes));
-            }
-
-            var methodCount = state.Reader.Read7BitEncodedInt();
-            var methods = new PickledMethodInfoDef[methodCount];
-            for (int i = 0; i < methodCount; ++i)
-            {
-                throw new NotImplementedException();
-                //DeserializeMethodHeader(state, null, constructingModule, ref methods[i]);
-            }
-
-            state.PushTrailer(() =>
-            {
-                foreach (var method in methods)
-                {
-                    var ilGenerator = method.MethodBuilder.GetILGenerator();
-                    DeserializeMethodBody(state, null, method.GenericParameters, method.Locals!, ilGenerator);
-                }
-            },
-            () => moduleBuilder.CreateGlobalFunctions(),
-            () =>
-            {
-                for (int i = 0; i < fields.Length; ++i)
+                var fieldCount = state.Reader.Read7BitEncodedInt();
+                var fields = new PickledFieldInfoDef[fieldCount];
+                for (int i = 0; i < fieldCount; ++i)
                 {
                     var fieldName = state.Reader.ReadString();
-                    FieldInfo? fieldInfo = null;
-                    for (int j = 0; j < fields.Length; ++j)
+                    var fieldAttributes = (FieldAttributes)state.Reader.ReadInt32();
+                    var fieldType = Deserialize<PickledTypeInfo>(state, TypeInfo, null, null);
+                    throw new NotImplementedException();
+                    //constructingModule.Fields[i] = new PickledFieldInfoDef(constructingModule, typeBuilder.DefineField(fieldName, fieldType.Type, fieldAttributes));
+                }
+
+                var methodCount = state.Reader.Read7BitEncodedInt();
+                var methods = new PickledMethodInfoDef[methodCount];
+                for (int i = 0; i < methodCount; ++i)
+                {
+                    throw new NotImplementedException();
+                    //DeserializeMethodHeader(state, null, constructingModule, ref methods[i]);
+                }
+
+                state.PushTrailer(() =>
+                {
+                    foreach (var method in methods)
                     {
-                        if (fieldName == fields[j].FieldInfo.Name)
+                        var ilGenerator = method.MethodBuilder.GetILGenerator();
+                        DeserializeMethodBody(state, null, method.GenericParameters, method.Locals!, ilGenerator);
+                    }
+                },
+                () => moduleBuilder.CreateGlobalFunctions(),
+                () =>
+                {
+                    for (int i = 0; i < fields.Length; ++i)
+                    {
+                        var fieldName = state.Reader.ReadString();
+                        FieldInfo? fieldInfo = null;
+                        for (int j = 0; j < fields.Length; ++j)
                         {
-                            fieldInfo = fields[j].FieldInfo;
+                            if (fieldName == fields[j].FieldInfo.Name)
+                            {
+                                fieldInfo = fields[j].FieldInfo;
+                            }
+                        }
+
+                        if (fieldInfo == null)
+                        {
+                            throw new Exception();
+                        }
+
+                        try
+                        {
+                            var deserInfo = new DeserializeInformation(typeof(object), !fieldInfo.FieldType.IsValueType);
+                            var fieldValue = Deserialize(state, deserInfo, null, null);
+                            fieldInfo.SetValue(null, fieldValue);
+                        }
+                        catch (MemoException exc)
+                        {
+                            state.RegisterFixup(exc.Position, value => fieldInfo.SetValue(null, value));
                         }
                     }
+                });
 
-                    if (fieldInfo == null)
-                    {
-                        throw new Exception();
-                    }
-
-                    try
-                    {
-                        var deserInfo = new DeserializeInformation(typeof(object), !fieldInfo.FieldType.IsValueType);
-                        var fieldValue = Deserialize(state, deserInfo, null, null);
-                        fieldInfo.SetValue(null, fieldValue);
-                    }
-                    catch (MemoException exc)
-                    {
-                        state.RegisterFixup(exc.Position, value => fieldInfo.SetValue(null, value));
-                    }
-                }
+                return moduleBuilder;
             });
-
-            return moduleBuilder;
         }
 
         private PickledGenericType DeserializeGenericInstantiation(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
