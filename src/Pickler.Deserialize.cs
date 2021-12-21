@@ -1113,7 +1113,7 @@ namespace Ibasa.Pikala
 
         private ModuleBuilder DeserializeModuleDef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
-            return state.RunWithTrailers(() => 
+            return state.RunWithTrailers(() =>
             {
                 var name = state.Reader.ReadString();
                 var (callback, _) = DeserializeWithMemo(state, position, (AssemblyBuilder assembly) =>
