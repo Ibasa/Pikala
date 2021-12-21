@@ -165,7 +165,8 @@ namespace Ibasa.Pikala
             }
             foreach (var parameter in methodParameters)
             {
-                state.Writer.Write(parameter.Name);
+                // 22.33: 9. Name can be null or non-null
+                state.Writer.WriteNullableString(parameter.Name);
                 state.Writer.Write((int)parameter.Attributes);
             }
 
