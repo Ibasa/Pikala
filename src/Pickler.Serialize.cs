@@ -104,6 +104,58 @@ namespace Ibasa.Pikala
             throw new Exception($"Invalid type code '{typeCode}' for enumeration");
         }
 
+        private void SerializeSignatureElement(PicklerSerializationState state, SignatureElement signature)
+        {
+            if (signature is SignatureType st)
+            {
+                state.Writer.Write((byte)SignatureElementOperation.Type);
+                SerializeType(state, st.Type);
+            }
+            else if (signature is SignatureGenericParameter sgp)
+            {
+                var operation = sgp.IsGenericTypeParameter ? SignatureElementOperation.TVar : SignatureElementOperation.MVar;
+                state.Writer.Write((byte)operation);
+                state.Writer.Write7BitEncodedInt(sgp.GenericParameterPosition);
+            }
+            else if (signature is SignatureConstructedGenericType scgt)
+            {
+                state.Writer.Write((byte)SignatureElementOperation.Generic);
+                SerializeType(state, scgt.GenericTypeDefinition);
+                state.Writer.Write7BitEncodedInt(scgt.GenericArguments.Length);
+                foreach (var genericArgument in scgt.GenericArguments)
+                {
+                    SerializeSignatureElement(state, genericArgument);
+                }
+            }
+            else if (signature is SignatureArray sa)
+            {
+                state.Writer.Write((byte)SignatureElementOperation.Array);
+                state.Writer.Write7BitEncodedInt(sa.Rank);
+                SerializeSignatureElement(state, sa.ElementType);
+            }
+            else if (signature is SignatureByRef sbr)
+            {
+                state.Writer.Write((byte)SignatureElementOperation.ByRef);
+                SerializeSignatureElement(state, sbr.ElementType);
+            }
+            else
+            {
+                throw new NotImplementedException($"Unhandled SignatureElement: {signature}");
+            }
+        }
+
+        private void SerializeSignature(PicklerSerializationState state, Signature signature)
+        {
+            state.Writer.Write(signature.Name);
+            state.Writer.Write7BitEncodedInt(signature.GenericParameterCount);
+            SerializeSignatureElement(state, signature.ReturnType);
+            state.Writer.Write7BitEncodedInt(signature.Parameters.Length);
+            foreach (var param in signature.Parameters)
+            {
+                SerializeSignatureElement(state, param);
+            }
+        }
+
         private void SerializeConstructorHeader(PicklerSerializationState state, Type[]? genericTypeParameters, ConstructorInfo constructor)
         {
             state.Writer.Write((int)constructor.Attributes);
@@ -475,16 +527,54 @@ namespace Ibasa.Pikala
 
             WriteCustomAttributes(state, module.CustomAttributes.ToArray());
 
-            var fields = module.GetFields();
+            var fields = module.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             state.Writer.Write7BitEncodedInt(fields.Length);
             foreach (var field in fields)
             {
                 state.Writer.Write(field.Name);
                 state.Writer.Write((int)field.Attributes);
-                SerializeType(state, field.FieldType);
+
+                // We expect all module fields to be RVA fields
+                System.Diagnostics.Debug.Assert(field.Attributes.HasFlag(FieldAttributes.HasFieldRVA));
+
+                var size = field.FieldType.StructLayoutAttribute.Size;
+                var value = field.GetValue(null);
+                var pin = System.Runtime.InteropServices.GCHandle.Alloc(value, System.Runtime.InteropServices.GCHandleType.Pinned);
+                try
+                {
+                    var addr = pin.AddrOfPinnedObject();
+                    unsafe
+                    {
+                        var bytes = new ReadOnlySpan<byte>(addr.ToPointer(), size);
+
+                        var allZero = true;
+                        for (int i = 0; i < size; ++i)
+                        {
+                            if (bytes[i] != 0)
+                            {
+                                allZero = false;
+                                break;
+                            }
+                        }
+
+                        if (allZero)
+                        {
+                            state.Writer.Write(-size);
+                        }
+                        else
+                        {
+                            state.Writer.Write(size);
+                            state.Writer.Write(bytes);
+                        }
+                    }
+                }
+                finally
+                {
+                    pin.Free();
+                }
             }
 
-            var methods = module.GetMethods();
+            var methods = module.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             state.Writer.Write7BitEncodedInt(methods.Length);
             foreach (var method in methods)
             {
@@ -497,16 +587,8 @@ namespace Ibasa.Pikala
                 {
                     SerializeMethodBody(state, null, method.Module, method.GetGenericArguments(), method.GetMethodBody());
                 }
-            }, () =>
-            {
-                foreach (var field in fields)
-                {
-                    state.Writer.Write(field.Name);
-                    var value = field.GetValue(null);
-                    var fieldInfo = MakeInfo(value, typeof(object), ShouldMemo(value, field.FieldType));
-                    Serialize(state, value, fieldInfo);
-                }
-            });
+            },
+            () => { });
         }
 
         private void SerializeTypeDef(PicklerSerializationState state, Type type, Type[]? genericParameters)
@@ -531,7 +613,7 @@ namespace Ibasa.Pikala
                 SerializeType(state, interfaceType, genericParameters);
 
                 var interfaceMap = type.GetInterfaceMap(interfaceType);
-                var mappedMethods = new List<(string, string)>();
+                var mappedMethods = new List<(Signature, Signature)>();
                 for (int i = 0; i < interfaceMap.InterfaceMethods.Length; ++i)
                 {
                     var targetMethod = interfaceMap.TargetMethods[i];
@@ -543,8 +625,8 @@ namespace Ibasa.Pikala
                     }
                     else
                     {
-                        var interfaceMethodSignature = Method.GetSignature(interfaceMap.InterfaceMethods[i]);
-                        var targetMethodSignature = Method.GetSignature(targetMethod);
+                        var interfaceMethodSignature = Signature.GetSignature(interfaceMap.InterfaceMethods[i]);
+                        var targetMethodSignature = Signature.GetSignature(targetMethod);
                         var isNewSlot = targetMethod.Attributes.HasFlag(MethodAttributes.NewSlot);
 
                         if (interfaceMethodSignature != targetMethodSignature || isNewSlot)
@@ -557,8 +639,8 @@ namespace Ibasa.Pikala
                 state.Writer.Write7BitEncodedInt(mappedMethods.Count);
                 foreach (var (interfaceMethod, targetMethod) in mappedMethods)
                 {
-                    state.Writer.Write(interfaceMethod);
-                    state.Writer.Write(targetMethod);
+                    SerializeSignature(state, interfaceMethod);
+                    SerializeSignature(state, targetMethod);
                 }
             }
 
@@ -601,22 +683,19 @@ namespace Ibasa.Pikala
                 }
                 WriteCustomAttributes(state, property.CustomAttributes.ToArray());
 
-                if (property.GetMethod == null)
+                var flags = (property.CanRead ? 0x1 : 0x0) | (property.CanWrite ? 0x2 : 0x0);
+                state.Writer.Write((byte)flags);
+
+                if (property.GetMethod != null)
                 {
-                    state.Writer.WriteNullableString(null);
-                }
-                else
-                {
-                    state.Writer.WriteNullableString(Method.GetSignature(property.GetMethod));
+                    var signature = Signature.GetSignature(property.GetMethod);
+                    SerializeSignature(state, signature);
                 }
 
-                if (property.SetMethod == null)
+                if (property.SetMethod != null)
                 {
-                    state.Writer.WriteNullableString(null);
-                }
-                else
-                {
-                    state.Writer.WriteNullableString(Method.GetSignature(property.SetMethod));
+                    var signature = Signature.GetSignature(property.SetMethod);
+                    SerializeSignature(state, signature);
                 }
             }
 
@@ -862,6 +941,7 @@ namespace Ibasa.Pikala
                 {
                     // Just write out an assembly refernce
                     state.Writer.Write((byte)PickleOperation.AssemblyRef);
+                    var name = assembly.GetName();
                     state.Writer.Write(assembly.FullName);
                 }
             }
@@ -874,7 +954,10 @@ namespace Ibasa.Pikala
                 // Is this assembly one we should save by value?
                 if (PickleByValue(module.Assembly))
                 {
-                    SerializeModuleDef(state, module);
+                    state.RunWithTrailers(() =>
+                    {
+                        SerializeModuleDef(state, module);
+                    });
                 }
                 else
                 {
@@ -1100,7 +1183,7 @@ namespace Ibasa.Pikala
 
                 state.Writer.Write((byte)PickleOperation.PropertyRef);
                 SerializeType(state, property.ReflectedType);
-                state.Writer.Write(property.Name);
+                SerializeSignature(state, Signature.GetSignature(property));
             }
 
             else if (info.RuntimeType.IsAssignableTo(typeof(MethodInfo)))
@@ -1111,7 +1194,7 @@ namespace Ibasa.Pikala
                 if (method.IsConstructedGenericMethod)
                 {
                     var genericArguments = method.GetGenericArguments();
-                    state.Writer.Write(Method.GetSignature(method.GetGenericMethodDefinition()));
+                    SerializeSignature(state, Signature.GetSignature(method.GetGenericMethodDefinition()));
                     state.Writer.Write7BitEncodedInt(genericArguments.Length);
                     foreach (var generic in genericArguments)
                     {
@@ -1120,7 +1203,7 @@ namespace Ibasa.Pikala
                 }
                 else
                 {
-                    state.Writer.Write(Method.GetSignature(method));
+                    SerializeSignature(state, Signature.GetSignature(method));
                     state.Writer.Write7BitEncodedInt(0);
                 }
                 SerializeType(state, method.ReflectedType);
@@ -1131,7 +1214,7 @@ namespace Ibasa.Pikala
                 var method = (ConstructorInfo)obj;
 
                 state.Writer.Write((byte)PickleOperation.ConstructorRef);
-                state.Writer.Write(Method.GetSignature(method));
+                SerializeSignature(state, Signature.GetSignature(method));
                 SerializeType(state, method.ReflectedType);
             }
 
@@ -1157,7 +1240,7 @@ namespace Ibasa.Pikala
 
             else if (info.RuntimeType.Assembly == mscorlib && (info.RuntimeType.FullName.StartsWith("System.Tuple") || info.RuntimeType.FullName.StartsWith("System.ValueTuple")))
             {
-                var tuple = obj as System.Runtime.CompilerServices.ITuple;
+                var tuple = (System.Runtime.CompilerServices.ITuple)obj;
 
                 if (info.RuntimeType.FullName.StartsWith("System.Tuple"))
                 {

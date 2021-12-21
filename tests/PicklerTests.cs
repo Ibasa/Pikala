@@ -151,12 +151,20 @@ namespace Ibasa.Pikala.Tests
             RoundTrip.Assert(pickler, TimeZoneInfo.Utc);
         }
 
+        public static object[][] ExampleTypeSet = new Type[][]
+        {
+            new[] { typeof(int) } ,
+            new[] { typeof(string[]) },
+            new[] { typeof(Tuple<int, object>) },
+            new[] { typeof(PointerStruct) },
+            new[] { typeof(List<uint>[]) },
+            new[] { typeof(Dictionary<,>) },
+            new[] { typeof(Pickler) },
+            new[] { typeof(TestTypes.ClassTypeWithIndexers) },
+        };
+
         [Theory]
-        [InlineData(typeof(int))]
-        [InlineData(typeof(string[]))]
-        [InlineData(typeof(Tuple<int, object>))]
-        [InlineData(typeof(PointerStruct))]
-        [InlineData(typeof(List<uint>[]))]
+        [MemberData(nameof(ExampleTypeSet))]
         public void TestType(Type type)
         {
             var pickler = new Pickler();
@@ -196,8 +204,25 @@ namespace Ibasa.Pikala.Tests
         }
 
         [Theory]
-        [InlineData(typeof(Pickler))]
-        [InlineData(typeof(Tuple<int, float, bool>))]
+        [MemberData(nameof(ExampleTypeSet))]
+        public void TestAssemblyRef(Type exampleType)
+        {
+            var pickler = new Pickler();
+
+            RoundTrip.Assert(pickler, exampleType.Assembly);
+        }
+
+        [Theory]
+        [MemberData(nameof(ExampleTypeSet))]
+        public void TestModuleRef(Type exampleType)
+        {
+            var pickler = new Pickler();
+
+            RoundTrip.Assert(pickler, exampleType.Module);
+        }
+
+        [Theory]
+        [MemberData(nameof(ExampleTypeSet))]
         public void TestMethodRef(Type type)
         {
             var pickler = new Pickler();
@@ -206,6 +231,45 @@ namespace Ibasa.Pikala.Tests
             foreach (var method in methods)
             {
                 RoundTrip.Assert(pickler, method);
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(ExampleTypeSet))]
+        public void TestFieldRef(Type type)
+        {
+            var pickler = new Pickler();
+
+            var fields = type.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
+            foreach (var field in fields)
+            {
+                RoundTrip.Assert(pickler, field);
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(ExampleTypeSet))]
+        public void TestConstructorRef(Type type)
+        {
+            var pickler = new Pickler();
+
+            var ctors = type.GetConstructors(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
+            foreach (var ctor in ctors)
+            {
+                RoundTrip.Assert(pickler, ctor);
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(ExampleTypeSet))]
+        public void TestPropertyRef(Type type)
+        {
+            var pickler = new Pickler();
+
+            var ctors = type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
+            foreach (var ctor in ctors)
+            {
+                RoundTrip.Assert(pickler, ctor);
             }
         }
 
@@ -223,34 +287,6 @@ namespace Ibasa.Pikala.Tests
             RoundTrip.Assert(pickler, doit2);
             RoundTrip.Assert(pickler, doit1.MakeGenericMethod(typeof(int)));
             RoundTrip.Assert(pickler, doit2.MakeGenericMethod(typeof(float), typeof(string)));
-        }
-
-        [Theory]
-        [InlineData(typeof(Pickler))]
-        [InlineData(typeof(Tuple<int, float, bool>))]
-        public void TestFieldRef(Type type)
-        {
-            var pickler = new Pickler();
-
-            var fields = type.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
-            foreach (var field in fields)
-            {
-                RoundTrip.Assert(pickler, field);
-            }
-        }
-
-        [Theory]
-        [InlineData(typeof(Pickler))]
-        [InlineData(typeof(Tuple<int, float, bool>))]
-        public void TestConstructorRef(Type type)
-        {
-            var pickler = new Pickler();
-
-            var ctors = type.GetConstructors(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
-            foreach (var ctor in ctors)
-            {
-                RoundTrip.Assert(pickler, ctor);
-            }
         }
 
         private static int StaticFunction() { return 4; }

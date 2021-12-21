@@ -183,6 +183,26 @@ namespace Ibasa.Pikala.Tests
             }
         }
 
+        public class ClassTypeWithIndexers
+        {
+            private string[] _current;
+
+            public ClassTypeWithIndexers(string[] current)
+            {
+                _current = current;
+            }
+
+            public string this[int index]
+            {
+                get { return _current[index]; }
+            }
+
+            public int this[string value]
+            {
+                get { return Array.IndexOf(_current, value); }
+            }
+        }
+
         public class ClassTypeWithExplcitInterface : IDisposable
         {
             readonly int X;

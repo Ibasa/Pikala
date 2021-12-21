@@ -11,11 +11,13 @@ namespace Ibasa.Pikala
 
         public abstract Type Type { get; }
 
-        public abstract PickledConstructorInfo GetConstructor(string signature);
+        public abstract PickledConstructorInfo GetConstructor(Signature signature);
 
-        public abstract PickledMethodInfo GetMethod(string signature);
+        public abstract PickledMethodInfo GetMethod(Signature signature);
 
         public abstract PickledFieldInfo GetField(string name);
+
+        public abstract PickledPropertyInfo GetProperty(Signature signature);
 
         public override void Emit(ILGenerator ilGenerator, OpCode opCode)
         {
@@ -32,12 +34,12 @@ namespace Ibasa.Pikala
             Type = type;
         }
 
-        public override PickledConstructorInfo GetConstructor(string signature)
+        public override PickledConstructorInfo GetConstructor(Signature signature)
         {
             var constructors = Type.GetConstructors(BindingsAll);
             foreach (var constructor in constructors)
             {
-                if (Method.GetSignature(constructor) == signature)
+                if (Signature.GetSignature(constructor).Equals(signature))
                 {
                     return new PickledConstructorInfoRef(constructor);
                 }
@@ -46,12 +48,12 @@ namespace Ibasa.Pikala
             throw new Exception($"Could not load constructor '{signature}' from type '{Type.Name}'");
         }
 
-        public override PickledMethodInfo GetMethod(string signature)
+        public override PickledMethodInfo GetMethod(Signature signature)
         {
             var methods = Type.GetMethods(BindingsAll);
             foreach (var method in methods)
             {
-                if (Method.GetSignature(method) == signature)
+                if (Signature.GetSignature(method).Equals(signature))
                 {
                     return new PickledMethodInfoRef(method);
                 }
@@ -68,6 +70,20 @@ namespace Ibasa.Pikala
                 throw new Exception($"Could not load field '{name}' from type '{Type.Name}'");
             }
             return new PickledFieldInfoRef(result);
+        }
+
+        public override PickledPropertyInfo GetProperty(Signature signature)
+        {
+            var properties = Type.GetProperties(BindingsAll);
+            foreach (var property in properties)
+            {
+                if (Signature.GetSignature(property).Equals(signature))
+                {
+                    return new PickledPropertyInfoRef(property);
+                }
+            }
+
+            throw new Exception($"Could not load property '{signature}' from type '{Type.Name}'");
         }
 
         public override PickledTypeInfo GetGenericArgument(int position)
@@ -88,17 +104,22 @@ namespace Ibasa.Pikala
             throw new NotImplementedException();
         }
 
-        public override PickledConstructorInfo GetConstructor(string signature)
+        public override PickledConstructorInfo GetConstructor(Signature signature)
         {
             throw new NotImplementedException();
         }
 
-        public override PickledMethodInfo GetMethod(string signature)
+        public override PickledMethodInfo GetMethod(Signature signature)
         {
             throw new NotImplementedException();
         }
 
         public override PickledFieldInfo GetField(string name)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override PickledPropertyInfo GetProperty(Signature signature)
         {
             throw new NotImplementedException();
         }
@@ -122,17 +143,22 @@ namespace Ibasa.Pikala
             throw new NotImplementedException();
         }
 
-        public override PickledConstructorInfo GetConstructor(string signature)
+        public override PickledConstructorInfo GetConstructor(Signature signature)
         {
             throw new NotImplementedException();
         }
 
-        public override PickledMethodInfo GetMethod(string signature)
+        public override PickledMethodInfo GetMethod(Signature signature)
         {
             throw new NotImplementedException();
         }
 
         public override PickledFieldInfo GetField(string name)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override PickledPropertyInfo GetProperty(Signature signature)
         {
             throw new NotImplementedException();
         }
@@ -181,7 +207,7 @@ namespace Ibasa.Pikala
         public TypeBuilder TypeBuilder { get; }
         public GenericTypeParameterBuilder[]? GenericParameters { get; set; }
         public PickledFieldInfoDef[]? Fields { get; set; }
-        public PropertyBuilder[]? Properties { get; set; }
+        public PickledPropertyInfoDef[]? Properties { get; set; }
         public PickledMethodInfoDef[]? Methods { get; set; }
         public PickledConstructorInfoDef[]? Constructors { get; set; }
 
@@ -190,13 +216,13 @@ namespace Ibasa.Pikala
             return TypeBuilder.Name;
         }
 
-        public override PickledConstructorInfo GetConstructor(string signature)
+        public override PickledConstructorInfo GetConstructor(Signature signature)
         {
             if (Constructors != null)
             {
                 foreach (var constructor in Constructors)
                 {
-                    if (constructor.GetSignature() == signature)
+                    if (constructor.GetSignature().Equals(signature))
                     {
                         return constructor;
                     }
@@ -206,13 +232,13 @@ namespace Ibasa.Pikala
             throw new Exception($"Could not load constructor '{signature}' from type '{TypeBuilder.Name}'");
         }
 
-        public override PickledMethodInfo GetMethod(string signature)
+        public override PickledMethodInfo GetMethod(Signature signature)
         {
             if (Methods != null)
             {
                 foreach (var method in Methods)
                 {
-                    if (method.GetSignature() == signature)
+                    if (method.GetSignature().Equals(signature))
                     {
                         return method;
                     }
@@ -236,6 +262,22 @@ namespace Ibasa.Pikala
             }
 
             throw new Exception($"Could not load field '{name}' from type '{TypeBuilder.Name}'");
+        }
+
+        public override PickledPropertyInfo GetProperty(Signature signature)
+        {
+            if (Properties != null)
+            {
+                foreach (var property in Properties)
+                {
+                    if (property.GetSignature().Equals(signature))
+                    {
+                        return property;
+                    }
+                }
+            }
+
+            throw new Exception($"Could not load property '{signature}' from type '{TypeBuilder.Name}'");
         }
 
         public override PickledTypeInfo GetGenericArgument(int position)
@@ -299,13 +341,14 @@ namespace Ibasa.Pikala
                 var methods = DeclaringType.Type.GetMethods(BindingsAll);
                 foreach (var method in methods)
                 {
-                    if (Method.GetSignature(method) == signature)
+                    if (Signature.GetSignature(method) == signature)
                     {
                         return method;
                     }
                 }
 
                 throw new Exception($"Could not load method '{signature}' from type '{DeclaringType.Type.Name}'");
+
             }
         }
 
@@ -321,72 +364,9 @@ namespace Ibasa.Pikala
             throw new NotImplementedException();
         }
 
-        public override string GetSignature()
+        public override Signature GetSignature()
         {
-            var signature = new StringBuilder();
-
-            signature.Append(MethodBuilder.Name);
-
-            if (GenericParameters != null)
-            {
-                signature.Append("<");
-                bool first = true;
-                foreach (var param in GenericParameters)
-                {
-                    if (!first)
-                    {
-                        signature.Append(", ");
-                    }
-                    first = false;
-                    // See Method.cs for comment about TypeParam names
-                    //signature.Append(param.Name);
-                }
-                signature.Append(">");
-            }
-
-            {
-                signature.Append("(");
-                if (ParameterTypes != null)
-                {
-                    bool first = true;
-                    foreach (var parameterType in ParameterTypes)
-                    {
-                        if (!first)
-                        {
-                            signature.Append(", ");
-                        }
-                        first = false;
-
-                        if (parameterType.IsGenericParameter)
-                        {
-                            if (parameterType.DeclaringMethod != null)
-                            {
-                                signature.Append("!!");
-                            }
-                            else if (parameterType.DeclaringType != null)
-                            {
-                                signature.Append("!");
-                            }
-                            else
-                            {
-                                throw new Exception("Generic paramater had neither a DeclaringMethod or a DeclaringType!");
-                            }
-                            signature.Append(parameterType.GenericParameterPosition);
-                        }
-                        else if (parameterType.FullName != null)
-                        {
-                            signature.Append(parameterType.FullName);
-                        }
-                        else
-                        {
-                            signature.Append(parameterType.Namespace + parameterType.Name);
-                        }
-                    }
-                }
-                signature.Append(")");
-            }
-
-            return signature.ToString();
+            return new Signature(MethodBuilder.Name, GenericParameters?.Length ?? 0, SignatureElement.FromType(MethodBuilder.ReturnType), SignatureElement.FromTypes(ParameterTypes));
         }
     }
 
@@ -453,7 +433,7 @@ namespace Ibasa.Pikala
 
         public PickledTypeInfo[] GenericArguments { get; set; }
 
-        public override PickledConstructorInfo GetConstructor(string signature)
+        public override PickledConstructorInfo GetConstructor(Signature signature)
         {
             var (type, isComplete) = ResolveType();
 
@@ -469,7 +449,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        public override PickledMethodInfo GetMethod(string signature)
+        public override PickledMethodInfo GetMethod(Signature signature)
         {
             var (type, isComplete) = ResolveType();
 
@@ -498,6 +478,22 @@ namespace Ibasa.Pikala
             {
                 var fieldInfo = GenericType.GetField(name);
                 return new PickledFieldInfoRef(TypeBuilder.GetField(type, fieldInfo.FieldInfo));
+            }
+        }
+
+        public override PickledPropertyInfo GetProperty(Signature signature)
+        {
+            var (type, isComplete) = ResolveType();
+
+            if (isComplete)
+            {
+                var infoRef = new PickledTypeInfoRef(type);
+                return infoRef.GetProperty(signature);
+            }
+            else
+            {
+                var propertyInfo = GenericType.GetProperty(signature);
+                return new PickledPropertyInfoRef(propertyInfo.PropertyInfo);
             }
         }
 
@@ -571,81 +567,9 @@ namespace Ibasa.Pikala
 
         public abstract object Invoke(object? target, params object?[] args);
 
-        public virtual string GetSignature()
+        public virtual Signature GetSignature()
         {
-            var signature = new StringBuilder();
-
-            // We want the open method handle
-            MethodBase methodBase = MethodBase;
-            if (methodBase.DeclaringType != null)
-            {
-                if (methodBase.DeclaringType.IsConstructedGenericType)
-                {
-                    var genericType = methodBase.DeclaringType.GetGenericTypeDefinition();
-                    methodBase = MethodBase.GetMethodFromHandle(methodBase.MethodHandle, genericType.TypeHandle);
-                }
-            }
-
-            signature.Append(methodBase.Name);
-
-            if (methodBase.IsGenericMethod)
-            {
-                signature.Append("<");
-                bool first = true;
-                foreach (var param in methodBase.GetGenericArguments())
-                {
-                    if (!first)
-                    {
-                        signature.Append(", ");
-                    }
-                    first = false;
-                    // See Method.cs for comment about TypeParam names
-                    //signature.Append(param.Name);
-                }
-                signature.Append(">");
-            }
-
-            {
-                signature.Append("(");
-                bool first = true;
-                foreach (var param in methodBase.GetParameters())
-                {
-                    if (!first)
-                    {
-                        signature.Append(", ");
-                    }
-                    first = false;
-
-                    var parameterType = param.ParameterType;
-                    if (parameterType.IsGenericParameter)
-                    {
-                        if (parameterType.DeclaringMethod != null)
-                        {
-                            signature.Append("!!");
-                        }
-                        else if (parameterType.DeclaringType != null)
-                        {
-                            signature.Append("!");
-                        }
-                        else
-                        {
-                            throw new Exception("Generic paramater had neither a DeclaringMethod or a DeclaringType!");
-                        }
-                        signature.Append(parameterType.GenericParameterPosition);
-                    }
-                    else if (parameterType.FullName != null)
-                    {
-                        signature.Append(parameterType.FullName);
-                    }
-                    else
-                    {
-                        signature.Append(parameterType.Namespace + parameterType.Name);
-                    }
-                }
-                signature.Append(")");
-            }
-
-            return signature.ToString();
+            return Signature.GetSignature(MethodBase);
         }
     }
 
@@ -700,55 +624,13 @@ namespace Ibasa.Pikala
                     return ConstructorBuilder;
                 }
 
-                return ConstructingType.Type.GetConstructor(ParameterTypes ?? Type.EmptyTypes);
+                return ConstructingType.GetConstructor(GetSignature()).ConstructorInfo;
             }
         }
 
-        public override string GetSignature()
+        public override Signature GetSignature()
         {
-            var signature = new StringBuilder();
-
-            signature.Append(ConstructorBuilder.Name);
-
-            {
-                signature.Append("(");
-                if (ParameterTypes != null)
-                {
-                    bool first = true;
-                    foreach (var parameterType in ParameterTypes)
-                    {
-                        if (!first)
-                        {
-                            signature.Append(", ");
-                        }
-                        first = false;
-
-                        if (parameterType.IsGenericParameter)
-                        {
-                            if (parameterType.DeclaringType != null)
-                            {
-                                signature.Append("!");
-                            }
-                            else
-                            {
-                                throw new Exception("Generic paramater had no DeclaringType!");
-                            }
-                            signature.Append(parameterType.GenericParameterPosition);
-                        }
-                        else if (parameterType.FullName != null)
-                        {
-                            signature.Append(parameterType.FullName);
-                        }
-                        else
-                        {
-                            signature.Append(parameterType.Namespace + parameterType.Name);
-                        }
-                    }
-                }
-                signature.Append(")");
-            }
-
-            return signature.ToString();
+            return new Signature(ConstructorBuilder.Name, 0, SignatureElement.FromType(ConstructingType.Type), SignatureElement.FromTypes(ParameterTypes));
         }
 
         public PickledTypeInfoDef ConstructingType { get; }
@@ -757,6 +639,81 @@ namespace Ibasa.Pikala
         public Type[]? ParameterTypes { get; }
         public PickledTypeInfo[]? Locals { get; }
     }
+
+    abstract class PickledPropertyInfo : PickledMemberInfo
+    {
+        public override MemberInfo MemberInfo { get { return PropertyInfo; } }
+
+        public abstract PropertyInfo PropertyInfo { get; }
+
+        public override void Emit(ILGenerator ilGenerator, OpCode opCode)
+        {
+            throw new Exception("Can't emit property info to IL stream");
+        }
+
+        public override PickledTypeInfo GetGenericArgument(int position)
+        {
+            throw new Exception("Properties do not have generic arguments");
+        }
+
+        public virtual Signature GetSignature()
+        {
+            return Signature.GetSignature(PropertyInfo);
+        }
+    }
+
+    sealed class PickledPropertyInfoRef : PickledPropertyInfo
+    {
+        public override PropertyInfo PropertyInfo { get; }
+
+        public PickledPropertyInfoRef(PropertyInfo propertyInfo)
+        {
+            PropertyInfo = propertyInfo;
+        }
+    }
+
+    sealed class PickledPropertyInfoDef : PickledPropertyInfo
+    {
+        public PickledPropertyInfoDef(PickledTypeInfoDef declaringType, PropertyBuilder propertyBuilder, Type[] indexParameters)
+        {
+            DeclaringType = declaringType;
+            PropertyBuilder = propertyBuilder;
+            IndexParameters = indexParameters;
+        }
+
+        public PickledTypeInfoDef DeclaringType { get; }
+        public PropertyBuilder PropertyBuilder { get; }
+        public Type[] IndexParameters { get; }
+
+        public override PropertyInfo PropertyInfo
+        {
+            get
+            {
+                if (!DeclaringType.IsCreated)
+                {
+                    return PropertyBuilder;
+                }
+
+                var signature = GetSignature();
+                var properties = DeclaringType.Type.GetProperties(BindingsAll);
+                foreach (var property in properties)
+                {
+                    if (Signature.GetSignature(property) == signature)
+                    {
+                        return property;
+                    }
+                }
+
+                throw new Exception($"Could not load property '{signature}' from type '{DeclaringType.Type.Name}'");
+            }
+        }
+
+        public override Signature GetSignature()
+        {
+            return new Signature(PropertyBuilder.Name, 0, SignatureElement.FromType(PropertyBuilder.PropertyType), SignatureElement.FromTypes(IndexParameters));
+        }
+    }
+
 
     abstract class PickledFieldInfo : PickledMemberInfo
     {
@@ -805,7 +762,7 @@ namespace Ibasa.Pikala
                     return FieldBuilder;
                 }
 
-                return DeclaringType.Type.GetField(FieldBuilder.Name);
+                return DeclaringType.Type.GetField(FieldBuilder.Name, BindingsAll);
             }
         }
     }

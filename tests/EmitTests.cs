@@ -7,7 +7,7 @@ namespace Ibasa.Pikala.Tests
     /// This test is all by itself because the lambda generates a type in the test and so we have to serialize the whole test class. 
     /// While serialising the whole test class should work for Pikala having this by itself makes investigation into just lambdas much easier.
     /// </summary>
-    public class EmitLambdaTest
+    public class EmitLambdaTests
     {
         private Pickler CreatePickler()
         {
