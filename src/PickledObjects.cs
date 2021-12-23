@@ -548,7 +548,7 @@ namespace Ibasa.Pikala
 
         public abstract object Get();
 
-        public override string ToString()
+        public override string? ToString()
         {
             return Get().ToString();
         }
