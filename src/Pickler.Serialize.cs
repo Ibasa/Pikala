@@ -813,7 +813,7 @@ namespace Ibasa.Pikala
             // If we call this we know obj is not memoised or null or an enum 
             // or any of the types explictly in System.TypeCode
 
-            IReducer reducer;
+            IReducer? reducer;
 
             if (info.RuntimeType.IsArray)
             {
