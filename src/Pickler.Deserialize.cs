@@ -1041,10 +1041,24 @@ namespace Ibasa.Pikala
         private Assembly DeserializeAsesmblyRef(PicklerDeserializationState state, long position)
         {
             var assemblyName = new AssemblyName(state.Reader.ReadString());
-            var assembly = Assembly.Load(assemblyName);
+            // Check to see if its already in our loaded assembly set
+            Assembly? assembly = null;
+            foreach (var candidate in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (candidate.FullName == assemblyName.FullName)
+                {
+                    if (assembly != null)
+                    {
+                        throw new Exception($"Ambiguous assembly name '{assemblyName}', found multiple matching assemblies.");
+                    }
+                    assembly = candidate;
+                }
+            }
+            // Else try to load it 
             if (assembly == null)
             {
-                throw new Exception($"Could not load assembly '{assemblyName}'");
+                // On moving to net5 we should look at using AssemblyLoadContext for this
+                assembly = Assembly.Load(assemblyName);
             }
             return state.SetMemo(position, true, assembly);
         }
@@ -1228,11 +1242,13 @@ namespace Ibasa.Pikala
             PickledTypeInfoRef? result;
             if (parent is Module module)
             {
-                result = new PickledTypeInfoRef(module.GetType(typeName));
-                if (result == null)
+                var type = module.GetType(typeName);
+                if (type == null)
                 {
                     throw new Exception($"Could not load type '{typeName}' from module '{module.FullyQualifiedName}'");
                 }
+
+                result = new PickledTypeInfoRef(type);
             }
             else if (parent is PickledTypeInfoRef declaringType)
             {
