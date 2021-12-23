@@ -16,7 +16,7 @@ namespace Ibasa.Pikala
                 if (method.DeclaringType.IsConstructedGenericType)
                 {
                     var genericType = method.DeclaringType.GetGenericTypeDefinition();
-                    method = MethodBase.GetMethodFromHandle(method.MethodHandle, genericType.TypeHandle);
+                    method = MethodBase.GetMethodFromHandle(method.MethodHandle, genericType.TypeHandle)!;
                 }
             }
 
