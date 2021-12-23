@@ -704,7 +704,12 @@ namespace Ibasa.Pikala
                     return ConstructorBuilder;
                 }
 
-                return ConstructingType.Type.GetConstructor(ParameterTypes ?? Type.EmptyTypes);
+                var result = ConstructingType.Type.GetConstructor(ParameterTypes ?? Type.EmptyTypes);
+                if (result == null)
+                {
+                    throw new Exception($"GetConstructor for {ConstructingType.Type.Name} unexpectedly returned null");
+                }
+                return result;
             }
         }
 
