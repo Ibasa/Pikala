@@ -814,7 +814,12 @@ namespace Ibasa.Pikala
                     return FieldBuilder;
                 }
 
-                return DeclaringType.Type.GetField(FieldBuilder.Name);
+                var result = DeclaringType.Type.GetField(FieldBuilder.Name);
+                if (result == null)
+                {
+                    throw new Exception($"GetField for {DeclaringType.Type.Name} unexpectedly returned null");
+                }
+                return result;
             }
         }
     }
