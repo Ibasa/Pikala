@@ -73,12 +73,12 @@ namespace Ibasa.Pikala
         // This is written as a byte so we're limited to 255 operations
     }
 
-    enum TypeDef
+    enum TypeDef : byte
     {
-        Enum,
-        Delegate,
-        Struct,
-        Class,
+        Enum = 0,
+        Delegate = 1,
+        Struct = 2,
+        Class = 3,
     }
 
     /// <summary>

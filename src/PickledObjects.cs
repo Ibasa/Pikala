@@ -165,6 +165,10 @@ namespace Ibasa.Pikala
         public Type CreateType()
         {
             _type = TypeBuilder.CreateType();
+            if (_type == null)
+            {
+                throw new Exception($"CreateType for {TypeBuilder.Name} unexpectedly returned null");
+            }
             return _type;
         }
 
