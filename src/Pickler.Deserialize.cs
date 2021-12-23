@@ -809,8 +809,10 @@ namespace Ibasa.Pikala
 
             var tupleType = isValueTuple ? typeof(System.ValueTuple) : typeof(System.Tuple);
             var openCreateMethod = tupleType.GetMethod("Create", length, genericParameters);
+            System.Diagnostics.Debug.Assert(openCreateMethod != null, "GetMethod for Tuple.Create returned null");
             var closedCreateMethod = openCreateMethod.MakeGenericMethod(genericArguments);
             var tupleObject = closedCreateMethod.Invoke(null, items);
+            System.Diagnostics.Debug.Assert(tupleObject != null, "Tuple.Create returned null");
 
             return tupleObject;
         }
