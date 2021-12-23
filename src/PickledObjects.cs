@@ -250,7 +250,7 @@ namespace Ibasa.Pikala
 
         public abstract MethodInfo MethodInfo { get; }
 
-        public override object Invoke(object? target, params object?[] args)
+        public override object? Invoke(object? target, params object?[] args)
         {
             return MethodInfo.Invoke(target, args);
         }
@@ -569,7 +569,7 @@ namespace Ibasa.Pikala
 
         public abstract MethodBase MethodBase { get; }
 
-        public abstract object Invoke(object? target, params object?[] args);
+        public abstract object? Invoke(object? target, params object?[] args);
 
         public virtual string GetSignature()
         {
