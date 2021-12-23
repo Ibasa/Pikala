@@ -9,7 +9,7 @@ namespace Ibasa.Pikala
     public interface IReducer
     {
         public Type Type { get; }
-        public (MethodBase, object?, object[]) Reduce(Type type, object obj);
+        public (MethodBase, object?, object?[]) Reduce(Type type, object obj);
     }
 
     enum PickleOperation : byte

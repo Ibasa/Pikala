@@ -875,7 +875,12 @@ namespace Ibasa.Pikala
                 args[i] = arg;
             }
 
-            return method.Invoke(target, args);
+            var result = method.Invoke(target, args);
+            if (result == null)
+            {
+                throw new Exception($"Invalid reducer method, '{method}' returned null.");
+            }
+            return result;
         }
 
         private void DeserializeObject(PicklerDeserializationState state, object uninitializedObject, Type type, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
