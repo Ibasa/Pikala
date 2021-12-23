@@ -83,8 +83,7 @@ namespace Ibasa.Pikala
                 name = type.TypeBuilder.Namespace + "." + name;
             }
 
-            Dictionary<string, PickledTypeInfoDef> mapping;
-            if (_constructedTypes.TryGetValue(assembly, out mapping))
+            if (_constructedTypes.TryGetValue(assembly, out var mapping))
             {
                 mapping.Add(name, type);
             }
@@ -96,25 +95,28 @@ namespace Ibasa.Pikala
             }
         }
 
-        private System.Reflection.Assembly? CurrentDomain_TypeResolve(object sender, ResolveEventArgs args)
+        private System.Reflection.Assembly? CurrentDomain_TypeResolve(object? sender, ResolveEventArgs args)
         {
-            if (_constructedTypes.TryGetValue(args.RequestingAssembly, out var types))
+            if (args.RequestingAssembly != null && args.Name != null)
             {
-                if (types.TryGetValue(args.Name, out var type))
+                if (_constructedTypes.TryGetValue(args.RequestingAssembly, out var types))
                 {
-                    if (type.FullyDefined)
+                    if (types.TryGetValue(args.Name, out var type))
                     {
-                        type.CreateType();
-                        return args.RequestingAssembly;
+                        if (type.FullyDefined)
+                        {
+                            type.CreateType();
+                            return args.RequestingAssembly;
+                        }
+                        else
+                        {
+                            throw new Exception($"Tried to load type '{args.Name}' from assembly '{args.RequestingAssembly}' but it's not yet fully defined");
+                        }
                     }
                     else
                     {
-                        throw new Exception($"Tried to load type '{args.Name}' from assembly '{args.RequestingAssembly}' but it's not yet fully defined");
+                        throw new Exception($"Tried to load type '{args.Name}' from assembly '{args.RequestingAssembly}' but it's not yet defined");
                     }
-                }
-                else
-                {
-                    throw new Exception($"Tried to load type '{args.Name}' from assembly '{args.RequestingAssembly}' but it's not yet defined");
                 }
             }
             return null;
