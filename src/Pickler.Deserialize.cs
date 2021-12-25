@@ -809,8 +809,10 @@ namespace Ibasa.Pikala
 
             var tupleType = isValueTuple ? typeof(System.ValueTuple) : typeof(System.Tuple);
             var openCreateMethod = tupleType.GetMethod("Create", length, genericParameters);
+            System.Diagnostics.Debug.Assert(openCreateMethod != null, "GetMethod for Tuple.Create returned null");
             var closedCreateMethod = openCreateMethod.MakeGenericMethod(genericArguments);
             var tupleObject = closedCreateMethod.Invoke(null, items);
+            System.Diagnostics.Debug.Assert(tupleObject != null, "Tuple.Create returned null");
 
             return tupleObject;
         }
@@ -873,7 +875,12 @@ namespace Ibasa.Pikala
                 args[i] = arg;
             }
 
-            return method.Invoke(target, args);
+            var result = method.Invoke(target, args);
+            if (result == null)
+            {
+                throw new Exception($"Invalid reducer method, '{method}' returned null.");
+            }
+            return result;
         }
 
         private void DeserializeObject(PicklerDeserializationState state, object uninitializedObject, Type type, Type[]? genericTypeParameters, Type[]? genericMethodParameters)

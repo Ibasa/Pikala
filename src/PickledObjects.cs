@@ -165,6 +165,10 @@ namespace Ibasa.Pikala
         public Type CreateType()
         {
             _type = TypeBuilder.CreateType();
+            if (_type == null)
+            {
+                throw new Exception($"CreateType for {TypeBuilder.Name} unexpectedly returned null");
+            }
             return _type;
         }
 
@@ -250,7 +254,7 @@ namespace Ibasa.Pikala
 
         public abstract MethodInfo MethodInfo { get; }
 
-        public override object Invoke(object? target, params object?[] args)
+        public override object? Invoke(object? target, params object?[] args)
         {
             return MethodInfo.Invoke(target, args);
         }
@@ -544,7 +548,7 @@ namespace Ibasa.Pikala
 
         public abstract object Get();
 
-        public override string ToString()
+        public override string? ToString()
         {
             return Get().ToString();
         }
@@ -569,7 +573,7 @@ namespace Ibasa.Pikala
 
         public abstract MethodBase MethodBase { get; }
 
-        public abstract object Invoke(object? target, params object?[] args);
+        public abstract object? Invoke(object? target, params object?[] args);
 
         public virtual string GetSignature()
         {
@@ -582,7 +586,7 @@ namespace Ibasa.Pikala
                 if (methodBase.DeclaringType.IsConstructedGenericType)
                 {
                     var genericType = methodBase.DeclaringType.GetGenericTypeDefinition();
-                    methodBase = MethodBase.GetMethodFromHandle(methodBase.MethodHandle, genericType.TypeHandle);
+                    methodBase = MethodBase.GetMethodFromHandle(methodBase.MethodHandle, genericType.TypeHandle)!;
                 }
             }
 
@@ -700,7 +704,12 @@ namespace Ibasa.Pikala
                     return ConstructorBuilder;
                 }
 
-                return ConstructingType.Type.GetConstructor(ParameterTypes ?? Type.EmptyTypes);
+                var result = ConstructingType.Type.GetConstructor(ParameterTypes ?? Type.EmptyTypes);
+                if (result == null)
+                {
+                    throw new Exception($"GetConstructor for {ConstructingType.Type.Name} unexpectedly returned null");
+                }
+                return result;
             }
         }
 
@@ -805,7 +814,12 @@ namespace Ibasa.Pikala
                     return FieldBuilder;
                 }
 
-                return DeclaringType.Type.GetField(FieldBuilder.Name);
+                var result = DeclaringType.Type.GetField(FieldBuilder.Name);
+                if (result == null)
+                {
+                    throw new Exception($"GetField for {DeclaringType.Type.Name} unexpectedly returned null");
+                }
+                return result;
             }
         }
     }
