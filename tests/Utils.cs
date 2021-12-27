@@ -7,6 +7,12 @@ namespace Ibasa.Pikala.Tests
 {
     public static class Utils
     {
+        public static Pickler CreateIsolatedPickler(Func<System.Reflection.Assembly, AssemblyPickleMode> assemblyPickleMode = null)
+        {
+            var alc = new System.Runtime.Loader.AssemblyLoadContext("Pikala.Tests");
+            return new Pickler(assemblyPickleMode, alc);
+        }
+
         public static void IterateArray(Array array, Action<int[]> iter)
         {
             var rank = array.Rank;

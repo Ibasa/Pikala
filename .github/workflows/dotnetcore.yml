@@ -19,21 +19,31 @@ jobs:
     - name: Setup .NET Core 6.0
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 6.0.100
+        dotnet-version: 6.0.x
     - name: Lint with dotnet format
       run: dotnet format --verify-no-changes
 
   build:
-    # Build and test with net5.0, we should eventually matrix this to test net5.0 and net6.0.
+    # Build and test with all supported dotnet versions (see https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core for what we should support)
 
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v2
+
+    - name: Setup .NET Core 3.1
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 3.1.x
     - name: Setup .NET Core 5.0
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 5.0.403
+        dotnet-version: 5.0.x
+    - name: Setup .NET Core 6.0
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 6.0.x
+
     - name: Build with dotnet
       run: dotnet build --configuration Release
     - name: Test with dotnet

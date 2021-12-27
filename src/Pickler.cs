@@ -1,15 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Linq;
+using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.Loader;
 
 namespace Ibasa.Pikala
 {
     public interface IReducer
     {
         public Type Type { get; }
-        public (MethodBase, object?, object[]) Reduce(Type type, object obj);
+        public (MethodBase, object?, object?[]) Reduce(Type type, object obj);
     }
 
     enum PickleOperation : byte
@@ -73,12 +74,12 @@ namespace Ibasa.Pikala
         // This is written as a byte so we're limited to 255 operations
     }
 
-    enum TypeDef
+    enum TypeDef : byte
     {
-        Enum,
-        Delegate,
-        Struct,
-        Class,
+        Enum = 0,
+        Delegate = 1,
+        Struct = 2,
+        Class = 3,
     }
 
     /// <summary>
@@ -130,9 +131,12 @@ namespace Ibasa.Pikala
         private const uint _header = ((byte)'P' << 0 | (byte)'K' << 8 | (byte)'L' << 16 | (byte)'A' << 24);
         private const uint _version = 1U;
 
-        public Pickler(Func<Assembly, AssemblyPickleMode>? assemblyPickleMode = null)
+        public AssemblyLoadContext AssemblyLoadContext { get; private set; }
+
+        public Pickler(Func<Assembly, AssemblyPickleMode>? assemblyPickleMode = null, AssemblyLoadContext? assemblyLoadContext = null)
         {
             // By default assume nothing needs to be pickled by value
+            AssemblyLoadContext = (assemblyLoadContext ?? AssemblyLoadContext.CurrentContextualReflectionContext) ?? AssemblyLoadContext.Default;
             _assemblyPickleMode = assemblyPickleMode ?? (_ => AssemblyPickleMode.Default);
             _reducers = new Dictionary<Type, IReducer>();
 

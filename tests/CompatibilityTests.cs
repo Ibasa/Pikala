@@ -1,8 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Xunit;
-using System.IO;
-using System.Collections.Generic;
 
 namespace Ibasa.Pikala.Tests
 {
@@ -264,16 +264,36 @@ namespace Ibasa.Pikala.Tests
             pickler.Serialize(stream, obj);
             var actualBytes = stream.ToArray();
 
+            // Different versions of the runtime will pull in different versions of dependent assemblies.
+            // So we only expect deterministic results for the same runtime version.
+            var version = $"{Environment.Version.Major}.{Environment.Version.Minor}";
+
             // If TestData is missing this will regenerate it
-            var filePath = Path.Combine(FindTestData(), name + ".bin");
+            var filePath = Path.Combine(FindTestData(), version, name + ".bin");
             byte[] expectedBytes;
             try
             {
                 expectedBytes = File.ReadAllBytes(filePath);
 
-                if (!System.Collections.StructuralComparisons.StructuralEqualityComparer.Equals(expectedBytes, actualBytes))
+                string? error = null;
+                if (expectedBytes.Length != actualBytes.Length)
                 {
-                    throw new Exception($"Serialised bytes did not match\nObject: {obj}\nExpected length: {expectedBytes.Length}\nActual length: {actualBytes.Length}");
+                    error = $"Length did not match";
+                }
+
+                for (int i = 0; i < Math.Min(expectedBytes.Length, actualBytes.Length); i++)
+                {
+                    // Try to find the first byte that didn't match. This might not find anything because one is a subset is the other in which case we fall back to the error string set above.
+                    if (expectedBytes[i] != actualBytes[i])
+                    {
+                        error = $"Byte at index {i} did not match. Expected {expectedBytes[i]}, actual {actualBytes[i]}";
+                        break;
+                    }
+                }
+
+                if (error != null)
+                {
+                    throw new Exception($"Serialised bytes did not match\nObject: {obj}\nExpected length: { expectedBytes.Length}\nActual length: { actualBytes.Length}\n{error}");
                 }
             }
             catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException)

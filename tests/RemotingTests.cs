@@ -1,7 +1,8 @@
 ﻿using System;
-using Xunit;
 using System.IO;
 using System.Text;
+using Xunit;
+using System.Linq;
 
 namespace Ibasa.Pikala.Tests
 {
@@ -12,6 +13,49 @@ namespace Ibasa.Pikala.Tests
             var assemblyPath = Path.Combine(testDirectory.FullName, Path.GetFileName(assembly.Location));
             File.Copy(assembly.Location, assemblyPath);
             return assemblyPath;
+        }
+
+        private static Version[] GetDotnetSdks()
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo();
+            psi.FileName = "dotnet";
+            psi.ArgumentList.Add("--list-sdks");
+            psi.RedirectStandardError = true;
+            psi.RedirectStandardOutput = true;
+
+            var process = new System.Diagnostics.Process();
+
+            var stdout = new StringBuilder();
+            var stderr = new StringBuilder();
+
+            process.OutputDataReceived += ((sender, data) => { if (data.Data != null) { stdout.AppendLine(data.Data); } });
+            process.ErrorDataReceived += ((sender, data) => { if (data.Data != null) { stderr.AppendLine(data.Data); } });
+            process.StartInfo = psi;
+
+            if (!process.Start())
+            {
+                throw new Exception("FSI process did not start");
+            }
+
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            process.WaitForExit();
+
+            if (process.ExitCode != 0)
+            {
+                throw new Exception($"FSI failed with {process.ExitCode}\nstdout: {stdout}\nstderr: {stderr}");
+            }
+
+            return
+                stdout.ToString().Split(Environment.NewLine)
+                .Where(line => !String.IsNullOrWhiteSpace(line))
+                .Select(line =>
+                {
+                    var parts = line.Split(" ");
+                    return new Version(parts[0]);
+                })
+                .ToArray();
         }
 
         private string RunFsi(string script)
@@ -28,6 +72,18 @@ namespace Ibasa.Pikala.Tests
             CopyAssembly(testDirectory, typeof(Xunit.Assert).Assembly);
             CopyAssembly(testDirectory, typeof(Xunit.TheoryData).Assembly);
 
+            // Find an SDK version to use that matches our runtime version (e.g. we might be running as 3.1.22 but want to find 3.1.416)
+            var versions = GetDotnetSdks();
+            var runtimeVersion = Environment.Version;
+            var sdkVersion =
+                versions
+                .Where(sdkVersion => sdkVersion.Major == runtimeVersion.Major && sdkVersion.Minor == runtimeVersion.Minor)
+                .OrderBy(sdkVersion => sdkVersion.Build)
+                .Last();
+
+            var globalJsonPath = Path.Combine(testDirectory.FullName, "global.json");
+            File.WriteAllText(globalJsonPath, $"{{\"sdk\":{{\"version\": \"{sdkVersion}\"}}}}");
+
             try
             {
                 // Copy the pikala assembly to temp, so we can't pick up the Pikala.Test assembly next to it
@@ -39,7 +95,7 @@ namespace Ibasa.Pikala.Tests
                 psi.ArgumentList.Add("--reference:" + assemblyReference);
                 psi.ArgumentList.Add(scriptPath);
                 // Set current directory to the temp directory so we can't pick up this test assembly
-                psi.WorkingDirectory = Path.GetTempPath();
+                psi.WorkingDirectory = testDirectory.FullName;
                 psi.RedirectStandardError = true;
                 psi.RedirectStandardOutput = true;
 
@@ -48,8 +104,8 @@ namespace Ibasa.Pikala.Tests
                 var stdout = new StringBuilder();
                 var stderr = new StringBuilder();
 
-                process.OutputDataReceived += ((sender, data) => { if (data.Data != null) { stdout.Append(data.Data); } });
-                process.ErrorDataReceived += ((sender, data) => { if (data.Data != null) { stderr.Append(data.Data); } });
+                process.OutputDataReceived += ((sender, data) => { if (data.Data != null) { stdout.AppendLine(data.Data); } });
+                process.ErrorDataReceived += ((sender, data) => { if (data.Data != null) { stderr.AppendLine(data.Data); } });
                 process.StartInfo = psi;
 
                 if (!process.Start())
@@ -67,7 +123,8 @@ namespace Ibasa.Pikala.Tests
                     throw new Exception($"FSI failed with {process.ExitCode}\nstdout: {stdout}\nstderr: {stderr}");
                 }
 
-                return stdout.ToString();
+                // Trim whitespace and normalise newlines
+                return stdout.ToString().Trim().Replace("\r\n", "\n");
             }
             finally
             {
@@ -376,7 +433,7 @@ namespace Ibasa.Pikala.Tests
 
             var result = RunFsi(script);
 
-            Assert.Equal("24", result);
+            Assert.Equal("2\n4", result);
         }
 
         [Fact]

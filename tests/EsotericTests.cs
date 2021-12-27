@@ -15,7 +15,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestModuleData()
         {
-            var pickler = new Pickler();
+            var pickler = Utils.CreateIsolatedPickler();
 
             var assembly = AssemblyBuilder.DefineDynamicAssembly(DynamicAssemblyName, AssemblyBuilderAccess.Run);
             var module = assembly.DefineDynamicModule("main");

@@ -1,17 +1,23 @@
-﻿using System;
-using Xunit;
+﻿using Ibasa.Pikala.Tests.TestTypes;
+using System;
 using System.IO;
-using Ibasa.Pikala.Tests.TestTypes;
+using Xunit;
 
 namespace Ibasa.Pikala.Tests
 {
-    public sealed class FactSkip32Bit : FactAttribute
+    public sealed class FactLargeTest : FactAttribute
     {
-        public FactSkip32Bit()
+        public FactLargeTest(bool isLongRunning)
         {
             if (IntPtr.Size == 4)
             {
                 Skip = "Skipping due to 32bit process";
+            }
+
+            var eventName = Environment.GetEnvironmentVariable("GITHUB_EVENT_NAME");
+            if (isLongRunning && eventName == "pull_request")
+            {
+                Skip = "Skipping long running test for pull request";
             }
         }
     }
@@ -54,7 +60,7 @@ namespace Ibasa.Pikala.Tests
             }
         }
 
-        [FactSkip32Bit]
+        [FactLargeTest(false)]
         public void Test2GBPrimitiveArray()
         {
             LargeArrayTest(() =>
@@ -71,7 +77,7 @@ namespace Ibasa.Pikala.Tests
             });
         }
 
-        [FactSkip32Bit]
+        [FactLargeTest(false)]
         public void Test3GBPrimitiveArray()
         {
             LargeArrayTest(() =>
@@ -88,7 +94,7 @@ namespace Ibasa.Pikala.Tests
             });
         }
 
-        [FactSkip32Bit]
+        [FactLargeTest(true)]
         public void Test2GBComplexArray()
         {
             var gb2 = 2L * 1024L * 1024L * 1024L;
@@ -109,7 +115,7 @@ namespace Ibasa.Pikala.Tests
             });
         }
 
-        [FactSkip32Bit]
+        [FactLargeTest(true)]
         public void Test3GBComplexArray()
         {
             var gb2 = 3L * 1024L * 1024L * 1024L;

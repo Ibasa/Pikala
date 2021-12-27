@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using System.Linq;
+using System.Reflection;
 using System.Reflection.Emit;
 
 namespace Ibasa.Pikala
@@ -536,9 +536,12 @@ namespace Ibasa.Pikala
 
                 // We expect all module fields to be RVA fields
                 System.Diagnostics.Debug.Assert(field.Attributes.HasFlag(FieldAttributes.HasFieldRVA));
+                // with a StructLayoutAttribute
+                System.Diagnostics.Debug.Assert(field.FieldType.StructLayoutAttribute != null);
 
                 var size = field.FieldType.StructLayoutAttribute.Size;
                 var value = field.GetValue(null);
+
                 var pin = System.Runtime.InteropServices.GCHandle.Alloc(value, System.Runtime.InteropServices.GCHandleType.Pinned);
                 try
                 {
@@ -892,7 +895,7 @@ namespace Ibasa.Pikala
             // If we call this we know obj is not memoised or null or an enum 
             // or any of the types explictly in System.TypeCode
 
-            IReducer reducer;
+            IReducer? reducer;
 
             if (info.RuntimeType.IsArray)
             {

@@ -4,14 +4,20 @@ using Xunit;
 namespace Ibasa.Pikala.Tests
 {
     /// <summary>
-    /// This test is all by itself because the lambda generates a type in the test and so we have to serialize the whole test class. 
+    /// Theses tests are all by themselves because the lambda generates a type in the test and so we have to serialize the whole test class. 
     /// While serialising the whole test class should work for Pikala having this by itself makes investigation into just lambdas much easier.
     /// </summary>
     public class EmitLambdaTests
     {
         private Pickler CreatePickler()
         {
-            return new Pickler(assembly => assembly == System.Reflection.Assembly.GetExecutingAssembly() ? AssemblyPickleMode.PickleByValue : AssemblyPickleMode.Default);
+            var assemblyPickleMode = new Func<System.Reflection.Assembly, AssemblyPickleMode>(assembly =>
+                assembly == System.Reflection.Assembly.GetExecutingAssembly() ? AssemblyPickleMode.PickleByValue : AssemblyPickleMode.Default
+            );
+
+            var assemblyLoadContext = new System.Runtime.Loader.AssemblyLoadContext("EmitTest", true);
+
+            return new Pickler(assemblyPickleMode, assemblyLoadContext);
         }
 
         [Fact]
@@ -63,7 +69,13 @@ namespace Ibasa.Pikala.Tests
     {
         private Pickler CreatePickler()
         {
-            return new Pickler(assembly => assembly == System.Reflection.Assembly.GetExecutingAssembly() ? AssemblyPickleMode.PickleByValue : AssemblyPickleMode.Default);
+            var assemblyPickleMode = new Func<System.Reflection.Assembly, AssemblyPickleMode>(assembly =>
+                assembly == System.Reflection.Assembly.GetExecutingAssembly() ? AssemblyPickleMode.PickleByValue : AssemblyPickleMode.Default
+            );
+
+            var assemblyLoadContext = new System.Runtime.Loader.AssemblyLoadContext("EmitTest", true);
+
+            return new Pickler(assemblyPickleMode, assemblyLoadContext);
         }
 
         [Fact]
