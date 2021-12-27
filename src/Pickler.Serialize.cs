@@ -475,16 +475,57 @@ namespace Ibasa.Pikala
 
             WriteCustomAttributes(state, module.CustomAttributes.ToArray());
 
-            var fields = module.GetFields();
+            var fields = module.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             state.Writer.Write7BitEncodedInt(fields.Length);
             foreach (var field in fields)
             {
                 state.Writer.Write(field.Name);
                 state.Writer.Write((int)field.Attributes);
-                SerializeType(state, field.FieldType);
+
+                // We expect all module fields to be RVA fields
+                System.Diagnostics.Debug.Assert(field.Attributes.HasFlag(FieldAttributes.HasFieldRVA));
+                // with a StructLayoutAttribute
+                System.Diagnostics.Debug.Assert(field.FieldType.StructLayoutAttribute != null);
+
+                var size = field.FieldType.StructLayoutAttribute.Size;
+                var value = field.GetValue(null);
+
+                var pin = System.Runtime.InteropServices.GCHandle.Alloc(value, System.Runtime.InteropServices.GCHandleType.Pinned);
+                try
+                {
+                    var addr = pin.AddrOfPinnedObject();
+                    unsafe
+                    {
+                        var bytes = new ReadOnlySpan<byte>(addr.ToPointer(), size);
+
+                        var allZero = true;
+                        for (int i = 0; i < size; ++i)
+                        {
+                            if (bytes[i] != 0)
+                            {
+                                allZero = false;
+                                break;
+                            }
+                        }
+
+                        if (allZero)
+                        {
+                            state.Writer.Write(-size);
+                        }
+                        else
+                        {
+                            state.Writer.Write(size);
+                            state.Writer.Write(bytes);
+                        }
+                    }
+                }
+                finally
+                {
+                    pin.Free();
+                }
             }
 
-            var methods = module.GetMethods();
+            var methods = module.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             state.Writer.Write7BitEncodedInt(methods.Length);
             foreach (var method in methods)
             {
@@ -497,16 +538,8 @@ namespace Ibasa.Pikala
                 {
                     SerializeMethodBody(state, null, method.Module, method.GetGenericArguments(), method.GetMethodBody());
                 }
-            }, () =>
-            {
-                foreach (var field in fields)
-                {
-                    state.Writer.Write(field.Name);
-                    var value = field.GetValue(null);
-                    var fieldInfo = MakeInfo(value, typeof(object), ShouldMemo(value, field.FieldType));
-                    Serialize(state, value, fieldInfo);
-                }
-            });
+            },
+            () => { });
         }
 
         private void SerializeTypeDef(PicklerSerializationState state, Type type, Type[]? genericParameters)
@@ -874,7 +907,10 @@ namespace Ibasa.Pikala
                 // Is this assembly one we should save by value?
                 if (PickleByValue(module.Assembly))
                 {
-                    SerializeModuleDef(state, module);
+                    state.RunWithTrailers(() =>
+                    {
+                        SerializeModuleDef(state, module);
+                    });
                 }
                 else
                 {

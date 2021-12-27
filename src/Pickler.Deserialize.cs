@@ -1328,9 +1328,16 @@ namespace Ibasa.Pikala
                 {
                     var fieldName = state.Reader.ReadString();
                     var fieldAttributes = (FieldAttributes)state.Reader.ReadInt32();
-                    var fieldType = Deserialize<PickledTypeInfo>(state, TypeInfo, null, null);
-                    throw new NotImplementedException();
-                    //constructingModule.Fields[i] = new PickledFieldInfoDef(constructingModule, typeBuilder.DefineField(fieldName, fieldType.Type, fieldAttributes));
+                    var fieldSize = state.Reader.ReadInt32();
+                    if (fieldSize < 0)
+                    {
+                        moduleBuilder.DefineUninitializedData(fieldName, -fieldSize, fieldAttributes);
+                    }
+                    else
+                    {
+                        var data = state.Reader.ReadBytes(fieldSize);
+                        moduleBuilder.DefineInitializedData(fieldName, data, fieldAttributes);
+                    }
                 }
 
                 var methodCount = state.Reader.Read7BitEncodedInt();
@@ -1350,37 +1357,7 @@ namespace Ibasa.Pikala
                     }
                 },
                 () => moduleBuilder.CreateGlobalFunctions(),
-                () =>
-                {
-                    for (int i = 0; i < fields.Length; ++i)
-                    {
-                        var fieldName = state.Reader.ReadString();
-                        FieldInfo? fieldInfo = null;
-                        for (int j = 0; j < fields.Length; ++j)
-                        {
-                            if (fieldName == fields[j].FieldInfo.Name)
-                            {
-                                fieldInfo = fields[j].FieldInfo;
-                            }
-                        }
-
-                        if (fieldInfo == null)
-                        {
-                            throw new Exception();
-                        }
-
-                        try
-                        {
-                            var deserInfo = new DeserializeInformation(typeof(object), !fieldInfo.FieldType.IsValueType);
-                            var fieldValue = Deserialize(state, deserInfo, null, null);
-                            fieldInfo.SetValue(null, fieldValue);
-                        }
-                        catch (MemoException exc)
-                        {
-                            state.RegisterFixup(exc.Position, value => fieldInfo.SetValue(null, value));
-                        }
-                    }
-                });
+                () => { });
 
                 return moduleBuilder;
             });
