@@ -197,7 +197,7 @@ namespace Ibasa.Pikala
 
         public override string ToString()
         {
-            return Type.FullName;
+            return Type.FullName!;
         }
     }
 
@@ -299,7 +299,7 @@ namespace Ibasa.Pikala
                 if (methodBase.DeclaringType.IsConstructedGenericType)
                 {
                     var genericType = methodBase.DeclaringType.GetGenericTypeDefinition();
-                    methodBase = MethodBase.GetMethodFromHandle(methodBase.MethodHandle, genericType.TypeHandle);
+                    methodBase = MethodBase.GetMethodFromHandle(methodBase.MethodHandle, genericType.TypeHandle)!;
                 }
             }
 
