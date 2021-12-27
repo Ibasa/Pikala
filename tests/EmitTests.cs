@@ -11,7 +11,13 @@ namespace Ibasa.Pikala.Tests
     {
         private Pickler CreatePickler()
         {
-            return new Pickler(assembly => assembly == System.Reflection.Assembly.GetExecutingAssembly() ? AssemblyPickleMode.PickleByValue : AssemblyPickleMode.Default);
+            var assemblyPickleMode = new Func<System.Reflection.Assembly, AssemblyPickleMode>(assembly =>
+                assembly == System.Reflection.Assembly.GetExecutingAssembly() ? AssemblyPickleMode.PickleByValue : AssemblyPickleMode.Default
+            );
+
+            var assemblyLoadContext = new System.Runtime.Loader.AssemblyLoadContext("EmitTest", true);
+
+            return new Pickler(assemblyPickleMode, assemblyLoadContext);
         }
 
         [Fact]
@@ -63,7 +69,13 @@ namespace Ibasa.Pikala.Tests
     {
         private Pickler CreatePickler()
         {
-            return new Pickler(assembly => assembly == System.Reflection.Assembly.GetExecutingAssembly() ? AssemblyPickleMode.PickleByValue : AssemblyPickleMode.Default);
+            var assemblyPickleMode = new Func<System.Reflection.Assembly, AssemblyPickleMode>(assembly =>
+                assembly == System.Reflection.Assembly.GetExecutingAssembly() ? AssemblyPickleMode.PickleByValue : AssemblyPickleMode.Default
+            );
+
+            var assemblyLoadContext = new System.Runtime.Loader.AssemblyLoadContext("EmitTest", true);
+
+            return new Pickler(assemblyPickleMode, assemblyLoadContext);
         }
 
         [Fact]
