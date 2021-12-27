@@ -1107,10 +1107,10 @@ namespace Ibasa.Pikala
 
         private Assembly? LookupWorkaroundAssembly(System.Runtime.Loader.AssemblyLoadContext alc)
         {
-            foreach(var assembly in alc.Assemblies)
+            foreach (var assembly in alc.Assemblies)
             {
                 var name = assembly.GetName();
-                if(name.Name == "DefineDynamicAssembly" && assembly.ManifestModule.ModuleVersionId == _ddaGuid)
+                if (name.Name == "DefineDynamicAssembly" && assembly.ManifestModule.ModuleVersionId == _ddaGuid)
                 {
                     return assembly;
                 }
@@ -1127,10 +1127,10 @@ namespace Ibasa.Pikala
 
             metadata.AddAssembly(
                 metadata.GetOrAddString("DefineDynamicAssembly"),
-                new Version(1, 0,0,0),
+                new Version(1, 0, 0, 0),
                 default(System.Reflection.Metadata.StringHandle),
                 default(System.Reflection.Metadata.BlobHandle),
-                flags: 0, 
+                flags: 0,
                 AssemblyHashAlgorithm.None);
 
             metadata.AddModule(
@@ -1169,9 +1169,10 @@ namespace Ibasa.Pikala
             var ddaSignature = new System.Reflection.Metadata.BlobBuilder();
             new System.Reflection.Metadata.Ecma335.BlobEncoder(ddaSignature)
                 .MethodSignature()
-                .Parameters(2, 
+                .Parameters(2,
                     returnType => returnType.Type().Type(assemblyBuilderRef, false),
-                    parameters => {
+                    parameters =>
+                    {
                         parameters.AddParameter().Type().Type(assemblyNameRef, false);
                         parameters.AddParameter().Type().Type(assemblyBuilderAccessRef, true);
                     });
@@ -1214,12 +1215,12 @@ namespace Ibasa.Pikala
 
             var peHeaderBuilder = new System.Reflection.PortableExecutable.PEHeaderBuilder();
             var peBuilder = new System.Reflection.PortableExecutable.ManagedPEBuilder(
-                peHeaderBuilder, 
+                peHeaderBuilder,
                 metadataRootBuilder,
-                ilBuilder, 
+                ilBuilder,
                 flags: System.Reflection.PortableExecutable.CorFlags.ILOnly,
                 deterministicIdProvider: content => contentId);
-            
+
             var builder = new System.Reflection.Metadata.BlobBuilder();
             peBuilder.Serialize(builder);
 
@@ -1279,7 +1280,7 @@ namespace Ibasa.Pikala
             }
 
             state.SetMemo(position, true, assembly);
-            
+
 
             ReadCustomAttributes(state, assembly.SetCustomAttribute, genericTypeParameters, genericMethodParameters);
             return assembly;
