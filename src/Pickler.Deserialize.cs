@@ -1043,7 +1043,7 @@ namespace Ibasa.Pikala
             var assemblyName = new AssemblyName(state.Reader.ReadString());
             // Check to see if its already in our loaded assembly set
             Assembly? assembly = null;
-            foreach (var candidate in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var candidate in AssemblyLoadContext.Assemblies)
             {
                 if (candidate.FullName == assemblyName.FullName)
                 {
@@ -1057,8 +1057,7 @@ namespace Ibasa.Pikala
             // Else try to load it 
             if (assembly == null)
             {
-                // On moving to net5 we should look at using AssemblyLoadContext for this
-                assembly = Assembly.Load(assemblyName);
+                assembly = AssemblyLoadContext.LoadFromAssemblyName(assemblyName);
             }
             return state.SetMemo(position, true, assembly);
         }
@@ -1101,15 +1100,167 @@ namespace Ibasa.Pikala
             }
         }
 
+        private Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>? _defineDynamicAssembly = null;
+
+        private static Guid DdaGuid = new Guid("75468177-0C74-489F-967D-AC6BAB6BA7A4");
+
+        private Assembly BuildAndLoadWorkaround(System.Runtime.Loader.AssemblyLoadContext alc)
+        {
+            var contentId = new System.Reflection.Metadata.BlobContentId(DdaGuid, 0x04030201);
+
+            var ilBuilder = new System.Reflection.Metadata.BlobBuilder();
+            var metadata = new System.Reflection.Metadata.Ecma335.MetadataBuilder();
+
+            metadata.AddAssembly(
+                metadata.GetOrAddString("DefineDynamicAssembly"),
+                new Version(1, 0,0,0),
+                default(System.Reflection.Metadata.StringHandle),
+                default(System.Reflection.Metadata.BlobHandle),
+                flags: 0, 
+                AssemblyHashAlgorithm.None);
+
+            metadata.AddModule(
+                0,
+                metadata.GetOrAddString("DefineDynamicAssembly.dll"),
+                metadata.GetOrAddGuid(DdaGuid),
+                default(System.Reflection.Metadata.GuidHandle),
+                default(System.Reflection.Metadata.GuidHandle));
+
+            var mscorlibName = mscorlib.GetName();
+            var mscorlibPublicKey = metadata.GetOrAddBlob(mscorlibName.GetPublicKey());
+
+            var mscorlibAssemblyRef = metadata.AddAssemblyReference(
+                metadata.GetOrAddString(mscorlibName.Name),
+                mscorlibName.Version,
+                metadata.GetOrAddString(mscorlibName.CultureName),
+                mscorlibPublicKey,
+                default(AssemblyFlags),
+                default(System.Reflection.Metadata.BlobHandle));
+
+            var assemblyBuilderRef = metadata.AddTypeReference(
+                mscorlibAssemblyRef,
+                metadata.GetOrAddString("System.Reflection.Emit"),
+                metadata.GetOrAddString("AssemblyBuilder"));
+
+            var assemblyNameRef = metadata.AddTypeReference(
+                mscorlibAssemblyRef,
+                metadata.GetOrAddString("System.Reflection"),
+                metadata.GetOrAddString("AssemblyName"));
+
+            var assemblyBuilderAccessRef = metadata.AddTypeReference(
+                mscorlibAssemblyRef,
+                metadata.GetOrAddString("System.Reflection.Emit"),
+                metadata.GetOrAddString("AssemblyBuilderAccess"));
+
+            var ddaSignature = new System.Reflection.Metadata.BlobBuilder();
+            new System.Reflection.Metadata.Ecma335.BlobEncoder(ddaSignature)
+                .MethodSignature()
+                .Parameters(2, 
+                    returnType => returnType.Type().Type(assemblyBuilderRef, false),
+                    parameters => {
+                        parameters.AddParameter().Type().Type(assemblyNameRef, false);
+                        parameters.AddParameter().Type().Type(assemblyBuilderAccessRef, true);
+                    });
+
+            var defineDynamicAssemblyRef = metadata.AddMemberReference(
+                assemblyBuilderRef,
+                metadata.GetOrAddString("DefineDynamicAssembly"),
+                metadata.GetOrAddBlob(ddaSignature));
+
+            var codeBuilder = new System.Reflection.Metadata.BlobBuilder();
+            var il = new System.Reflection.Metadata.Ecma335.InstructionEncoder(codeBuilder);
+            il.LoadArgument(0);
+            il.LoadArgument(1);
+            il.Call(defineDynamicAssemblyRef);
+            il.OpCode(System.Reflection.Metadata.ILOpCode.Ret);
+
+            var methodBodyStream = new System.Reflection.Metadata.Ecma335.MethodBodyStreamEncoder(ilBuilder);
+            var ddaOffset = methodBodyStream.AddMethodBody(il);
+
+            var parameters = metadata.AddParameter(ParameterAttributes.None, metadata.GetOrAddString("name"), 0);
+            metadata.AddParameter(ParameterAttributes.None, metadata.GetOrAddString("access"), 1);
+
+            var ddaMethodDef = metadata.AddMethodDefinition(
+                MethodAttributes.Public | MethodAttributes.Static,
+                MethodImplAttributes.IL,
+                metadata.GetOrAddString("DefineDynamicAssembly"),
+                metadata.GetOrAddBlob(ddaSignature),
+                ddaOffset,
+                parameterList: parameters);
+
+            metadata.AddTypeDefinition(
+                default(TypeAttributes),
+                default(System.Reflection.Metadata.StringHandle),
+                metadata.GetOrAddString("<Module>"),
+                baseType: default(System.Reflection.Metadata.EntityHandle),
+                fieldList: System.Reflection.Metadata.Ecma335.MetadataTokens.FieldDefinitionHandle(1),
+                methodList: ddaMethodDef);
+
+            var metadataRootBuilder = new System.Reflection.Metadata.Ecma335.MetadataRootBuilder(metadata);
+
+            var peHeaderBuilder = new System.Reflection.PortableExecutable.PEHeaderBuilder();
+            var peBuilder = new System.Reflection.PortableExecutable.ManagedPEBuilder(
+                peHeaderBuilder, 
+                metadataRootBuilder,
+                ilBuilder, 
+                flags: System.Reflection.PortableExecutable.CorFlags.ILOnly,
+                deterministicIdProvider: content => contentId);
+            
+            var builder = new System.Reflection.Metadata.BlobBuilder();
+            peBuilder.Serialize(builder);
+
+            var memoryStream = new System.IO.MemoryStream();
+            builder.WriteContentTo(memoryStream);
+            memoryStream.Position = 0;
+
+            return alc.LoadFromStream(memoryStream);
+        }
+
         private Assembly DeserializeAsesmblyDef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             var assemblyName = new AssemblyName(state.Reader.ReadString());
-            var assembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.RunAndCollect, null);
+            var access = AssemblyLoadContext.IsCollectible ? AssemblyBuilderAccess.RunAndCollect : AssemblyBuilderAccess.Run;
+            var currentContextualReflectionContextOrDefault =
+                System.Runtime.Loader.AssemblyLoadContext.CurrentContextualReflectionContext ?? System.Runtime.Loader.AssemblyLoadContext.Default;
+            AssemblyBuilder assembly;
+            if (AssemblyLoadContext == currentContextualReflectionContextOrDefault)
+            {
+                // If the assembly load context is the current contextual one then we can just call DefineDynamicAssembly.
+                assembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, access);
+
+            }
+            else if (Environment.Version.Major >= 6)
+            {
+                // Else for runtime 6.0 onwards we can set our AssemblyLoadContext as the current contextual context and then call DefineDynamicAssembly
+                using var scope = AssemblyLoadContext.EnterContextualReflection();
+                assembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, access);
+            }
+            else
+            {
+                // Else before net6 DefineDynamicAssembly did not check the contextual ALC, it instead used the callers ALC. So to get around this we do some "fun" here
+                // where we build a tiny assembly with one method to call AssemblyBuilder.DefineDynamicAssembly, load that into the ALC we want to use then invoke 
+                // the method on it. We can reuse this method, so we cache it via a Func.
+                if (_defineDynamicAssembly == null)
+                {
+                    var ddaAssembly = BuildAndLoadWorkaround(AssemblyLoadContext);
+                    var context = System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(ddaAssembly);
+                    System.Diagnostics.Debug.Assert(context == AssemblyLoadContext, "Failed to load into defined ALC");
+                    var ddaMethod = ddaAssembly.ManifestModule.GetMethod("DefineDynamicAssembly");
+                    System.Diagnostics.Debug.Assert(ddaMethod != null, "Failed to GetMethod(\"DefineDynamicAssembly\")");
+                    var ddaDelegate = ddaMethod.CreateDelegate(typeof(Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>));
+                    _defineDynamicAssembly = (Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>)ddaDelegate;
+                }
+                assembly = _defineDynamicAssembly(assemblyName, access);
+            }
+
             if (assembly == null)
             {
                 throw new Exception($"Could not define assembly '{assemblyName}'");
             }
+
             state.SetMemo(position, true, assembly);
+            
+
             ReadCustomAttributes(state, assembly.SetCustomAttribute, genericTypeParameters, genericMethodParameters);
             return assembly;
         }

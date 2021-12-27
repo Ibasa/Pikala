@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.Loader;
 
 namespace Ibasa.Pikala
 {
@@ -130,9 +131,12 @@ namespace Ibasa.Pikala
         private const uint _header = ((byte)'P' << 0 | (byte)'K' << 8 | (byte)'L' << 16 | (byte)'A' << 24);
         private const uint _version = 1U;
 
-        public Pickler(Func<Assembly, AssemblyPickleMode>? assemblyPickleMode = null)
+        public AssemblyLoadContext AssemblyLoadContext { get; private set; }
+
+        public Pickler(Func<Assembly, AssemblyPickleMode>? assemblyPickleMode = null, AssemblyLoadContext? assemblyLoadContext = null)
         {
             // By default assume nothing needs to be pickled by value
+            AssemblyLoadContext = (assemblyLoadContext ?? AssemblyLoadContext.CurrentContextualReflectionContext) ?? AssemblyLoadContext.Default;
             _assemblyPickleMode = assemblyPickleMode ?? (_ => AssemblyPickleMode.Default);
             _reducers = new Dictionary<Type, IReducer>();
 
