@@ -1102,11 +1102,25 @@ namespace Ibasa.Pikala
 
         private Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>? _defineDynamicAssembly = null;
 
-        private static Guid DdaGuid = new Guid("75468177-0C74-489F-967D-AC6BAB6BA7A4");
+        private static Guid _ddaGuid = new Guid("75468177-0C74-489F-967D-AC6BAB6BA7A4");
+        private static object _ddaLock = new object();
 
-        private Assembly BuildAndLoadWorkaround(System.Runtime.Loader.AssemblyLoadContext alc)
+        private Assembly? LookupWorkaroundAssembly(System.Runtime.Loader.AssemblyLoadContext alc)
         {
-            var contentId = new System.Reflection.Metadata.BlobContentId(DdaGuid, 0x04030201);
+            foreach(var assembly in alc.Assemblies)
+            {
+                var name = assembly.GetName();
+                if(name.Name == "DefineDynamicAssembly" && assembly.ManifestModule.ModuleVersionId == _ddaGuid)
+                {
+                    return assembly;
+                }
+            }
+            return null;
+        }
+
+        private Assembly BuildAndLoadWorkaroundAssembly(System.Runtime.Loader.AssemblyLoadContext alc)
+        {
+            var contentId = new System.Reflection.Metadata.BlobContentId(_ddaGuid, 0x04030201);
 
             var ilBuilder = new System.Reflection.Metadata.BlobBuilder();
             var metadata = new System.Reflection.Metadata.Ecma335.MetadataBuilder();
@@ -1122,7 +1136,7 @@ namespace Ibasa.Pikala
             metadata.AddModule(
                 0,
                 metadata.GetOrAddString("DefineDynamicAssembly.dll"),
-                metadata.GetOrAddGuid(DdaGuid),
+                metadata.GetOrAddGuid(_ddaGuid),
                 default(System.Reflection.Metadata.GuidHandle),
                 default(System.Reflection.Metadata.GuidHandle));
 
@@ -1242,13 +1256,19 @@ namespace Ibasa.Pikala
                 // the method on it. We can reuse this method, so we cache it via a Func.
                 if (_defineDynamicAssembly == null)
                 {
-                    var ddaAssembly = BuildAndLoadWorkaround(AssemblyLoadContext);
-                    var context = System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(ddaAssembly);
-                    System.Diagnostics.Debug.Assert(context == AssemblyLoadContext, "Failed to load into defined ALC");
-                    var ddaMethod = ddaAssembly.ManifestModule.GetMethod("DefineDynamicAssembly");
-                    System.Diagnostics.Debug.Assert(ddaMethod != null, "Failed to GetMethod(\"DefineDynamicAssembly\")");
-                    var ddaDelegate = ddaMethod.CreateDelegate(typeof(Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>));
-                    _defineDynamicAssembly = (Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>)ddaDelegate;
+                    lock (_ddaLock)
+                    {
+                        if (_defineDynamicAssembly == null)
+                        {
+                            var ddaAssembly = LookupWorkaroundAssembly(AssemblyLoadContext) ?? BuildAndLoadWorkaroundAssembly(AssemblyLoadContext);
+                            var context = System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(ddaAssembly);
+                            System.Diagnostics.Debug.Assert(context == AssemblyLoadContext, "Failed to load into defined ALC");
+                            var ddaMethod = ddaAssembly.ManifestModule.GetMethod("DefineDynamicAssembly");
+                            System.Diagnostics.Debug.Assert(ddaMethod != null, "Failed to GetMethod(\"DefineDynamicAssembly\")");
+                            var ddaDelegate = ddaMethod.CreateDelegate(typeof(Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>));
+                            _defineDynamicAssembly = (Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>)ddaDelegate;
+                        }
+                    }
                 }
                 assembly = _defineDynamicAssembly(assemblyName, access);
             }

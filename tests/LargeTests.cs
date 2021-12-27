@@ -14,7 +14,7 @@ namespace Ibasa.Pikala.Tests
                 Skip = "Skipping due to 32bit process";
             }
 
-            var eventName = Environment.GetEnvironmentVariable("GITHUB_EVENT_NAME") ?? "pull_request";
+            var eventName = Environment.GetEnvironmentVariable("GITHUB_EVENT_NAME");
             if (isLongRunning && eventName == "pull_request")
             {
                 Skip = "Skipping long running test for pull request";

@@ -73,5 +73,31 @@ namespace Ibasa.Pikala.Tests
 
             Assert.Contains("Ambiguous assembly name 'TestAmbiguousAssemblies, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null', found multiple matching assemblies.", exc.Message);
         }
+
+        [Fact]
+        public void TestSharedALC()
+        {
+            // This test is to test that if we create one ALC and use it with two picklers that there are no issues with the workaround assembly we use.
+            // We're checking for racing and duplication problems here.
+
+            var alc = new System.Runtime.Loader.AssemblyLoadContext("TestSharedALC", true);
+
+            var pickler1 = new Pickler(null, alc);
+            var pickler2 = new Pickler(null, alc);
+
+            var assembly1 = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestSharedALC1"), AssemblyBuilderAccess.Run);
+            var assembly2 = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestSharedALC2"), AssemblyBuilderAccess.Run);
+
+            void TestAssert(Pickler pickler, AssemblyBuilder assemblyBuilder)
+            {
+                var assembly = RoundTrip.Do<Assembly>(pickler, assemblyBuilder);
+                Assert.Equal(assemblyBuilder.FullName, assembly.FullName);
+            }
+
+            var task1 = System.Threading.Tasks.Task.Run(() => TestAssert(pickler1, assembly1));
+            var task2 = System.Threading.Tasks.Task.Run((() => TestAssert(pickler2, assembly2)));
+
+            System.Threading.Tasks.Task.WaitAll(task1, task2);
+        }
     }
 }
