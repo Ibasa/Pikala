@@ -17,6 +17,8 @@ namespace Ibasa.Pikala
 
         public abstract PickledFieldInfo GetField(string name);
 
+        public abstract PickledPropertyInfo GetProperty(string name);
+
         public override void Emit(ILGenerator ilGenerator, OpCode opCode)
         {
             ilGenerator.Emit(opCode, Type);
@@ -70,6 +72,20 @@ namespace Ibasa.Pikala
             return new PickledFieldInfoRef(result);
         }
 
+        public override PickledPropertyInfo GetProperty(string name)
+        {
+            var properties = Type.GetProperties(BindingsAll);
+            foreach (var property in properties)
+            {
+                if (property.Name == name)
+                {
+                    return new PickledPropertyInfoRef(property);
+                }
+            }
+
+            throw new Exception($"Could not load property '{name}' from type '{Type.Name}'");
+        }
+
         public override PickledTypeInfo GetGenericArgument(int position)
         {
             return new PickledGenericParameterRef(Type.GetGenericArguments()[position]);
@@ -99,6 +115,11 @@ namespace Ibasa.Pikala
         }
 
         public override PickledFieldInfo GetField(string name)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override PickledPropertyInfo GetProperty(string name)
         {
             throw new NotImplementedException();
         }
@@ -133,6 +154,11 @@ namespace Ibasa.Pikala
         }
 
         public override PickledFieldInfo GetField(string name)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override PickledPropertyInfo GetProperty(string name)
         {
             throw new NotImplementedException();
         }
@@ -185,7 +211,7 @@ namespace Ibasa.Pikala
         public TypeBuilder TypeBuilder { get; }
         public GenericTypeParameterBuilder[]? GenericParameters { get; set; }
         public PickledFieldInfoDef[]? Fields { get; set; }
-        public PropertyBuilder[]? Properties { get; set; }
+        public PickledPropertyInfoDef[]? Properties { get; set; }
         public PickledMethodInfoDef[]? Methods { get; set; }
         public PickledConstructorInfoDef[]? Constructors { get; set; }
 
@@ -240,6 +266,22 @@ namespace Ibasa.Pikala
             }
 
             throw new Exception($"Could not load field '{name}' from type '{TypeBuilder.Name}'");
+        }
+
+        public override PickledPropertyInfo GetProperty(string name)
+        {
+            if (Properties != null)
+            {
+                foreach (var property in Properties)
+                {
+                    if (property.PropertyBuilder.Name == name)
+                    {
+                        return property;
+                    }
+                }
+            }
+
+            throw new Exception($"Could not load property '{name}' from type '{TypeBuilder.Name}'");
         }
 
         public override PickledTypeInfo GetGenericArgument(int position)
@@ -505,6 +547,22 @@ namespace Ibasa.Pikala
             }
         }
 
+        public override PickledPropertyInfo GetProperty(string name)
+        {
+            var (type, isComplete) = ResolveType();
+
+            if (isComplete)
+            {
+                var infoRef = new PickledTypeInfoRef(type);
+                return infoRef.GetProperty(name);
+            }
+            else
+            {
+                var propertyInfo = GenericType.GetProperty(name);
+                return new PickledPropertyInfoRef(propertyInfo.PropertyInfo);
+            }
+        }
+
         public override PickledTypeInfo GetGenericArgument(int position)
         {
             throw new NotImplementedException();
@@ -765,6 +823,69 @@ namespace Ibasa.Pikala
         public ParameterBuilder[]? Parameters { get; }
         public Type[]? ParameterTypes { get; }
         public PickledTypeInfo[]? Locals { get; }
+    }
+
+    abstract class PickledPropertyInfo : PickledMemberInfo
+    {
+        public override MemberInfo MemberInfo { get { return PropertyInfo; } }
+
+        public abstract PropertyInfo PropertyInfo { get; }
+
+        public override void Emit(ILGenerator ilGenerator, OpCode opCode)
+        {
+            throw new Exception("Can't emit property info to IL stream");
+        }
+
+        public override PickledTypeInfo GetGenericArgument(int position)
+        {
+            throw new Exception("Properties do not have generic arguments");
+        }
+    }
+
+    sealed class PickledPropertyInfoRef : PickledPropertyInfo
+    {
+        public override PropertyInfo PropertyInfo { get; }
+
+        public PickledPropertyInfoRef(PropertyInfo propertyInfo)
+        {
+            PropertyInfo = propertyInfo;
+        }
+    }
+
+    sealed class PickledPropertyInfoDef : PickledPropertyInfo
+    {
+        public PickledPropertyInfoDef(PickledTypeInfoDef declaringType, PropertyBuilder propertyBuilder, Type[] indexParameters)
+        {
+            DeclaringType = declaringType;
+            PropertyBuilder = propertyBuilder;
+            IndexParameters = indexParameters;
+        }
+
+        public PickledTypeInfoDef DeclaringType { get; }
+        public PropertyBuilder PropertyBuilder { get; }
+        public Type[] IndexParameters { get; }
+
+        public override PropertyInfo PropertyInfo
+        {
+            get
+            {
+                if (!DeclaringType.IsCreated)
+                {
+                    return PropertyBuilder;
+                }
+
+                var properties = DeclaringType.Type.GetProperties(BindingsAll);
+                foreach (var property in properties)
+                {
+                    if (property.Name == PropertyBuilder.Name)
+                    {
+                        return property;
+                    }
+                }
+
+                throw new Exception($"Could not load property '{PropertyBuilder.Name}' from type '{DeclaringType.Type.Name}'");
+            }
+        }
     }
 
     abstract class PickledFieldInfo : PickledMemberInfo
