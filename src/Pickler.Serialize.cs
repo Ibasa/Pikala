@@ -828,18 +828,18 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void WriteCustomAttributeValue(PicklerSerializationState state, object value, SerializeInformation info)
+        private void WriteCustomAttributeValue(PicklerSerializationState state, object? value, SerializeInformation info)
         {
             // argument might be a ReadOnlyCollection[CustomAttributeTypedArgument] but we should write that as just an array of values
             if (value is System.Collections.ObjectModel.ReadOnlyCollection<CustomAttributeTypedArgument> collection)
             {
-                var result = new object[collection.Count];
+                var result = new object?[collection.Count];
                 for (int i = 0; i < result.Length; ++i)
                 {
                     result[i] = collection[i].Value;
                 }
                 // No point memoising this array, we just created it!
-                Serialize(state, result, new SerializeInformation(typeof(object[]), typeof(object[]), false));
+                Serialize(state, result, new SerializeInformation(typeof(object?[]), typeof(object?[]), false));
             }
             else
             {

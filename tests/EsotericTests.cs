@@ -10,14 +10,12 @@ namespace Ibasa.Pikala.Tests
     /// </summary>
     public class EsotericTests
     {
-        private static AssemblyName DynamicAssemblyName = new AssemblyName("DynamicTest");
-
         [Fact]
         public void TestModuleData()
         {
             var pickler = Utils.CreateIsolatedPickler();
 
-            var assembly = AssemblyBuilder.DefineDynamicAssembly(DynamicAssemblyName, AssemblyBuilderAccess.Run);
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestModuleData"), AssemblyBuilderAccess.Run);
             var module = assembly.DefineDynamicModule("main");
             var undata = module.DefineUninitializedData("uninit", 128, FieldAttributes.Public);
             var indata = module.DefineInitializedData("init", new byte[] { 1, 2 }, FieldAttributes.Private);
@@ -81,7 +79,7 @@ namespace Ibasa.Pikala.Tests
         {
             var pickler = new Pickler(_ => AssemblyPickleMode.PickleByReference);
 
-            var assembly = AssemblyBuilder.DefineDynamicAssembly(DynamicAssemblyName, AssemblyBuilderAccess.Run);
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestPropertyOverloadByReturnType"), AssemblyBuilderAccess.Run);
             var module = assembly.DefineDynamicModule("main");
             var type = module.DefineType("test");
             var intProp = DefineAutomaticProperty(type, "Prop", PropertyAttributes.None, typeof(int));
@@ -89,6 +87,7 @@ namespace Ibasa.Pikala.Tests
             var typeInstance = type.CreateType();
 
             var properties = typeInstance.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
+            Assert.Equal(2, properties.Length);
 
             foreach (var prop in properties)
             {
