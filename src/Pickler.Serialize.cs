@@ -634,22 +634,23 @@ namespace Ibasa.Pikala
                 }
                 WriteCustomAttributes(state, property.CustomAttributes.ToArray());
 
-                if (property.GetMethod == null)
-                {
-                    state.Writer.WriteNullableString(null);
-                }
-                else
-                {
-                    state.Writer.WriteNullableString(Method.GetSignature(property.GetMethod));
-                }
+                var accessors = property.GetAccessors(true);
+                var getter = property.GetMethod;
+                var setter = property.SetMethod;
+                var otherCount = accessors.Length - (
+                        (getter == null ? 0 : 1) +
+                        (setter == null ? 0 : 1));
 
-                if (property.SetMethod == null)
+                var count = (otherCount << 2) + (setter == null ? 0 : 2) + (getter == null ? 0 : 1);
+                state.Writer.Write7BitEncodedInt(count);
+                // Make sure get and set are first
+                // GetAccessors should return get first
+                System.Diagnostics.Debug.Assert(getter == null || accessors[0] == getter);
+                // GetAccessors should return set after get, that is either first if get is null, or second.
+                System.Diagnostics.Debug.Assert(setter == null || accessors[getter == null ? 0 : 1] == setter);
+                foreach (var accessor in accessors)
                 {
-                    state.Writer.WriteNullableString(null);
-                }
-                else
-                {
-                    state.Writer.WriteNullableString(Method.GetSignature(property.SetMethod));
+                    state.Writer.Write(Method.GetSignature(accessor));
                 }
             }
 

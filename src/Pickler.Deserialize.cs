@@ -468,22 +468,31 @@ namespace Ibasa.Pikala
                 var propertyBuilder = typeBuilder.DefineProperty(propertyName, propertyAttributes, propertyType.Type, propertyParameters);
                 ReadCustomAttributes(state, propertyBuilder.SetCustomAttribute, constructingType.GenericParameters, null);
 
-                var getMethod = state.Reader.ReadNullableString();
-                var setMethod = state.Reader.ReadNullableString();
-                foreach (var method in constructingType.Methods)
-                {
-                    if (getMethod == null && setMethod == null) break;
+                var count = state.Reader.Read7BitEncodedInt();
+                var hasGetter = (count & 0x1) != 0;
+                var hasSetter = (count & 0x2) != 0;
+                var otherCount = count >> 2;
 
-                    if (method.GetSignature() == getMethod)
-                    {
-                        propertyBuilder.SetGetMethod(method.MethodBuilder);
-                        getMethod = null;
-                    }
-                    if (method.GetSignature() == setMethod)
-                    {
-                        propertyBuilder.SetSetMethod(method.MethodBuilder);
-                        setMethod = null;
-                    }
+
+                MethodBuilder GetMethod(string signature)
+                {
+                    var info = constructingType.GetMethod(signature);
+                    // If we had covariant returns this cast wouldn't be needed.
+                    var def = (PickledMethodInfoDef)info;
+                    return def.MethodBuilder;
+                }
+
+                if (hasGetter)
+                {
+                    propertyBuilder.SetGetMethod(GetMethod(state.Reader.ReadString()));
+                }
+                if (hasSetter)
+                {
+                    propertyBuilder.SetSetMethod(GetMethod(state.Reader.ReadString()));
+                }
+                for (var j = 0; j < otherCount; ++j)
+                {
+                    propertyBuilder.AddOtherMethod(GetMethod(state.Reader.ReadString()));
                 }
             }
 
