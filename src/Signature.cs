@@ -19,7 +19,7 @@ namespace Ibasa.Pikala
 
     abstract class SignatureElement : IEquatable<SignatureElement>
     {
-        public abstract bool Equals(SignatureElement other);
+        public abstract bool Equals(SignatureElement? other);
 
         public static SignatureElement FromType(Type type)
         {
@@ -35,18 +35,21 @@ namespace Ibasa.Pikala
             }
             else if (type.IsPointer)
             {
-                var elementType = FromType(type.GetElementType());
-                return new SignaturePointer(elementType);
+                var elementType = type.GetElementType();
+                System.Diagnostics.Debug.Assert(elementType != null);
+                return new SignaturePointer(FromType(elementType));
             }
             else if (type.IsArray)
             {
-                var elementType = FromType(type.GetElementType());
-                return new SignatureArray(type.GetArrayRank(), elementType);
+                var elementType = type.GetElementType();
+                System.Diagnostics.Debug.Assert(elementType != null);
+                return new SignatureArray(type.GetArrayRank(), FromType(elementType));
             }
             else if (type.IsByRef)
             {
-                var elementType = FromType(type.GetElementType());
-                return new SignatureByRef(elementType);
+                var elementType = type.GetElementType();
+                System.Diagnostics.Debug.Assert(elementType != null);
+                return new SignatureByRef(FromType(elementType));
             }
             return new SignatureType(type);
         }
@@ -85,7 +88,7 @@ namespace Ibasa.Pikala
             GenericParameterPosition = genericParameterPosition;
         }
 
-        public override bool Equals(SignatureElement other)
+        public override bool Equals(SignatureElement? other)
         {
             if (other is SignatureGenericParameter sgp)
             {
@@ -109,7 +112,7 @@ namespace Ibasa.Pikala
             ElementType = elementType;
         }
 
-        public override bool Equals(SignatureElement other)
+        public override bool Equals(SignatureElement? other)
         {
             if (other is SignaturePointer sp)
             {
@@ -133,7 +136,7 @@ namespace Ibasa.Pikala
             ElementType = elementType;
         }
 
-        public override bool Equals(SignatureElement other)
+        public override bool Equals(SignatureElement? other)
         {
             if (other is SignatureByRef sbr)
             {
@@ -159,7 +162,7 @@ namespace Ibasa.Pikala
             Rank = rank;
         }
 
-        public override bool Equals(SignatureElement other)
+        public override bool Equals(SignatureElement? other)
         {
             if (other is SignatureArray sa)
             {
@@ -186,7 +189,7 @@ namespace Ibasa.Pikala
             Type = type;
         }
 
-        public override bool Equals(SignatureElement other)
+        public override bool Equals(SignatureElement? other)
         {
             if (other is SignatureType st)
             {
@@ -213,7 +216,7 @@ namespace Ibasa.Pikala
             GenericArguments = genericArguments;
         }
 
-        public override bool Equals(SignatureElement other)
+        public override bool Equals(SignatureElement? other)
         {
             if (other is SignatureConstructedGenericType scgt)
             {
@@ -306,6 +309,7 @@ namespace Ibasa.Pikala
             SignatureElement returnType;
             if (methodBase is ConstructorInfo constructor)
             {
+                System.Diagnostics.Debug.Assert(constructor.DeclaringType != null);
                 returnType = SignatureElement.FromType(constructor.DeclaringType);
             }
             else if (methodBase is MethodInfo method)
