@@ -946,45 +946,11 @@ namespace Ibasa.Pikala
             return state.SetMemo(position, true, type.GetField(name));
         }
 
-        private PropertyInfo DeserializePropertyInfo(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
+        private PickledPropertyInfo DeserializePropertyInfo(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
-            var type = Deserialize(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+            var type = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
             var name = state.Reader.ReadString();
-
-            PropertyInfo? result;
-            if (type is PickledTypeInfoDef constructingType)
-            {
-                result = null;
-                if (constructingType.Properties != null)
-                {
-                    foreach (var property in constructingType.Properties)
-                    {
-                        if (property.Name == name)
-                        {
-                            result = property;
-                            break;
-                        }
-                    }
-                }
-
-                if (result == null)
-                {
-                    throw new Exception($"Could not load property '{name}' from type '{constructingType.TypeBuilder.FullName}'");
-                }
-            }
-            else if (type is PickledTypeInfoRef typeInfo)
-            {
-                result = typeInfo.Type.GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
-                if (result == null)
-                {
-                    throw new Exception($"Could not load property '{name}' from type '{typeInfo.Type.FullName}'");
-                }
-            }
-            else
-            {
-                throw new Exception($"Unexpected parent '{type}' for property '{name}'");
-            }
-            return state.SetMemo(position, true, result);
+            return state.SetMemo(position, true, type.GetProperty(name));
         }
 
         private PickledConstructorInfo DeserializeConstructorInfo(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
@@ -1054,7 +1020,7 @@ namespace Ibasa.Pikala
                     assembly = candidate;
                 }
             }
-            // Else try to load it 
+            // Else try to load it
             if (assembly == null)
             {
                 assembly = AssemblyLoadContext.LoadFromAssemblyName(assemblyName);
@@ -1078,9 +1044,9 @@ namespace Ibasa.Pikala
                 var propertyValues = new object?[namedProperties.Length];
                 for (int j = 0; j < namedProperties.Length; ++j)
                 {
-                    var propertyInfo = DeserializeNonNull<PropertyInfo>(state, MakeInfo(typeof(PropertyInfo)), genericTypeParameters, genericMethodParameters);
-                    namedProperties[j] = propertyInfo;
-                    var deserInfo = new DeserializeInformation(typeof(object), !propertyInfo.PropertyType.IsValueType);
+                    var propertyInfo = DeserializeNonNull<PickledPropertyInfo>(state, MakeInfo(typeof(PropertyInfo)), genericTypeParameters, genericMethodParameters);
+                    namedProperties[j] = propertyInfo.PropertyInfo;
+                    var deserInfo = new DeserializeInformation(typeof(object), !namedProperties[j].PropertyType.IsValueType);
                     propertyValues[j] = ReducePickle(Deserialize(state, deserInfo, genericTypeParameters, genericMethodParameters));
                 }
 
