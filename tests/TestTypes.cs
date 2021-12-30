@@ -415,5 +415,26 @@ namespace Ibasa.Pikala.Tests
                 throw new Exception("i out of range");
             }
         }
+
+        public class SelfReferencingProperty
+        {
+            private string _current;
+
+            public SelfReferencingProperty(string current)
+            {
+                _current = current;
+            }
+
+            public SelfReferencingProperty Current
+            {
+                get { return this; }
+                set { _current = value._current; }
+            }
+
+            public override string ToString()
+            {
+                return _current;
+            }
+        }
     }
 }
