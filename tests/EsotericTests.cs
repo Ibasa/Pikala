@@ -51,6 +51,41 @@ namespace Ibasa.Pikala.Tests
             }
         }
 
+        [Fact]
+        public void TestPropertyOther()
+        {
+            var pickler = Utils.CreateIsolatedPickler();
+
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestPropertyOther"), AssemblyBuilderAccess.Run);
+            var module = assembly.DefineDynamicModule("main");
+            var type = module.DefineType("type");
+            var property = type.DefineProperty("prop", PropertyAttributes.None, typeof(int), null);
+            var other = type.DefineMethod("other", MethodAttributes.Private, typeof(void), null);
+            other.GetILGenerator().Emit(OpCodes.Ret);
+            property.AddOtherMethod(other);
+            var getter = type.DefineMethod("get", MethodAttributes.Private, typeof(int), null);
+            getter.GetILGenerator().Emit(OpCodes.Ldc_I4_0);
+            getter.GetILGenerator().Emit(OpCodes.Ret);
+            property.SetGetMethod(getter);
+
+            var builtType = type.CreateType();
+
+            var rtType = RoundTrip.Do(pickler, builtType);
+            Assert.NotNull(rtType);
+
+            var prop = rtType.GetProperty("prop", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(prop);
+
+            var accessors = prop.GetAccessors(true);
+            Assert.Equal(2, accessors.Length);
+
+            var getMethod = accessors[0];
+            Assert.Equal("get", getMethod.Name);
+
+            var otherMethod = accessors[1];
+            Assert.Equal("other", otherMethod.Name);
+        }
+
         private static PropertyBuilder DefineAutomaticProperty(TypeBuilder type, string name, PropertyAttributes attributes, Type returnType)
         {
             var field = type.DefineField("@backingfield_" + name, returnType, FieldAttributes.Private);
@@ -92,7 +127,7 @@ namespace Ibasa.Pikala.Tests
             foreach (var prop in properties)
             {
                 RoundTrip.Assert(pickler, prop);
-            }
+            } 
         }
     }
 }

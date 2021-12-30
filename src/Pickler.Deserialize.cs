@@ -528,36 +528,31 @@ namespace Ibasa.Pikala
                 ReadCustomAttributes(state, propertyBuilder.SetCustomAttribute, constructingType.GenericParameters, null);
                 constructingType.Properties[i] = new PickledPropertyInfoDef(constructingType, propertyBuilder, propertyParameters);
 
-                var flags = state.Reader.ReadByte();
-                var hasGet = (flags & 0x1) != 0;
-                var hasSet = (flags & 0x2) != 0;
+                var count = state.Reader.Read7BitEncodedInt();
+                var hasGetter = (count & 0x1) != 0;
+                var hasSetter = (count & 0x2) != 0;
+                var otherCount = count >> 2;
 
-                Signature? getSignature = null;
-                if (hasGet)
+
+                MethodBuilder GetMethod(Signature signature)
                 {
-                    getSignature = DeserializeSignature(state);
+                    var info = constructingType.GetMethod(signature);
+                    // If we had covariant returns this cast wouldn't be needed.
+                    var def = (PickledMethodInfoDef)info;
+                    return def.MethodBuilder;
                 }
 
-                Signature? setSignature = null;
-                if (hasSet)
+                if (hasGetter)
                 {
-                    setSignature = DeserializeSignature(state);
+                    propertyBuilder.SetGetMethod(GetMethod(DeserializeSignature(state)));
                 }
-
-                foreach (var method in constructingType.Methods)
+                if (hasSetter)
                 {
-                    if (getSignature == null && setSignature == null) break;
-
-                    if (method.GetSignature() == getSignature)
-                    {
-                        propertyBuilder.SetGetMethod(method.MethodBuilder);
-                        getSignature = null;
-                    }
-                    if (method.GetSignature() == setSignature)
-                    {
-                        propertyBuilder.SetSetMethod(method.MethodBuilder);
-                        setSignature = null;
-                    }
+                    propertyBuilder.SetSetMethod(GetMethod(DeserializeSignature(state)));
+                }
+                for (var j = 0; j < otherCount; ++j)
+                {
+                    propertyBuilder.AddOtherMethod(GetMethod(DeserializeSignature(state)));
                 }
             }
 

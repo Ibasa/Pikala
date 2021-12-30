@@ -718,7 +718,6 @@ namespace Ibasa.Pikala
         }
     }
 
-
     abstract class PickledFieldInfo : PickledMemberInfo
     {
         public override MemberInfo MemberInfo { get { return FieldInfo; } }
