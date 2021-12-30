@@ -453,6 +453,7 @@ namespace Ibasa.Pikala
             }
 
             var propertyCount = state.Reader.Read7BitEncodedInt();
+            constructingType.Properties = new PickledPropertyInfoDef[propertyCount];
             for (int i = 0; i < propertyCount; ++i)
             {
                 var propertyName = state.Reader.ReadString();
@@ -467,6 +468,7 @@ namespace Ibasa.Pikala
 
                 var propertyBuilder = typeBuilder.DefineProperty(propertyName, propertyAttributes, propertyType.Type, propertyParameters);
                 ReadCustomAttributes(state, propertyBuilder.SetCustomAttribute, constructingType.GenericParameters, null);
+                constructingType.Properties[i] = new PickledPropertyInfoDef(constructingType, propertyBuilder, propertyParameters);
 
                 var count = state.Reader.Read7BitEncodedInt();
                 var hasGetter = (count & 0x1) != 0;
