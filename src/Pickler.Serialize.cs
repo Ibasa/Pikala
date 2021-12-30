@@ -948,7 +948,6 @@ namespace Ibasa.Pikala
                 {
                     // Just write out an assembly refernce
                     state.Writer.Write((byte)PickleOperation.AssemblyRef);
-                    var name = assembly.GetName();
                     state.Writer.Write(assembly.FullName);
                 }
             }

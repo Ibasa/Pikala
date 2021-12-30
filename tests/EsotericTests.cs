@@ -127,7 +127,7 @@ namespace Ibasa.Pikala.Tests
             foreach (var prop in properties)
             {
                 RoundTrip.Assert(pickler, prop);
-            } 
+            }
         }
     }
 }
