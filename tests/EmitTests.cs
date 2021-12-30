@@ -280,5 +280,17 @@ namespace Ibasa.Pikala.Tests
             Assert.Equal(value(2), result(2));
             Assert.Equal(value(3), result(3));
         }
+
+        [Fact]
+        public void TestSelfReferenceProperty()
+        {
+            var pickler = CreatePickler();
+
+            var value = new TestTypes.SelfReferencingProperty("boo");
+
+            var result = RoundTrip.Do<object>(pickler, value);
+
+            Assert.Equal(value.ToString(), result.ToString());
+        }
     }
 }
