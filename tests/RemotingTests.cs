@@ -423,10 +423,14 @@ namespace Ibasa.Pikala.Tests
         {
             Func<int, string> value = i => (i * 2).ToString();
 
+            // Check we can deser it
+            var base64 = Base64FromObject(value);
+            var func = Base64ToObject(base64);
+
             var script = string.Join('\n', new[]
             {
                 ScriptHeader,
-                "let func = deserializeBase64 \"" +  Base64FromObject(value) + "\" :?> System.Func<int, string>",
+                "let func = deserializeBase64 \"" +  base64 + "\" :?> System.Func<int, string>",
                 "printfn \"%s\" (func.Invoke 1)",
                 "printfn \"%s\" (func.Invoke 2)",
             });
