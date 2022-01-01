@@ -1036,7 +1036,7 @@ namespace Ibasa.Pikala
             {
                 assembly = AssemblyLoadContext.LoadFromAssemblyName(assemblyName);
             }
-            return state.SetMemo(position, true, assembly);
+            return state.SetMemo(position, ShouldMemo(assembly, typeof(Assembly)), assembly);
         }
 
         private void ReadCustomAttributes(PicklerDeserializationState state, Action<CustomAttributeBuilder> setCustomAttribute, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
@@ -1266,7 +1266,7 @@ namespace Ibasa.Pikala
         private Module DeserializeManifestModuleRef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             var assembly = DeserializeNonNull<Assembly>(state, AssemblyInfo, genericTypeParameters, genericMethodParameters);
-            return state.SetMemo(position, true, assembly.ManifestModule);
+            return state.SetMemo(position, ShouldMemo(assembly, typeof(Module)), assembly.ManifestModule);
         }
 
         private Module DeserializeModuleRef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
