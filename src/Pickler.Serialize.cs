@@ -28,7 +28,7 @@ namespace Ibasa.Pikala
         /// <summary>
         /// There are some objects that we shouldn't bother to memoise because it's cheaper to just write their tokens.
         /// </summary>
-        private bool ShouldMemo(object obj, Type staticType)
+        private bool ShouldMemo(object? obj, Type staticType)
         {
             // If the static type is a value type we shouldn't memo because this is a value not a reference
             if (staticType.IsValueType) { return false; }
@@ -856,7 +856,9 @@ namespace Ibasa.Pikala
             state.Writer.Write7BitEncodedInt(attributes.Length);
             foreach (var attribute in attributes)
             {
-                Serialize(state, attribute.Constructor, MakeInfo(attribute.Constructor, typeof(ConstructorInfo)));
+                SerializeType(state, attribute.AttributeType);
+
+                SerializeSignature(state, Signature.GetSignature(attribute.Constructor));
                 state.Writer.Write7BitEncodedInt(attribute.ConstructorArguments.Count);
                 foreach (var argument in attribute.ConstructorArguments)
                 {
@@ -872,7 +874,7 @@ namespace Ibasa.Pikala
                     if (!argument.IsField)
                     {
                         var property = (PropertyInfo)argument.MemberInfo;
-                        Serialize(state, property, MakeInfo(property, typeof(PropertyInfo)));
+                        SerializeSignature(state, Signature.GetSignature(property));
                         var value = argument.TypedValue.Value;
                         var info = MakeInfo(argument.TypedValue.Value, typeof(object), ShouldMemo(value, property.PropertyType));
                         WriteCustomAttributeValue(state, value, info);
@@ -885,7 +887,7 @@ namespace Ibasa.Pikala
                     if (argument.IsField)
                     {
                         var field = (FieldInfo)argument.MemberInfo;
-                        Serialize(state, field, MakeInfo(field, typeof(FieldInfo)));
+                        state.Writer.Write(field.Name);
                         var value = argument.TypedValue.Value;
                         var info = MakeInfo(argument.TypedValue.Value, typeof(object), ShouldMemo(value, field.FieldType));
                         WriteCustomAttributeValue(state, value, info);
@@ -1197,6 +1199,7 @@ namespace Ibasa.Pikala
                 var method = (MethodInfo)obj;
 
                 state.Writer.Write((byte)PickleOperation.MethodRef);
+                SerializeType(state, method.ReflectedType);
                 if (method.IsConstructedGenericMethod)
                 {
                     var genericArguments = method.GetGenericArguments();
@@ -1212,7 +1215,6 @@ namespace Ibasa.Pikala
                     SerializeSignature(state, Signature.GetSignature(method));
                     state.Writer.Write7BitEncodedInt(0);
                 }
-                SerializeType(state, method.ReflectedType);
             }
 
             else if (info.RuntimeType.IsAssignableTo(typeof(ConstructorInfo)))
@@ -1220,8 +1222,8 @@ namespace Ibasa.Pikala
                 var method = (ConstructorInfo)obj;
 
                 state.Writer.Write((byte)PickleOperation.ConstructorRef);
-                SerializeSignature(state, Signature.GetSignature(method));
                 SerializeType(state, method.ReflectedType);
+                SerializeSignature(state, Signature.GetSignature(method));
             }
 
             // End of reflection handlers
