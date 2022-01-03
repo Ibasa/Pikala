@@ -423,5 +423,27 @@ namespace Ibasa.Pikala.Tests
                 return _current;
             }
         }
+
+        /// <summary>
+        /// Class to test that memoisation only cares about reference equality, not overrider equality
+        /// </summary>
+        public sealed class ReferenceEqualityClass
+        {
+            public int Tag { get; set; }
+
+            public override bool Equals(object obj)
+            {
+                if (obj is ReferenceEqualityClass other)
+                {
+                    return other.Tag == Tag;
+                }
+                return false;
+            }
+
+            public override int GetHashCode()
+            {
+                return Tag.GetHashCode();
+            }
+        }
     }
 }

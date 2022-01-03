@@ -473,5 +473,20 @@ namespace Ibasa.Pikala.Tests
                 Utils.ArbitraryArray(Arb.Default.Int32().Generator),
                 value => RoundTrip.Assert(pickler, value));
         }
+
+        [Fact]
+        public void TestMemoisationWorksOnReferencesNotEqaulity()
+        {
+            var pickler = new Pickler();
+
+            var x = new TestTypes.ReferenceEqualityClass() { Tag = 1 };
+            var y = new TestTypes.ReferenceEqualityClass() { Tag = 1 };
+            var z = Tuple.Create(x, x, y);
+
+            var w = RoundTrip.Do(pickler, z);
+
+            Assert.Same(w.Item1, w.Item2);
+            Assert.NotSame(w.Item2, w.Item3);
+        }
     }
 }

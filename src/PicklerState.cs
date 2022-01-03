@@ -261,12 +261,33 @@ namespace Ibasa.Pikala
 
     sealed class PicklerSerializationState
     {
+        // This is built in from .NET 5 onwards.
+        class ReferenceEqualityComparer : EqualityComparer<object>
+        {
+            private static IEqualityComparer<object>? _defaultComparer;
+
+            public new static IEqualityComparer<object> Default
+            {
+                get { return _defaultComparer ?? (_defaultComparer = new ReferenceEqualityComparer()); }
+            }
+
+            public override bool Equals(object? x, object? y)
+            {
+                return ReferenceEquals(x, y);
+            }
+
+            public override int GetHashCode(object obj)
+            {
+                return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+            }
+        }
+
         Dictionary<object, long> memo;
         public BinaryWriter Writer { get; private set; }
 
         public PicklerSerializationState(Stream stream)
         {
-            memo = new Dictionary<object, long>();
+            memo = new Dictionary<object, long>(ReferenceEqualityComparer.Default);
             Writer = new BinaryWriter(new PickleStream(stream));
         }
 
