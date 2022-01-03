@@ -338,13 +338,20 @@ namespace Ibasa.Pikala.Tests
             }
         }
 
-        [SelfReferencing]
+        [SelfReferencing(Property = "SelfReferencingAttribute", Tag = 0)]
         [System.AttributeUsage(AttributeTargets.All, Inherited = false, AllowMultiple = true)]
         sealed class SelfReferencingAttribute : Attribute
         {
+            [SelfReferencing(Property = ".ctor", Tag = 1)]
             public SelfReferencingAttribute()
             {
             }
+
+            [SelfReferencing(Property = "Property", Tag = 2)]
+            public string Property { get; set; }
+
+            [SelfReferencing(Property = "Tag", Tag = 3)]
+            public int Tag;
         }
 
         public abstract class AbstractClass
