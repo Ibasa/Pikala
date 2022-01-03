@@ -19,8 +19,6 @@ namespace Ibasa.Pikala
             StaticType = staticType;
             ShouldMemo = shouldMemo;
         }
-
-        public bool NeedsOperationToken { get { return RuntimeType != StaticType; } }
     }
 
     public sealed partial class Pickler
@@ -861,25 +859,6 @@ namespace Ibasa.Pikala
                 SerializeArray(state, (Array)obj, info.RuntimeType);
             }
 
-            // This check needs to come before IsValueType, because these 
-            // are also value types.
-            else if (info.RuntimeType == typeof(IntPtr))
-            {
-                if (info.NeedsOperationToken)
-                {
-                    state.Writer.Write((byte)PickleOperation.IntPtr);
-                }
-                state.Writer.Write((long)(IntPtr)obj);
-            }
-            else if (info.RuntimeType == typeof(UIntPtr))
-            {
-                if (info.NeedsOperationToken)
-                {
-                    state.Writer.Write((byte)PickleOperation.UIntPtr);
-                }
-                state.Writer.Write((ulong)(UIntPtr)obj);
-            }
-
             // Reflection
             else if (info.RuntimeType.IsAssignableTo(typeof(Assembly)))
             {
@@ -1364,10 +1343,14 @@ namespace Ibasa.Pikala
                     return;
                 }
 
+                // This is exactly the same method we use when deserialising, if we can infer the operation from the static type we
+                // don't write out operation tokens (and some other info like type refs)
+                var needsOperationToken = !InferOperationFromStaticType(info.StaticType).HasValue;
+
                 if (info.RuntimeType.IsEnum)
                 {
                     // typeCode for an enum will be something like Int32
-                    if (info.NeedsOperationToken)
+                    if (needsOperationToken)
                     {
                         state.Writer.Write((byte)PickleOperation.Enum);
                         SerializeType(state, info.RuntimeType);
@@ -1379,98 +1362,98 @@ namespace Ibasa.Pikala
                 switch (typeCode)
                 {
                     case TypeCode.Boolean:
-                        if (info.NeedsOperationToken)
+                        if (needsOperationToken)
                         {
                             state.Writer.Write((byte)PickleOperation.Boolean);
                         }
                         state.Writer.Write((bool)obj);
                         return;
                     case TypeCode.Char:
-                        if (info.NeedsOperationToken)
+                        if (needsOperationToken)
                         {
                             state.Writer.Write((byte)PickleOperation.Char);
                         }
                         state.Writer.Write((char)obj);
                         return;
                     case TypeCode.SByte:
-                        if (info.NeedsOperationToken)
+                        if (needsOperationToken)
                         {
                             state.Writer.Write((byte)PickleOperation.SByte);
                         }
                         state.Writer.Write((sbyte)obj);
                         return;
                     case TypeCode.Int16:
-                        if (info.NeedsOperationToken)
+                        if (needsOperationToken)
                         {
                             state.Writer.Write((byte)PickleOperation.Int16);
                         }
                         state.Writer.Write((short)obj);
                         return;
                     case TypeCode.Int32:
-                        if (info.NeedsOperationToken)
+                        if (needsOperationToken)
                         {
                             state.Writer.Write((byte)PickleOperation.Int32);
                         }
                         state.Writer.Write((int)obj);
                         return;
                     case TypeCode.Int64:
-                        if (info.NeedsOperationToken)
+                        if (needsOperationToken)
                         {
                             state.Writer.Write((byte)PickleOperation.Int64);
                         }
                         state.Writer.Write((long)obj);
                         return;
                     case TypeCode.Byte:
-                        if (info.NeedsOperationToken)
+                        if (needsOperationToken)
                         {
                             state.Writer.Write((byte)PickleOperation.Byte);
                         }
                         state.Writer.Write((byte)obj);
                         return;
                     case TypeCode.UInt16:
-                        if (info.NeedsOperationToken)
+                        if (needsOperationToken)
                         {
                             state.Writer.Write((byte)PickleOperation.UInt16);
                         }
                         state.Writer.Write((ushort)obj);
                         return;
                     case TypeCode.UInt32:
-                        if (info.NeedsOperationToken)
+                        if (needsOperationToken)
                         {
                             state.Writer.Write((byte)PickleOperation.UInt32);
                         }
                         state.Writer.Write((uint)obj);
                         return;
                     case TypeCode.UInt64:
-                        if (info.NeedsOperationToken)
+                        if (needsOperationToken)
                         {
                             state.Writer.Write((byte)PickleOperation.UInt64);
                         }
                         state.Writer.Write((ulong)obj);
                         return;
                     case TypeCode.Single:
-                        if (info.NeedsOperationToken)
+                        if (needsOperationToken)
                         {
                             state.Writer.Write((byte)PickleOperation.Single);
                         }
                         state.Writer.Write((float)obj);
                         return;
                     case TypeCode.Double:
-                        if (info.NeedsOperationToken)
+                        if (needsOperationToken)
                         {
                             state.Writer.Write((byte)PickleOperation.Double);
                         }
                         state.Writer.Write((double)obj);
                         return;
                     case TypeCode.Decimal:
-                        if (info.NeedsOperationToken)
+                        if (needsOperationToken)
                         {
                             state.Writer.Write((byte)PickleOperation.Decimal);
                         }
                         state.Writer.Write((decimal)obj);
                         return;
                     case TypeCode.DBNull:
-                        if (info.NeedsOperationToken)
+                        if (needsOperationToken)
                         {
                             state.Writer.Write((byte)PickleOperation.DBNull);
                         }
@@ -1484,7 +1467,27 @@ namespace Ibasa.Pikala
                     // Let DateTime just be handled by ISerializable 
                     case TypeCode.DateTime:
                     case TypeCode.Object:
-                        SerializeObject(state, obj, info, genericTypeParameters, genericMethodParameters);
+                        // We handle IntPtr and UIntPtr here because we need to check `needsOperationToken`
+                        if (info.RuntimeType == typeof(IntPtr))
+                        {
+                            if (needsOperationToken)
+                            {
+                                state.Writer.Write((byte)PickleOperation.IntPtr);
+                            }
+                            state.Writer.Write((long)(IntPtr)obj);
+                        }
+                        else if (info.RuntimeType == typeof(UIntPtr))
+                        {
+                            if (needsOperationToken)
+                            {
+                                state.Writer.Write((byte)PickleOperation.UIntPtr);
+                            }
+                            state.Writer.Write((ulong)(UIntPtr)obj);
+                        }
+                        else
+                        {
+                            SerializeObject(state, obj, info, genericTypeParameters, genericMethodParameters);
+                        }
                         return;
                 }
 
