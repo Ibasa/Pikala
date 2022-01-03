@@ -475,7 +475,7 @@ namespace Ibasa.Pikala.Tests
         }
 
         [Fact]
-        public void TestMemoisationWorksOnReferencesNotEqaulity()
+        public void TestMemoizationWorksOnReferencesNotEquality()
         {
             var pickler = new Pickler();
 
