@@ -243,6 +243,26 @@ namespace Ibasa.Pikala.Tests
             var result = RoundTrip.Do(pickler, value);
 
             Assert.Equal(value.FullName, result.FullName);
+
+            void Check(System.Reflection.MemberInfo member, int expectedTag)
+            {
+                var attrs = member.GetCustomAttributes(result, false);
+                var attr = Assert.Single(attrs);
+
+                Assert.Equal(result, attr.GetType());
+
+                var propertyValue = (string)result.GetProperty("Property").GetValue(attr);
+                var tagValue = (int)result.GetField("Tag").GetValue(attr);
+
+                Assert.Equal(member.Name, propertyValue);
+                Assert.Equal(expectedTag, tagValue);
+            }
+
+            // Check everything has the attributes with set properties
+            Check(result, 0);
+            Check(result.GetConstructor(Type.EmptyTypes), 1);
+            Check(result.GetProperty("Property"), 2);
+            Check(result.GetField("Tag"), 3);
         }
 
         [Fact]

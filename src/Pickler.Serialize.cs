@@ -121,8 +121,6 @@ namespace Ibasa.Pikala
                 state.Writer.Write((int)parameter.Attributes);
             }
 
-            WriteCustomAttributes(state, constructor.CustomAttributes.ToArray());
-
             var methodBody = constructor.GetMethodBody();
 
             state.Writer.Write(methodBody.InitLocals);
@@ -169,8 +167,6 @@ namespace Ibasa.Pikala
                 state.Writer.WriteNullableString(parameter.Name);
                 state.Writer.Write((int)parameter.Attributes);
             }
-
-            WriteCustomAttributes(state, method.CustomAttributes.ToArray());
 
             if (method.Attributes.HasFlag(MethodAttributes.PinvokeImpl) || method.Attributes.HasFlag(MethodAttributes.UnmanagedExport) || method.Attributes.HasFlag(MethodAttributes.Abstract))
             {
@@ -523,6 +519,8 @@ namespace Ibasa.Pikala
                 {
                     pin.Free();
                 }
+
+                WriteCustomAttributes(state, field.CustomAttributes.ToArray());
             }
 
             var methods = module.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
@@ -530,6 +528,7 @@ namespace Ibasa.Pikala
             foreach (var method in methods)
             {
                 SerializeMethodHeader(state, null, method);
+                WriteCustomAttributes(state, method.CustomAttributes.ToArray());
             }
 
             state.PushTrailer(() =>
@@ -602,7 +601,6 @@ namespace Ibasa.Pikala
                 state.Writer.Write(field.Name);
                 state.Writer.Write((int)field.Attributes);
                 SerializeType(state, field.FieldType, genericParameters);
-                WriteCustomAttributes(state, field.CustomAttributes.ToArray());
             }
 
             var constructors = type.GetConstructors(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
@@ -632,7 +630,6 @@ namespace Ibasa.Pikala
                 {
                     SerializeType(state, indexParameter.ParameterType, genericParameters);
                 }
-                WriteCustomAttributes(state, property.CustomAttributes.ToArray());
 
                 var accessors = property.GetAccessors(true);
                 var getter = property.GetMethod;
@@ -654,17 +651,27 @@ namespace Ibasa.Pikala
                 }
             }
 
-            // Custom attributes might be self referencing so make sure all ctors and things are setup first
-            WriteCustomAttributes(state, type.CustomAttributes.ToArray());
-
             state.PushTrailer(() =>
             {
+                // Custom attributes might be self referencing so make sure all ctors and things are setup first
+                WriteCustomAttributes(state, type.CustomAttributes.ToArray());
+
+                foreach (var field in fields)
+                {
+                    WriteCustomAttributes(state, field.CustomAttributes.ToArray());
+                }
+                foreach (var property in properties)
+                {
+                    WriteCustomAttributes(state, property.CustomAttributes.ToArray());
+                }
                 foreach (var constructor in constructors)
                 {
+                    WriteCustomAttributes(state, constructor.CustomAttributes.ToArray());
                     SerializeMethodBody(state, genericParameters, constructor.Module, null, constructor.GetMethodBody());
                 }
                 foreach (var method in methods)
                 {
+                    WriteCustomAttributes(state, method.CustomAttributes.ToArray());
                     var methodBody = method.GetMethodBody();
                     if (methodBody != null)
                     {
@@ -1072,11 +1079,12 @@ namespace Ibasa.Pikala
                             for (int i = 0; i < values.Length; ++i)
                             {
                                 state.Writer.Write(names[i]);
-                                WriteEnumerationValue(state.Writer, typeCode, values.GetValue(i));
+                                var value = values.GetValue(i);
+                                System.Diagnostics.Debug.Assert(value != null);
+                                WriteEnumerationValue(state.Writer, typeCode, value);
                             }
 
-                            var customAttributes = type.CustomAttributes.ToArray();
-                            WriteCustomAttributes(state, customAttributes);
+                            WriteCustomAttributes(state, type.CustomAttributes.ToArray());
                         }
                         else if (type.IsAssignableTo(typeof(Delegate)))
                         {
