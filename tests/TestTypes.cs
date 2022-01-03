@@ -425,7 +425,7 @@ namespace Ibasa.Pikala.Tests
         }
 
         /// <summary>
-        /// Class to test that memoisation only cares about reference equality, not overrider equality
+        /// Class to test that memoization only cares about reference equality, not overriden Equals
         /// </summary>
         public sealed class ReferenceEqualityClass
         {
