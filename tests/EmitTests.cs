@@ -320,7 +320,7 @@ namespace Ibasa.Pikala.Tests
 
             var a = new TestTypes.SelfReferenceStatic() { Tag = 1 };
             var b = new TestTypes.SelfReferenceStatic() { Tag = 2 };
-            TestTypes.SelfReferenceStatic.Selves = new [] { a, b };
+            TestTypes.SelfReferenceStatic.Selves = new[] { a, b };
             TestTypes.SelfReferenceStatic.TagField = typeof(TestTypes.SelfReferenceStatic).GetField("Tag");
 
             var result = RoundTrip.Do<Array>(pickler, TestTypes.SelfReferenceStatic.Selves);
