@@ -1291,54 +1291,59 @@ namespace Ibasa.Pikala
 
                         // This check needs to come before IsValueType, because these
                         // are also value types.
-                        else if (runtimeType == typeof(IntPtr))
+                        if (runtimeType == typeof(IntPtr))
                         {
                             return new OperationCacheEntry(typeCode, PickleOperation.IntPtr);
                         }
-                        else if (runtimeType == typeof(UIntPtr))
+                        if (runtimeType == typeof(UIntPtr))
                         {
                             return new OperationCacheEntry(typeCode, PickleOperation.UIntPtr);
                         }
 
                         // Reflection
-                        else if (runtimeType.IsAssignableTo(typeof(Assembly)))
+                        if (runtimeType.IsAssignableTo(typeof(Assembly)))
                         {
                             return new OperationCacheEntry(typeCode, OperationGroup.Assembly);
                         }
-                        else if (runtimeType.IsAssignableTo(typeof(Module)))
+                        if (runtimeType.IsAssignableTo(typeof(Module)))
                         {
                             return new OperationCacheEntry(typeCode, OperationGroup.Module);
                         }
-                        else if (runtimeType.IsAssignableTo(typeof(Type)))
+                        if (runtimeType.IsAssignableTo(typeof(MemberInfo))) 
                         {
-                            return new OperationCacheEntry(typeCode, OperationGroup.Type);
-                        }
-                        else if (runtimeType.IsAssignableTo(typeof(FieldInfo)))
-                        {
-                            return new OperationCacheEntry(typeCode, PickleOperation.FieldRef);
-                        }
-                        else if (runtimeType.IsAssignableTo(typeof(PropertyInfo)))
-                        {
-                            return new OperationCacheEntry(typeCode, PickleOperation.PropertyRef);
-                        }
-                        else if (runtimeType.IsAssignableTo(typeof(MethodInfo)))
-                        {
-                            return new OperationCacheEntry(typeCode, PickleOperation.MethodRef);
-                        }
-                        else if (runtimeType.IsAssignableTo(typeof(ConstructorInfo)))
-                        {
-                            return new OperationCacheEntry(typeCode, PickleOperation.ConstructorRef);
+                            if (runtimeType.IsAssignableTo(typeof(Type)))
+                            {
+                                return new OperationCacheEntry(typeCode, OperationGroup.Type);
+                            }
+                            else if (runtimeType.IsAssignableTo(typeof(FieldInfo)))
+                            {
+                                return new OperationCacheEntry(typeCode, PickleOperation.FieldRef);
+                            }
+                            else if (runtimeType.IsAssignableTo(typeof(PropertyInfo)))
+                            {
+                                return new OperationCacheEntry(typeCode, PickleOperation.PropertyRef);
+                            }
+                            else if (runtimeType.IsAssignableTo(typeof(MethodInfo)))
+                            {
+                                return new OperationCacheEntry(typeCode, PickleOperation.MethodRef);
+                            }
+                            else if (runtimeType.IsAssignableTo(typeof(ConstructorInfo)))
+                            {
+                                return new OperationCacheEntry(typeCode, PickleOperation.ConstructorRef);
+                            }
+
+                            // TODO Events!
                         }
                         // End of reflection handlers
 
-                        else if (runtimeType.IsAssignableTo(typeof(MulticastDelegate)))
+                        if (runtimeType.IsAssignableTo(typeof(MulticastDelegate)))
                         {
                             return new OperationCacheEntry(typeCode, PickleOperation.Delegate);
                         }
 
                         // Tuples!
 
-                        else if (runtimeType.Assembly == mscorlib && (runtimeType.FullName.StartsWith("System.Tuple") || runtimeType.FullName.StartsWith("System.ValueTuple")))
+                        if (runtimeType.Assembly == mscorlib && (runtimeType.FullName.StartsWith("System.Tuple") || runtimeType.FullName.StartsWith("System.ValueTuple")))
                         {
                             if (runtimeType.FullName.StartsWith("System.Tuple"))
                             {
@@ -1350,28 +1355,25 @@ namespace Ibasa.Pikala
                             }
                         }
 
-                        else if (_reducers.TryGetValue(runtimeType, out var reducer) || (runtimeType.IsGenericType && _reducers.TryGetValue(runtimeType.GetGenericTypeDefinition(), out reducer)))
+                        if (_reducers.TryGetValue(runtimeType, out var reducer) || (runtimeType.IsGenericType && _reducers.TryGetValue(runtimeType.GetGenericTypeDefinition(), out reducer)))
                         {
                             return new OperationCacheEntry(typeCode, reducer);
                         }
 
-                        else if (runtimeType.IsAssignableTo(typeof(System.Runtime.Serialization.ISerializable)))
+                        if (runtimeType.IsAssignableTo(typeof(System.Runtime.Serialization.ISerializable)))
                         {
                             return new OperationCacheEntry(typeCode, PickleOperation.ISerializable);
                         }
 
-                        else if (runtimeType.IsAssignableTo(typeof(MarshalByRefObject)))
+                        if (runtimeType.IsAssignableTo(typeof(MarshalByRefObject)))
                         {
                             throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from MarshalByRefObject.");
                         }
 
-                        else
-                        {
-                            var fields = GetSerializedFields(runtimeType);
-                            // Sort the fields by name so we serialise in deterministic order
-                            Array.Sort(fields, (x, y) => x.Name.CompareTo(y.Name));
-                            return new OperationCacheEntry(typeCode, fields);
-                        }
+                        var fields = GetSerializedFields(runtimeType);
+                        // Sort the fields by name so we serialise in deterministic order
+                        Array.Sort(fields, (x, y) => x.Name.CompareTo(y.Name));
+                        return new OperationCacheEntry(typeCode, fields);
                     }
 
             }
