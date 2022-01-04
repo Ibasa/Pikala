@@ -111,7 +111,7 @@ namespace Ibasa.Pikala
             state.Writer.Write7BitEncodedInt(constructorParameters.Length);
             foreach (var parameter in constructorParameters)
             {
-                SerializeType(state, parameter.ParameterType, genericTypeParameters);
+                Serialize(state, parameter.ParameterType, MakeInfo(parameter.ParameterType, typeof(Type), true), genericTypeParameters);
             }
             foreach (var parameter in constructorParameters)
             {
@@ -126,14 +126,14 @@ namespace Ibasa.Pikala
             state.Writer.Write7BitEncodedInt(methodBody.LocalVariables.Count);
             foreach (var local in methodBody.LocalVariables)
             {
-                SerializeType(state, local.LocalType, genericTypeParameters);
+                Serialize(state, local.LocalType, MakeInfo(local.LocalType, typeof(Type), true), genericTypeParameters);
             }
 
             var collectedTypes = CollectTypes(genericTypeParameters, constructor.Module, null, methodBody);
             state.Writer.Write7BitEncodedInt(collectedTypes.Count);
             foreach (var type in collectedTypes)
             {
-                SerializeType(state, type, genericTypeParameters);
+                Serialize(state, type, MakeInfo(type, typeof(Type), true), genericTypeParameters);
             }
         }
 
@@ -151,13 +151,13 @@ namespace Ibasa.Pikala
                 state.Writer.Write(parameter.Name);
             }
 
-            SerializeType(state, method.ReturnType, genericTypeParameters, genericMethodParameters);
+            Serialize(state, method.ReturnType, MakeInfo(method.ReturnType, typeof(Type), true), genericTypeParameters, genericMethodParameters);
 
             var methodParameters = method.GetParameters();
             state.Writer.Write7BitEncodedInt(methodParameters.Length);
             foreach (var parameter in methodParameters)
             {
-                SerializeType(state, parameter.ParameterType, genericTypeParameters, genericMethodParameters);
+                Serialize(state, parameter.ParameterType, MakeInfo(parameter.ParameterType, typeof(Type), true), genericTypeParameters, genericMethodParameters);
             }
             foreach (var parameter in methodParameters)
             {
@@ -179,14 +179,14 @@ namespace Ibasa.Pikala
                 state.Writer.Write7BitEncodedInt(methodBody.LocalVariables.Count);
                 foreach (var local in methodBody.LocalVariables)
                 {
-                    SerializeType(state, local.LocalType, genericTypeParameters, genericMethodParameters);
+                    Serialize(state, local.LocalType, MakeInfo(local.LocalType, typeof(Type), true), genericTypeParameters, genericMethodParameters);
                 }
 
                 var collectedTypes = CollectTypes(genericTypeParameters, method.Module, genericMethodParameters, methodBody);
                 state.Writer.Write7BitEncodedInt(collectedTypes.Count);
                 foreach (var type in collectedTypes)
                 {
-                    SerializeType(state, type, genericTypeParameters, genericMethodParameters);
+                    Serialize(state, type, MakeInfo(type, typeof(Type), true), genericTypeParameters, genericMethodParameters);
                 }
             }
         }
@@ -376,7 +376,7 @@ namespace Ibasa.Pikala
                         {
                             var typeToken = ilReader.ReadInt32();
                             var typeInfo = methodModule.ResolveType(typeToken, genericTypeParameters, genericMethodParameters);
-                            SerializeType(state, typeInfo, genericTypeParameters, genericMethodParameters);
+                            Serialize(state, typeInfo, MakeInfo(typeInfo, typeof(Type), true), genericTypeParameters, genericMethodParameters);
                             break;
                         }
 
@@ -539,7 +539,7 @@ namespace Ibasa.Pikala
             () => { });
         }
 
-        private void SerializeTypeDef(PicklerSerializationState state, Type type, Type[]? genericParameters)
+        private void SerializeDef(PicklerSerializationState state, Type type, Type[]? genericParameters)
         {
             if (type.IsValueType)
             {
@@ -551,14 +551,14 @@ namespace Ibasa.Pikala
             }
             else
             {
-                SerializeType(state, type.BaseType, genericParameters);
+                Serialize(state, type.BaseType, MakeInfo(type.BaseType, typeof(Type), true), genericParameters);
             }
 
             var interfaces = type.GetInterfaces();
             state.Writer.Write7BitEncodedInt(interfaces.Length);
             foreach (var interfaceType in interfaces)
             {
-                SerializeType(state, interfaceType, genericParameters);
+                Serialize(state, interfaceType, MakeInfo(interfaceType, typeof(Type), true), genericParameters);
 
                 var interfaceMap = type.GetInterfaceMap(interfaceType);
                 var mappedMethods = new List<(string, string)>();
@@ -598,7 +598,7 @@ namespace Ibasa.Pikala
             {
                 state.Writer.Write(field.Name);
                 state.Writer.Write((int)field.Attributes);
-                SerializeType(state, field.FieldType, genericParameters);
+                Serialize(state, field.FieldType, MakeInfo(field.FieldType, typeof(Type), true), genericParameters);
             }
 
             var constructors = type.GetConstructors(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
@@ -621,12 +621,12 @@ namespace Ibasa.Pikala
             {
                 state.Writer.Write(property.Name);
                 state.Writer.Write((int)property.Attributes);
-                SerializeType(state, property.PropertyType, genericParameters);
+                Serialize(state, property.PropertyType, MakeInfo(property.PropertyType, typeof(Type), true), genericParameters);
                 var indexParameters = property.GetIndexParameters();
                 state.Writer.Write7BitEncodedInt(indexParameters.Length);
                 foreach (var indexParameter in indexParameters)
                 {
-                    SerializeType(state, indexParameter.ParameterType, genericParameters);
+                    Serialize(state, indexParameter.ParameterType, MakeInfo(indexParameter.ParameterType, typeof(Type), true), genericParameters);
                 }
 
                 var accessors = property.GetAccessors(true);
@@ -715,7 +715,7 @@ namespace Ibasa.Pikala
             }
 
             var elementType = objType.GetElementType();
-            SerializeType(state, elementType);
+            Serialize(state, elementType, MakeInfo(elementType, typeof(Type), true));
 
             if (objType.IsSZArray)
             {
@@ -925,11 +925,12 @@ namespace Ibasa.Pikala
                 if (type.IsConstructedGenericType)
                 {
                     state.Writer.Write((byte)PickleOperation.GenericInstantiation);
-                    SerializeType(state, type.GetGenericTypeDefinition());
+                    var genericTypeDefinition = type.GetGenericTypeDefinition();
+                    Serialize(state, genericTypeDefinition, MakeInfo(genericTypeDefinition, typeof(Type), true));
                     state.Writer.Write7BitEncodedInt(type.GenericTypeArguments.Length);
                     foreach (var arg in type.GenericTypeArguments)
                     {
-                        SerializeType(state, arg);
+                        Serialize(state, arg, MakeInfo(arg, typeof(Type), true));
                     }
                 }
 
@@ -945,7 +946,8 @@ namespace Ibasa.Pikala
                     {
                         state.Writer.Write((byte)type.GetArrayRank());
                     }
-                    SerializeType(state, type.GetElementType());
+                    var elementType = type.GetElementType();
+                    Serialize(state, elementType, MakeInfo(elementType, typeof(Type), true));
                 }
 
                 else if (type.IsGenericParameter)
@@ -1038,7 +1040,7 @@ namespace Ibasa.Pikala
 
                         if (type.DeclaringType != null)
                         {
-                            SerializeType(state, type.DeclaringType);
+                            Serialize(state, type.DeclaringType, MakeInfo(type.DeclaringType, typeof(Type), true));
                         }
                         else
                         {
@@ -1069,18 +1071,18 @@ namespace Ibasa.Pikala
                         {
                             // delegates are a name, optionally generic parameters, a return type and parameter types
                             var invoke = type.GetMethod("Invoke");
-                            SerializeType(state, invoke.ReturnType);
+                            Serialize(state, invoke.ReturnType, MakeInfo(invoke.ReturnType, typeof(Type), true));
                             var parameters = invoke.GetParameters();
                             state.Writer.Write7BitEncodedInt(parameters.Length);
                             foreach (var parameter in parameters)
                             {
                                 state.Writer.Write(parameter.Name);
-                                SerializeType(state, parameter.ParameterType, genericParameters);
+                                Serialize(state, parameter.ParameterType, MakeInfo(parameter.ParameterType, typeof(Type), true), genericParameters);
                             }
                         }
                         else
                         {
-                            SerializeTypeDef(state, type, genericParameters);
+                            SerializeDef(state, type, genericParameters);
                         }
                     });
                 }
@@ -1091,7 +1093,7 @@ namespace Ibasa.Pikala
 
                     if (type.DeclaringType != null)
                     {
-                        SerializeType(state, type.DeclaringType);
+                        Serialize(state, type.DeclaringType, MakeInfo(type.DeclaringType, typeof(Type), true));
                         state.Writer.Write(type.Name);
                     }
                     else
@@ -1114,7 +1116,7 @@ namespace Ibasa.Pikala
                 var field = (FieldInfo)obj;
 
                 state.Writer.Write((byte)PickleOperation.FieldRef);
-                SerializeType(state, field.ReflectedType);
+                Serialize(state, field.ReflectedType, MakeInfo(field.ReflectedType, typeof(Type), true));
                 state.Writer.Write(field.Name);
             }
 
@@ -1123,7 +1125,7 @@ namespace Ibasa.Pikala
                 var property = (PropertyInfo)obj;
 
                 state.Writer.Write((byte)PickleOperation.PropertyRef);
-                SerializeType(state, property.ReflectedType);
+                Serialize(state, property.ReflectedType, MakeInfo(property.ReflectedType, typeof(Type), true));
                 state.Writer.Write(property.Name);
             }
 
@@ -1139,7 +1141,7 @@ namespace Ibasa.Pikala
                     state.Writer.Write7BitEncodedInt(genericArguments.Length);
                     foreach (var generic in genericArguments)
                     {
-                        SerializeType(state, generic);
+                        Serialize(state, generic, MakeInfo(generic, typeof(Type), true));
                     }
                 }
                 else
@@ -1147,7 +1149,7 @@ namespace Ibasa.Pikala
                     state.Writer.Write(Method.GetSignature(method));
                     state.Writer.Write7BitEncodedInt(0);
                 }
-                SerializeType(state, method.ReflectedType);
+                Serialize(state, method.ReflectedType, MakeInfo(method.ReflectedType, typeof(Type), true));
             }
 
             else if (info.RuntimeType.IsAssignableTo(typeof(ConstructorInfo)))
@@ -1156,7 +1158,7 @@ namespace Ibasa.Pikala
 
                 state.Writer.Write((byte)PickleOperation.ConstructorRef);
                 state.Writer.Write(Method.GetSignature(method));
-                SerializeType(state, method.ReflectedType);
+                Serialize(state, method.ReflectedType, MakeInfo(method.ReflectedType, typeof(Type), true));
             }
 
             // End of reflection handlers
@@ -1168,7 +1170,7 @@ namespace Ibasa.Pikala
                 var invocationList = dele.GetInvocationList();
 
                 state.Writer.Write((byte)PickleOperation.Delegate);
-                SerializeType(state, info.RuntimeType);
+                Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
                 state.Writer.Write7BitEncodedInt(invocationList.Length);
                 foreach (var invocation in invocationList)
                 {
@@ -1203,15 +1205,14 @@ namespace Ibasa.Pikala
                 var genericArguments = info.RuntimeType.GetGenericArguments();
                 for (int i = 0; i < tuple.Length; ++i)
                 {
-                    SerializeType(state, genericArguments[i], genericTypeParameters, genericMethodParameters);
+                    Serialize(state, genericArguments[i], MakeInfo(genericArguments[i], typeof(Type), true), genericTypeParameters, genericMethodParameters);
                 }
 
                 // Write out the values
                 for (int i = 0; i < tuple.Length; ++i)
                 {
                     var item = tuple[i];
-                    var itemInfo = new SerializeInformation(item?.GetType(), genericArguments[i], !genericArguments[i].IsValueType);
-                    Serialize(state, item, itemInfo, genericTypeParameters, genericMethodParameters);
+                    Serialize(state, item, MakeInfo(item, genericArguments[i]), genericTypeParameters, genericMethodParameters);
                 }
             }
 
@@ -1272,7 +1273,7 @@ namespace Ibasa.Pikala
                 state.Writer.Write((byte)PickleOperation.ISerializable);
                 if (!info.StaticType.IsValueType || info.StaticType != info.RuntimeType)
                 {
-                    SerializeType(state, info.RuntimeType);
+                    Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
                 }
                 state.Writer.Write7BitEncodedInt(serializationInfo.MemberCount);
                 foreach (var member in serializationInfo)
@@ -1293,7 +1294,7 @@ namespace Ibasa.Pikala
                 state.Writer.Write((byte)PickleOperation.Object);
                 if (!info.StaticType.IsValueType || info.StaticType != info.RuntimeType)
                 {
-                    SerializeType(state, info.RuntimeType);
+                    Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
                 }
                 var fields = GetSerializedFields(info.RuntimeType);
                 // Sort the fields by name so we serialise in deterministic order
@@ -1313,11 +1314,6 @@ namespace Ibasa.Pikala
                     Serialize(state, value, fieldInfo);
                 }
             }
-        }
-
-        private void SerializeType(PicklerSerializationState state, Type type, Type[]? genericTypeParameters = null, Type[]? genericMethodParameters = null)
-        {
-            Serialize(state, type, new SerializeInformation(type?.GetType(), typeof(Type), true), genericTypeParameters, genericMethodParameters);
         }
 
         private void Serialize(PicklerSerializationState state, object? obj, SerializeInformation info, Type[]? genericTypeParameters = null, Type[]? genericMethodParameters = null)
@@ -1353,7 +1349,7 @@ namespace Ibasa.Pikala
                     if (needsOperationToken)
                     {
                         state.Writer.Write((byte)PickleOperation.Enum);
-                        SerializeType(state, info.RuntimeType);
+                        Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
                     }
                     WriteEnumerationValue(state.Writer, typeCode, obj);
                     return;
