@@ -557,16 +557,9 @@ namespace Ibasa.Pikala
                         throw new Exception($"Could not find static field '{fieldName}' on type '{type.Name}'");
                     }
 
-                    try
-                    {
-                        var deserInfo = new DeserializeInformation(typeof(object), !fieldInfo.FieldType.IsValueType);
-                        var fieldValue = Deserialize(state, deserInfo, null, null);
-                        fieldInfo.SetValue(null, fieldValue);
-                    }
-                    catch (MemoException exc)
-                    {
-                        state.RegisterFixup(exc.Position, value => fieldInfo.SetValue(null, value));
-                    }
+                    var deserInfo = new DeserializeInformation(typeof(object), !fieldInfo.FieldType.IsValueType);
+                    var fieldValue = ReducePickle(Deserialize(state, deserInfo, null, null));
+                    fieldInfo.SetValue(null, fieldValue);
                 }
             });
         }
@@ -1812,7 +1805,6 @@ namespace Ibasa.Pikala
             {
                 return pickledObject.Get();
             }
-            state.DoFixups();
             state.DoStaticFields();
             return result;
         }
