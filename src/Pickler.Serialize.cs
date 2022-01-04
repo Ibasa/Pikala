@@ -1087,40 +1087,52 @@ namespace Ibasa.Pikala
 
         private void SerializeFieldInfo(PicklerSerializationState state, FieldInfo field)
         {
-            Serialize(state, field.ReflectedType, MakeInfo(field.ReflectedType, typeof(Type), true));
-            state.Writer.Write(field.Name);
+            state.RunWithTrailers(() =>
+            {
+                Serialize(state, field.ReflectedType, MakeInfo(field.ReflectedType, typeof(Type), true));
+                state.Writer.Write(field.Name);
+            });
         }
 
         private void SerializePropertyInfo(PicklerSerializationState state, PropertyInfo property)
         {
-            Serialize(state, property.ReflectedType, MakeInfo(property.ReflectedType, typeof(Type), true));
-            state.Writer.Write(property.Name);
+            state.RunWithTrailers(() =>
+            {
+                Serialize(state, property.ReflectedType, MakeInfo(property.ReflectedType, typeof(Type), true));
+                state.Writer.Write(property.Name);
+            });
         }
 
         private void SerializeMethodInfo(PicklerSerializationState state, MethodInfo method)
         {
-            if (method.IsConstructedGenericMethod)
+            state.RunWithTrailers(() =>
             {
-                var genericArguments = method.GetGenericArguments();
-                state.Writer.Write(Method.GetSignature(method.GetGenericMethodDefinition()));
-                state.Writer.Write7BitEncodedInt(genericArguments.Length);
-                foreach (var generic in genericArguments)
+                if (method.IsConstructedGenericMethod)
                 {
-                    Serialize(state, generic, MakeInfo(generic, typeof(Type), true));
+                    var genericArguments = method.GetGenericArguments();
+                    state.Writer.Write(Method.GetSignature(method.GetGenericMethodDefinition()));
+                    state.Writer.Write7BitEncodedInt(genericArguments.Length);
+                    foreach (var generic in genericArguments)
+                    {
+                        Serialize(state, generic, MakeInfo(generic, typeof(Type), true));
+                    }
                 }
-            }
-            else
-            {
-                state.Writer.Write(Method.GetSignature(method));
-                state.Writer.Write7BitEncodedInt(0);
-            }
-            Serialize(state, method.ReflectedType, MakeInfo(method.ReflectedType, typeof(Type), true));
+                else
+                {
+                    state.Writer.Write(Method.GetSignature(method));
+                    state.Writer.Write7BitEncodedInt(0);
+                }
+                Serialize(state, method.ReflectedType, MakeInfo(method.ReflectedType, typeof(Type), true));
+            });
         }
 
         private void SerializeConstructorInfo(PicklerSerializationState state, ConstructorInfo constructor)
         {
-            state.Writer.Write(Method.GetSignature(constructor));
-            Serialize(state, constructor.ReflectedType, MakeInfo(constructor.ReflectedType, typeof(Type), true));
+            state.RunWithTrailers(() =>
+            {
+                state.Writer.Write(Method.GetSignature(constructor));
+                Serialize(state, constructor.ReflectedType, MakeInfo(constructor.ReflectedType, typeof(Type), true));
+            });
         }
 
         private void SerializeMulticastDelegate(PicklerSerializationState state, MulticastDelegate multicastDelegate, Type runtimeType)
