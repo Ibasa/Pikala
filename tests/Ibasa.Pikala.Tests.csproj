@@ -7,6 +7,7 @@
 
   <PropertyGroup>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <StartupObject>Ibasa.Pikala.Tests.Program</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>

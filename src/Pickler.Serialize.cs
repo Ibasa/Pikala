@@ -568,7 +568,7 @@ namespace Ibasa.Pikala
 
                     if (targetMethod.DeclaringType != interfaceMap.TargetType)
                     {
-                        // We only care about storing in the map methods that THIS class needs to override. Any interface 
+                        // We only care about storing in the map methods that THIS class needs to override. Any interface
                         // methods that our base classes are implementing don
                     }
                     else
@@ -704,19 +704,10 @@ namespace Ibasa.Pikala
                 throw new NotImplementedException($"Pikala does not support arrays of rank higher than {byte.MaxValue}, got {obj.Rank}");
             }
 
-            // Special case szarray (i.e. Rank 1, lower bound 0)
-            if (objType.IsSZArray)
-            {
-                state.Writer.Write((byte)PickleOperation.SZArray);
-            }
-            else
-            {
-                state.Writer.Write((byte)PickleOperation.Array);
-            }
-
             var elementType = objType.GetElementType();
             Serialize(state, elementType, MakeInfo(elementType, typeof(Type), true));
 
+            // Special case szarray (i.e. Rank 1, lower bound 0)
             if (objType.IsSZArray)
             {
                 state.Writer.Write7BitEncodedInt(obj.Length);
@@ -871,6 +862,7 @@ namespace Ibasa.Pikala
                 state.Writer.Write(assembly.FullName);
             }
         }
+
         private void SerializeModule(PicklerSerializationState state, Module module)
         {
             // This is a module, we need to emit a reference to the assembly it's found in and it's name
@@ -1008,7 +1000,6 @@ namespace Ibasa.Pikala
                     {
                         state.Writer.Write((byte)TypeDef.Class);
                     }
-
                     Type[]? genericParameters = null;
                     if (!type.IsEnum)
                     {
@@ -1096,21 +1087,18 @@ namespace Ibasa.Pikala
 
         private void SerializeFieldInfo(PicklerSerializationState state, FieldInfo field)
         {
-            state.Writer.Write((byte)PickleOperation.FieldRef);
             Serialize(state, field.ReflectedType, MakeInfo(field.ReflectedType, typeof(Type), true));
             state.Writer.Write(field.Name);
         }
 
         private void SerializePropertyInfo(PicklerSerializationState state, PropertyInfo property)
         {
-            state.Writer.Write((byte)PickleOperation.PropertyRef);
             Serialize(state, property.ReflectedType, MakeInfo(property.ReflectedType, typeof(Type), true));
             state.Writer.Write(property.Name);
         }
 
         private void SerializeMethodInfo(PicklerSerializationState state, MethodInfo method)
         {
-            state.Writer.Write((byte)PickleOperation.MethodRef);
             if (method.IsConstructedGenericMethod)
             {
                 var genericArguments = method.GetGenericArguments();
@@ -1131,17 +1119,14 @@ namespace Ibasa.Pikala
 
         private void SerializeConstructorInfo(PicklerSerializationState state, ConstructorInfo constructor)
         {
-            state.Writer.Write((byte)PickleOperation.ConstructorRef);
             state.Writer.Write(Method.GetSignature(constructor));
             Serialize(state, constructor.ReflectedType, MakeInfo(constructor.ReflectedType, typeof(Type), true));
         }
 
-        private void SerializeDelegate(PicklerSerializationState state, MulticastDelegate multicastDelegate, Type runtimeType)
+        private void SerializeMulticastDelegate(PicklerSerializationState state, MulticastDelegate multicastDelegate, Type runtimeType)
         {
             // Delegates are just a target and a method
             var invocationList = multicastDelegate.GetInvocationList();
-
-            state.Writer.Write((byte)PickleOperation.Delegate);
             Serialize(state, runtimeType, MakeInfo(runtimeType, typeof(Type), true));
             state.Writer.Write7BitEncodedInt(invocationList.Length);
             foreach (var invocation in invocationList)
@@ -1150,17 +1135,9 @@ namespace Ibasa.Pikala
                 Serialize(state, invocation.Method, MakeInfo(invocation.Method, typeof(MethodInfo), true));
             }
         }
+
         private void SerializeTuple(PicklerSerializationState state, System.Runtime.CompilerServices.ITuple tuple, Type runtimeType)
         {
-            if (runtimeType.FullName.StartsWith("System.Tuple"))
-            {
-                state.Writer.Write((byte)PickleOperation.Tuple);
-            }
-            else
-            {
-                state.Writer.Write((byte)PickleOperation.ValueTuple);
-            }
-
             if (tuple.Length > byte.MaxValue)
             {
                 throw new NotImplementedException($"Pikala does not support tuples of length higher than {byte.MaxValue}, got {tuple.Length}");
@@ -1188,7 +1165,6 @@ namespace Ibasa.Pikala
             // We've got a reducer for the type (or its generic variant)
             var (method, target, args) = reducer.Reduce(runtimeType, obj);
 
-            state.Writer.Write((byte)PickleOperation.Reducer);
             Serialize(state, method, MakeInfo(method, typeof(MethodBase), true));
 
             // Assert properties of the reduction
@@ -1227,17 +1203,14 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeISerializable(PicklerSerializationState state, object obj, SerializeInformation info)
+        private void SerializeISerializable(PicklerSerializationState state, System.Runtime.Serialization.ISerializable iserializable, SerializeInformation info)
         {
             // ISerializable objects call into GetObjectData and will reconstruct with the (SerializationInfo, StreamingContext) constructor
-
-            var iserializable = (System.Runtime.Serialization.ISerializable)obj;
 
             var context = new System.Runtime.Serialization.StreamingContext(System.Runtime.Serialization.StreamingContextStates.All, this);
             var serializationInfo = new System.Runtime.Serialization.SerializationInfo(info.RuntimeType, new System.Runtime.Serialization.FormatterConverter());
             iserializable.GetObjectData(serializationInfo, context);
 
-            state.Writer.Write((byte)PickleOperation.ISerializable);
             if (!info.StaticType.IsValueType || info.StaticType != info.RuntimeType)
             {
                 Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
@@ -1250,17 +1223,13 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeObject(PicklerSerializationState state, object obj, SerializeInformation info)
+        private void SerializeObject(PicklerSerializationState state, object obj, SerializeInformation info, FieldInfo[] fields)
         {
             // Must be an object, try and dump all it's fields
-            state.Writer.Write((byte)PickleOperation.Object);
             if (!info.StaticType.IsValueType || info.StaticType != info.RuntimeType)
             {
                 Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
             }
-            var fields = GetSerializedFields(info.RuntimeType);
-            // Sort the fields by name so we serialise in deterministic order
-            Array.Sort(fields, (x, y) => x.Name.CompareTo(y.Name));
 
             state.Writer.Write7BitEncodedInt(fields.Length);
             foreach (var field in fields)
@@ -1277,6 +1246,139 @@ namespace Ibasa.Pikala
             }
         }
 
+        private OperationCacheEntry GetOperation(Type runtimeType)
+        {
+            // Rest of the operations will need the type of obj
+            var typeCode = Type.GetTypeCode(runtimeType);
+
+            if (runtimeType.IsEnum)
+            {
+                return new OperationCacheEntry(typeCode, PickleOperation.Enum);
+            }
+
+            switch (typeCode)
+            {
+                case TypeCode.Boolean: return new OperationCacheEntry(typeCode, PickleOperation.Boolean);
+                case TypeCode.Char: return new OperationCacheEntry(typeCode, PickleOperation.Char);
+                case TypeCode.SByte: return new OperationCacheEntry(typeCode, PickleOperation.SByte);
+                case TypeCode.Int16: return new OperationCacheEntry(typeCode, PickleOperation.Int16);
+                case TypeCode.Int32: return new OperationCacheEntry(typeCode, PickleOperation.Int32);
+                case TypeCode.Int64: return new OperationCacheEntry(typeCode, PickleOperation.Int64);
+                case TypeCode.Byte: return new OperationCacheEntry(typeCode, PickleOperation.Byte);
+                case TypeCode.UInt16: return new OperationCacheEntry(typeCode, PickleOperation.UInt16);
+                case TypeCode.UInt32: return new OperationCacheEntry(typeCode, PickleOperation.UInt32);
+                case TypeCode.UInt64: return new OperationCacheEntry(typeCode, PickleOperation.UInt64);
+                case TypeCode.Single: return new OperationCacheEntry(typeCode, PickleOperation.Single);
+                case TypeCode.Double: return new OperationCacheEntry(typeCode, PickleOperation.Double);
+                case TypeCode.Decimal: return new OperationCacheEntry(typeCode, PickleOperation.Decimal);
+                case TypeCode.DBNull: return new OperationCacheEntry(typeCode, PickleOperation.DBNull);
+                case TypeCode.String: return new OperationCacheEntry(typeCode, PickleOperation.String);
+                // Let DateTime just be handled by ISerializable
+                case TypeCode.DateTime:
+                case TypeCode.Object:
+                    {
+                        if (runtimeType.IsArray)
+                        {
+                            if (runtimeType.IsSZArray)
+                            {
+                                return new OperationCacheEntry(typeCode, PickleOperation.SZArray);
+                            }
+                            else
+                            {
+                                return new OperationCacheEntry(typeCode, PickleOperation.Array);
+                            }
+                        }
+
+                        // This check needs to come before IsValueType, because these
+                        // are also value types.
+                        else if (runtimeType == typeof(IntPtr))
+                        {
+                            return new OperationCacheEntry(typeCode, PickleOperation.IntPtr);
+                        }
+                        else if (runtimeType == typeof(UIntPtr))
+                        {
+                            return new OperationCacheEntry(typeCode, PickleOperation.UIntPtr);
+                        }
+
+                        // Reflection
+                        else if (runtimeType.IsAssignableTo(typeof(Assembly)))
+                        {
+                            return new OperationCacheEntry(typeCode, OperationGroup.Assembly);
+                        }
+                        else if (runtimeType.IsAssignableTo(typeof(Module)))
+                        {
+                            return new OperationCacheEntry(typeCode, OperationGroup.Module);
+                        }
+                        else if (runtimeType.IsAssignableTo(typeof(Type)))
+                        {
+                            return new OperationCacheEntry(typeCode, OperationGroup.Type);
+                        }
+                        else if (runtimeType.IsAssignableTo(typeof(FieldInfo)))
+                        {
+                            return new OperationCacheEntry(typeCode, PickleOperation.FieldRef);
+                        }
+                        else if (runtimeType.IsAssignableTo(typeof(PropertyInfo)))
+                        {
+                            return new OperationCacheEntry(typeCode, PickleOperation.PropertyRef);
+                        }
+                        else if (runtimeType.IsAssignableTo(typeof(MethodInfo)))
+                        {
+                            return new OperationCacheEntry(typeCode, PickleOperation.MethodRef);
+                        }
+                        else if (runtimeType.IsAssignableTo(typeof(ConstructorInfo)))
+                        {
+                            return new OperationCacheEntry(typeCode, PickleOperation.ConstructorRef);
+                        }
+                        // End of reflection handlers
+
+                        else if (runtimeType.IsAssignableTo(typeof(MulticastDelegate)))
+                        {
+                            return new OperationCacheEntry(typeCode, PickleOperation.Delegate);
+                        }
+
+                        // Tuples!
+
+                        else if (runtimeType.Assembly == mscorlib && (runtimeType.FullName.StartsWith("System.Tuple") || runtimeType.FullName.StartsWith("System.ValueTuple")))
+                        {
+                            if (runtimeType.FullName.StartsWith("System.Tuple"))
+                            {
+                                return new OperationCacheEntry(typeCode, PickleOperation.Tuple);
+                            }
+                            else
+                            {
+                                return new OperationCacheEntry(typeCode, PickleOperation.ValueTuple);
+                            }
+                        }
+
+                        else if (_reducers.TryGetValue(runtimeType, out var reducer) || (runtimeType.IsGenericType && _reducers.TryGetValue(runtimeType.GetGenericTypeDefinition(), out reducer)))
+                        {
+                            return new OperationCacheEntry(typeCode, reducer);
+                        }
+
+                        else if (runtimeType.IsAssignableTo(typeof(System.Runtime.Serialization.ISerializable)))
+                        {
+                            return new OperationCacheEntry(typeCode, PickleOperation.ISerializable);
+                        }
+
+                        else if (runtimeType.IsAssignableTo(typeof(MarshalByRefObject)))
+                        {
+                            throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from MarshalByRefObject.");
+                        }
+
+                        else
+                        {
+                            var fields = GetSerializedFields(runtimeType);
+                            // Sort the fields by name so we serialise in deterministic order
+                            Array.Sort(fields, (x, y) => x.Name.CompareTo(y.Name));
+                            return new OperationCacheEntry(typeCode, fields);
+                        }
+                    }
+
+            }
+
+            throw new Exception($"Unhandled TypeCode '{typeCode}' for type '{runtimeType}'");
+        }
+
         private void Serialize(PicklerSerializationState state, object? obj, SerializeInformation info, Type[]? genericTypeParameters = null, Type[]? genericMethodParameters = null)
         {
             if (Object.ReferenceEquals(obj, null))
@@ -1285,10 +1387,7 @@ namespace Ibasa.Pikala
             }
             else
             {
-                // Rest of the operations will need the type of obj
-                var typeCode = Type.GetTypeCode(info.RuntimeType);
-
-                // Most pointers we'll reject but we special case IntPtr and UIntPtr as they're often 
+                // Most pointers we'll reject but we special case IntPtr and UIntPtr as they're often
                 // used for native sized numbers
                 if (info.RuntimeType.IsPointer || info.RuntimeType == typeof(Pointer))
                 {
@@ -1300,243 +1399,138 @@ namespace Ibasa.Pikala
                     return;
                 }
 
-                // This is exactly the same method we use when deserialising, if we can infer the operation from the static type we
-                // don't write out operation tokens (and some other info like type refs)
-                var needsOperationToken = !InferOperationFromStaticType(info.StaticType).HasValue;
-
-                if (info.RuntimeType.IsEnum)
+                OperationCacheEntry operationEntry;
+                if (!_operationCache.TryGetValue(info.RuntimeType, out operationEntry))
                 {
-                    // typeCode for an enum will be something like Int32
-                    if (needsOperationToken)
-                    {
-                        state.Writer.Write((byte)PickleOperation.Enum);
-                        Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
-                    }
-                    WriteEnumerationValue(state.Writer, typeCode, obj);
-                    return;
+                    operationEntry = GetOperation(info.RuntimeType);
+                    _operationCache.Add(info.RuntimeType, operationEntry);
                 }
 
-                switch (typeCode)
+                switch (operationEntry.Group)
                 {
-                    case TypeCode.Boolean:
+                    case OperationGroup.FullyKnown:
+                        System.Diagnostics.Debug.Assert(operationEntry.Operation.HasValue);
+                        var operation = operationEntry.Operation.Value;
+                        // This is exactly the same method we use when deserialising, if we can infer the operation from the static type we
+                        // don't write out operation tokens (and some other info like type refs)
+                        var needsOperationToken = !InferOperationFromStaticType(info.StaticType).HasValue;
                         if (needsOperationToken)
                         {
-                            state.Writer.Write((byte)PickleOperation.Boolean);
+                            state.Writer.Write((byte)operation);
                         }
-                        state.Writer.Write((bool)obj);
-                        return;
-                    case TypeCode.Char:
-                        if (needsOperationToken)
+                        switch (operation)
                         {
-                            state.Writer.Write((byte)PickleOperation.Char);
-                        }
-                        state.Writer.Write((char)obj);
-                        return;
-                    case TypeCode.SByte:
-                        if (needsOperationToken)
-                        {
-                            state.Writer.Write((byte)PickleOperation.SByte);
-                        }
-                        state.Writer.Write((sbyte)obj);
-                        return;
-                    case TypeCode.Int16:
-                        if (needsOperationToken)
-                        {
-                            state.Writer.Write((byte)PickleOperation.Int16);
-                        }
-                        state.Writer.Write((short)obj);
-                        return;
-                    case TypeCode.Int32:
-                        if (needsOperationToken)
-                        {
-                            state.Writer.Write((byte)PickleOperation.Int32);
-                        }
-                        state.Writer.Write((int)obj);
-                        return;
-                    case TypeCode.Int64:
-                        if (needsOperationToken)
-                        {
-                            state.Writer.Write((byte)PickleOperation.Int64);
-                        }
-                        state.Writer.Write((long)obj);
-                        return;
-                    case TypeCode.Byte:
-                        if (needsOperationToken)
-                        {
-                            state.Writer.Write((byte)PickleOperation.Byte);
-                        }
-                        state.Writer.Write((byte)obj);
-                        return;
-                    case TypeCode.UInt16:
-                        if (needsOperationToken)
-                        {
-                            state.Writer.Write((byte)PickleOperation.UInt16);
-                        }
-                        state.Writer.Write((ushort)obj);
-                        return;
-                    case TypeCode.UInt32:
-                        if (needsOperationToken)
-                        {
-                            state.Writer.Write((byte)PickleOperation.UInt32);
-                        }
-                        state.Writer.Write((uint)obj);
-                        return;
-                    case TypeCode.UInt64:
-                        if (needsOperationToken)
-                        {
-                            state.Writer.Write((byte)PickleOperation.UInt64);
-                        }
-                        state.Writer.Write((ulong)obj);
-                        return;
-                    case TypeCode.Single:
-                        if (needsOperationToken)
-                        {
-                            state.Writer.Write((byte)PickleOperation.Single);
-                        }
-                        state.Writer.Write((float)obj);
-                        return;
-                    case TypeCode.Double:
-                        if (needsOperationToken)
-                        {
-                            state.Writer.Write((byte)PickleOperation.Double);
-                        }
-                        state.Writer.Write((double)obj);
-                        return;
-                    case TypeCode.Decimal:
-                        if (needsOperationToken)
-                        {
-                            state.Writer.Write((byte)PickleOperation.Decimal);
-                        }
-                        state.Writer.Write((decimal)obj);
-                        return;
-                    case TypeCode.DBNull:
-                        if (needsOperationToken)
-                        {
-                            state.Writer.Write((byte)PickleOperation.DBNull);
-                        }
-                        return;
-                    case TypeCode.String:
-                        state.Writer.Write((byte)PickleOperation.String);
-                        state.Writer.Write((string)obj);
-                        return;
-                    // Let DateTime just be handled by ISerializable 
-                    case TypeCode.DateTime:
-                    case TypeCode.Object:
-                        // We handle IntPtr and UIntPtr here because we need to check `needsOperationToken`
-                        if (info.RuntimeType == typeof(IntPtr))
-                        {
-                            if (needsOperationToken)
-                            {
-                                state.Writer.Write((byte)PickleOperation.IntPtr);
-                            }
-                            state.Writer.Write((long)(IntPtr)obj);
-                            return;
-                        }
-                        if (info.RuntimeType == typeof(UIntPtr))
-                        {
-                            if (needsOperationToken)
-                            {
-                                state.Writer.Write((byte)PickleOperation.UIntPtr);
-                            }
-                            state.Writer.Write((ulong)(UIntPtr)obj);
-                            return;
-                        }
-
-                        // If we call this we know obj is not memoised or null or an enum 
-                        // or any of the types explictly in System.TypeCode
-
-                        if (info.RuntimeType.IsArray)
-                        {
-                            SerializeArray(state, (Array)obj, info.RuntimeType);
-                            return;
-                        }
-
-                        // Reflection
-                        if (obj is Assembly assembly)
-                        {
-                            SerializeAssembly(state, assembly);
-                            return;
-                        }
-
-                        if (obj is Module module)
-                        {
-                            SerializeModule(state, module);
-                            return;
-                        }
-
-                        if (obj is MemberInfo)
-                        {
-                            if (obj is Type type)
-                            {
-                                SerializeType(state, type, genericTypeParameters, genericMethodParameters);
+                            case PickleOperation.Enum:
+                                // typeCode for an enum will be something like Int32
+                                if (needsOperationToken)
+                                {
+                                    Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
+                                }
+                                WriteEnumerationValue(state.Writer, operationEntry.TypeCode, obj);
                                 return;
-                            }
 
-                            if (obj is FieldInfo field)
-                            {
-                                SerializeFieldInfo(state, field);
+                            case PickleOperation.Boolean:
+                                state.Writer.Write((bool)obj);
                                 return;
-                            }
-
-                            if (obj is PropertyInfo property)
-                            {
-                                SerializePropertyInfo(state, property);
+                            case PickleOperation.Char:
+                                state.Writer.Write((char)obj);
                                 return;
-                            }
-
-                            if (obj is MethodInfo method)
-                            {
-                                SerializeMethodInfo(state, method);
+                            case PickleOperation.SByte:
+                                state.Writer.Write((sbyte)obj);
                                 return;
-                            }
-
-                            if (obj is ConstructorInfo constructor)
-                            {
-                                SerializeConstructorInfo(state, constructor);
+                            case PickleOperation.Int16:
+                                state.Writer.Write((short)obj);
                                 return;
-                            }
+                            case PickleOperation.Int32:
+                                state.Writer.Write((int)obj);
+                                return;
+                            case PickleOperation.Int64:
+                                state.Writer.Write((long)obj);
+                                return;
+                            case PickleOperation.Byte:
+                                state.Writer.Write((byte)obj);
+                                return;
+                            case PickleOperation.UInt16:
+                                state.Writer.Write((ushort)obj);
+                                return;
+                            case PickleOperation.UInt32:
+                                state.Writer.Write((uint)obj);
+                                return;
+                            case PickleOperation.UInt64:
+                                state.Writer.Write((ulong)obj);
+                                return;
+                            case PickleOperation.Single:
+                                state.Writer.Write((float)obj);
+                                return;
+                            case PickleOperation.Double:
+                                state.Writer.Write((double)obj);
+                                return;
+                            case PickleOperation.Decimal:
+                                state.Writer.Write((decimal)obj);
+                                return;
+                            case PickleOperation.DBNull:
+                                return;
+                            case PickleOperation.String:
+                                state.Writer.Write((string)obj);
+                                return;
+                            case PickleOperation.IntPtr:
+                                state.Writer.Write((long)(IntPtr)obj);
+                                return;
+                            case PickleOperation.UIntPtr:
+                                state.Writer.Write((ulong)(UIntPtr)obj);
+                                return;
+                            case PickleOperation.Array:
+                            case PickleOperation.SZArray:
+                                SerializeArray(state, (Array)obj, info.RuntimeType);
+                                return;
+                            case PickleOperation.FieldRef:
+                                SerializeFieldInfo(state, (FieldInfo)obj);
+                                return;
+                            case PickleOperation.PropertyRef:
+                                SerializePropertyInfo(state, (PropertyInfo)obj);
+                                return;
+                            case PickleOperation.MethodRef:
+                                SerializeMethodInfo(state, (MethodInfo)obj);
+                                return;
+                            case PickleOperation.ConstructorRef:
+                                SerializeConstructorInfo(state, (ConstructorInfo)obj);
+                                return;
+                            case PickleOperation.Delegate:
+                                SerializeMulticastDelegate(state, (MulticastDelegate)obj, info.RuntimeType);
+                                return;
+                            case PickleOperation.Tuple:
+                            case PickleOperation.ValueTuple:
+                                SerializeTuple(state, (System.Runtime.CompilerServices.ITuple)obj, info.RuntimeType);
+                                return;
+                            case PickleOperation.ISerializable:
+                                SerializeISerializable(state, (System.Runtime.Serialization.ISerializable)obj, info);
+                                return;
+                            case PickleOperation.Reducer:
+                                System.Diagnostics.Debug.Assert(operationEntry.Reducer != null);
+                                SerializeReducer(state, obj, operationEntry.Reducer, info.RuntimeType);
+                                return;
+                            case PickleOperation.Object:
+                                System.Diagnostics.Debug.Assert(operationEntry.Fields != null);
+                                SerializeObject(state, obj, info, operationEntry.Fields);
+                                return;
 
-                            // Fall through. Maybe someones inherit from MemberInfo but it has a Reducer?
+                            default:
+                                throw new Exception($"Unexpected operation {operationEntry.Operation} for a fully known operation");
                         }
 
-                        // End of reflection handlers
-
-                        if (obj is MulticastDelegate multicastDelegate)
-                        {
-                            SerializeDelegate(state, multicastDelegate, info.RuntimeType);
-                            return;
-                        }
-
-                        // Tuples!
-
-                        if (info.RuntimeType.Assembly == mscorlib && (info.RuntimeType.FullName.StartsWith("System.Tuple") || info.RuntimeType.FullName.StartsWith("System.ValueTuple")))
-                        {
-                            SerializeTuple(state, (System.Runtime.CompilerServices.ITuple)obj, info.RuntimeType);
-                            return;
-                        }
-
-                        if (_reducers.TryGetValue(info.RuntimeType, out var reducer) || (info.RuntimeType.IsGenericType && _reducers.TryGetValue(info.RuntimeType.GetGenericTypeDefinition(), out reducer)))
-                        {
-                            SerializeReducer(state, obj, reducer, info.RuntimeType);
-                            return;
-                        }
-
-                        if (obj is System.Runtime.Serialization.ISerializable serializable)
-                        {
-                            SerializeISerializable(state, serializable, info);
-                            return;
-                        }
-
-                        if (obj is MarshalByRefObject)
-                        {
-                            throw new Exception($"Type '{info.RuntimeType}' is not automaticly serializable as it inherits from MarshalByRefObject.");
-                        }
-
-                        SerializeObject(state, obj, info);
+                    case OperationGroup.Assembly:
+                        SerializeAssembly(state, (Assembly)obj);
                         return;
+                    case OperationGroup.Module:
+                        SerializeModule(state, (Module)obj);
+                        return;
+                    case OperationGroup.Type:
+                        SerializeType(state, (Type)obj, genericTypeParameters, genericMethodParameters);
+                        return;
+
                 }
 
-                throw new Exception($"Unhandled TypeCode '{typeCode}' for type '{info.RuntimeType}'");
+                throw new Exception($"Unhandled OperationGroup '{operationEntry.Group}' for type '{info.RuntimeType}'");
             }
         }
 
