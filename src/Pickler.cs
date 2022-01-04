@@ -95,6 +95,65 @@ namespace Ibasa.Pikala
         PickleByValue,
     }
 
+    /// <summary>
+    /// Sometimes our operation cache doesn't know the exact operation to do but we do know a rough grouping.
+    /// E.g. The Type "Assembly" is always an AssemblyRef or Def or Mscorlib but we need to look at the value itself to work that out while our cache is by type.
+    /// </summary>
+    enum OperationGroup
+    {
+        FullyKnown,
+        Assembly,
+        Module,
+        Type
+    }
+
+    readonly struct OperationCacheEntry
+    {
+        public readonly OperationGroup Group;
+        public readonly TypeCode TypeCode;
+        public readonly PickleOperation? Operation;
+        public readonly IReducer? Reducer;
+        public readonly FieldInfo[]? Fields;
+
+        public OperationCacheEntry(TypeCode typeCode, OperationGroup group)
+        {
+            System.Diagnostics.Debug.Assert(group != OperationGroup.FullyKnown);
+            TypeCode = typeCode;
+            Group = group;
+            Operation = null;
+            Reducer = null;
+            Fields = null;
+        }
+
+        public OperationCacheEntry(TypeCode typeCode, PickleOperation operation)
+        {
+            TypeCode = typeCode;
+            Group = OperationGroup.FullyKnown;
+            Operation = operation;
+            Reducer = null;
+            Fields = null;
+        }
+
+
+        public OperationCacheEntry(TypeCode typeCode, IReducer reducer)
+        {
+            TypeCode = typeCode;
+            Group = OperationGroup.FullyKnown;
+            Operation = PickleOperation.Reducer;
+            Reducer = reducer;
+            Fields = null;
+        }
+
+        public OperationCacheEntry(TypeCode typeCode, FieldInfo[] fields)
+        {
+            TypeCode = typeCode;
+            Group = OperationGroup.FullyKnown;
+            Operation = PickleOperation.Object;
+            Reducer = null;
+            Fields = fields;
+        }
+    }
+
     public sealed partial class Pickler
     {
         private static readonly Assembly mscorlib = typeof(int).Assembly;
@@ -128,6 +187,8 @@ namespace Ibasa.Pikala
         private Dictionary<Type, IReducer> _reducers;
         // This is keyed by the static type of the object we're serialising or deserialising
         private Dictionary<Type, PickleOperation?> _inferCache;
+        // This is keyed by the runtime type of the object we're serialising
+        private Dictionary<Type, OperationCacheEntry> _operationCache;
 
         // Variables that are written to the start of the Pikala stream for framing checks
         private const uint _header = ((byte)'P' << 0 | (byte)'K' << 8 | (byte)'L' << 16 | (byte)'A' << 24);
@@ -142,6 +203,7 @@ namespace Ibasa.Pikala
             _assemblyPickleMode = assemblyPickleMode ?? (_ => AssemblyPickleMode.Default);
             _reducers = new Dictionary<Type, IReducer>();
             _inferCache = new Dictionary<Type, PickleOperation?>();
+            _operationCache = new Dictionary<Type, OperationCacheEntry>();
 
             RegisterReducer(new DictionaryReducer());
         }

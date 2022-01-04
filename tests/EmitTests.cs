@@ -4,7 +4,7 @@ using Xunit;
 namespace Ibasa.Pikala.Tests
 {
     /// <summary>
-    /// Theses tests are all by themselves because the lambda generates a type in the test and so we have to serialize the whole test class. 
+    /// Theses tests are all by themselves because the lambda generates a type in the test and so we have to serialize the whole test class.
     /// While serialising the whole test class should work for Pikala having this by itself makes investigation into just lambdas much easier.
     /// </summary>
     public class EmitLambdaTests

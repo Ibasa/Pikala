@@ -1236,7 +1236,7 @@ namespace Ibasa.Pikala
             else
             {
                 // Else before net6 DefineDynamicAssembly did not check the contextual ALC, it instead used the callers ALC. So to get around this we do some "fun" here
-                // where we build a tiny assembly with one method to call AssemblyBuilder.DefineDynamicAssembly, load that into the ALC we want to use then invoke 
+                // where we build a tiny assembly with one method to call AssemblyBuilder.DefineDynamicAssembly, load that into the ALC we want to use then invoke
                 // the method on it. We can reuse this method, so we cache it via a Func.
                 if (_defineDynamicAssembly == null)
                 {

@@ -614,7 +614,7 @@ namespace Ibasa.Pikala.Tests
         [Fact]
         public void TestRoundtripChangingFieldTypeIncompatibly()
         {
-            // Test that if we serialise an object with a custom type, then reload that object in a new domain where we've changed 
+            // Test that if we serialise an object with a custom type, then reload that object in a new domain where we've changed
             // the type of the fields thar we get a sensible error
 
 

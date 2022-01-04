@@ -935,7 +935,7 @@ namespace Ibasa.Pikala
                     return FieldBuilder;
                 }
 
-                var result = DeclaringType.Type.GetField(FieldBuilder.Name);
+                var result = DeclaringType.Type.GetField(FieldBuilder.Name, BindingsAll);
                 if (result == null)
                 {
                     throw new Exception($"GetField for {DeclaringType.Type.Name} unexpectedly returned null");
