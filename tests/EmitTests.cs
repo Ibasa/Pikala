@@ -312,5 +312,34 @@ namespace Ibasa.Pikala.Tests
 
             Assert.Equal(value.ToString(), result.ToString());
         }
+
+        [Fact]
+        public void TestSelfReferenceStatic()
+        {
+            var pickler = CreatePickler();
+
+            var a = new TestTypes.SelfReferenceStatic() { Tag = 1 };
+            var b = new TestTypes.SelfReferenceStatic() { Tag = 2 };
+            TestTypes.SelfReferenceStatic.Selves = new[] { a, b };
+            TestTypes.SelfReferenceStatic.TagField = typeof(TestTypes.SelfReferenceStatic).GetField("Tag");
+
+            var result = RoundTrip.Do<Array>(pickler, TestTypes.SelfReferenceStatic.Selves);
+
+            Assert.Equal(2, result.Length);
+            Assert.Equal("1", result.GetValue(0).ToString());
+            Assert.Equal("2", result.GetValue(1).ToString());
+            // Check that the array on the type matches via reflection
+            var type = result.GetValue(0).GetType();
+            Assert.Equal("SelfReferenceStatic", type.Name);
+            var field = type.GetField("Selves");
+            Assert.NotNull(field);
+            var array = field.GetValue(null);
+            Assert.Same(result, array);
+
+            // fresh pickler so we get a new dynamic assembly
+            pickler = CreatePickler();
+            var tagField = RoundTrip.Do(pickler, TestTypes.SelfReferenceStatic.TagField);
+            Assert.Equal("Tag", tagField.Name);
+        }
     }
 }

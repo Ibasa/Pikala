@@ -445,5 +445,19 @@ namespace Ibasa.Pikala.Tests
                 return Tag.GetHashCode();
             }
         }
+
+        public class SelfReferenceStatic
+        {
+            public int Tag;
+
+            public static System.Reflection.FieldInfo TagField;
+
+            public static SelfReferenceStatic[] Selves;
+
+            public override string ToString()
+            {
+                return Tag.ToString();
+            }
+        }
     }
 }
