@@ -1309,7 +1309,7 @@ namespace Ibasa.Pikala
                         {
                             return new OperationCacheEntry(typeCode, OperationGroup.Module);
                         }
-                        if (runtimeType.IsAssignableTo(typeof(MemberInfo))) 
+                        if (runtimeType.IsAssignableTo(typeof(MemberInfo)))
                         {
                             if (runtimeType.IsAssignableTo(typeof(Type)))
                             {
