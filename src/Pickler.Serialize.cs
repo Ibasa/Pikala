@@ -1416,10 +1416,8 @@ namespace Ibasa.Pikala
                         }
                         return;
                     case TypeCode.String:
-                        {
-                            state.Writer.Write((byte)PickleOperation.String);
-                            state.Writer.Write((string)obj);
-                        }
+                        state.Writer.Write((byte)PickleOperation.String);
+                        state.Writer.Write((string)obj);
                         return;
                     // Let DateTime just be handled by ISerializable 
                     case TypeCode.DateTime:
@@ -1432,93 +1430,109 @@ namespace Ibasa.Pikala
                                 state.Writer.Write((byte)PickleOperation.IntPtr);
                             }
                             state.Writer.Write((long)(IntPtr)obj);
+                            return;
                         }
-                        else if (info.RuntimeType == typeof(UIntPtr))
+                        if (info.RuntimeType == typeof(UIntPtr))
                         {
                             if (needsOperationToken)
                             {
                                 state.Writer.Write((byte)PickleOperation.UIntPtr);
                             }
                             state.Writer.Write((ulong)(UIntPtr)obj);
+                            return;
                         }
 
                         // If we call this we know obj is not memoised or null or an enum 
                         // or any of the types explictly in System.TypeCode
 
-                        else if (info.RuntimeType.IsArray)
+                        if (info.RuntimeType.IsArray)
                         {
                             SerializeArray(state, (Array)obj, info.RuntimeType);
+                            return;
                         }
 
                         // Reflection
-                        else if (info.RuntimeType.IsAssignableTo(typeof(Assembly)))
+                        if (obj is Assembly assembly)
                         {
-                            SerializeAssembly(state, (Assembly)obj);
+                            SerializeAssembly(state, assembly);
+                            return;
                         }
 
-                        else if (info.RuntimeType.IsAssignableTo(typeof(Module)))
+                        if (obj is Module module)
                         {
-                            SerializeModule(state, (Module)obj);
+                            SerializeModule(state, module);
+                            return;
                         }
 
-                        else if (info.RuntimeType.IsAssignableTo(typeof(Type)))
+                        if (obj is MemberInfo)
                         {
-                            SerializeType(state, (Type)obj, genericTypeParameters, genericMethodParameters);
-                        }
+                            if (obj is Type type)
+                            {
+                                SerializeType(state, type, genericTypeParameters, genericMethodParameters);
+                                return;
+                            }
 
-                        else if (info.RuntimeType.IsAssignableTo(typeof(FieldInfo)))
-                        {
-                            SerializeFieldInfo(state, (FieldInfo)obj);
-                        }
+                            if (obj is FieldInfo field)
+                            {
+                                SerializeFieldInfo(state, field);
+                                return;
+                            }
 
-                        else if (info.RuntimeType.IsAssignableTo(typeof(PropertyInfo)))
-                        {
-                            SerializePropertyInfo(state, (PropertyInfo)obj);
-                        }
+                            if (obj is PropertyInfo property)
+                            {
+                                SerializePropertyInfo(state, property);
+                                return;
+                            }
 
-                        else if (info.RuntimeType.IsAssignableTo(typeof(MethodInfo)))
-                        {
-                            SerializeMethodInfo(state, (MethodInfo)obj);
-                        }
+                            if (obj is MethodInfo method)
+                            {
+                                SerializeMethodInfo(state, method);
+                                return;
+                            }
 
-                        else if (info.RuntimeType.IsAssignableTo(typeof(ConstructorInfo)))
-                        {
-                            SerializeConstructorInfo(state, (ConstructorInfo)obj);
+                            if (obj is ConstructorInfo constructor)
+                            {
+                                SerializeConstructorInfo(state, constructor);
+                                return;
+                            }
+
+                            // Fall through. Maybe someones inherit from MemberInfo but it has a Reducer?
                         }
 
                         // End of reflection handlers
 
-                        else if (info.RuntimeType.IsAssignableTo(typeof(MulticastDelegate)))
+                        if (obj is MulticastDelegate multicastDelegate)
                         {
-                            SerializeDelegate(state, (MulticastDelegate)obj, info.RuntimeType);
+                            SerializeDelegate(state, multicastDelegate, info.RuntimeType);
+                            return;
                         }
 
                         // Tuples!
 
-                        else if (info.RuntimeType.Assembly == mscorlib && (info.RuntimeType.FullName.StartsWith("System.Tuple") || info.RuntimeType.FullName.StartsWith("System.ValueTuple")))
+                        if (info.RuntimeType.Assembly == mscorlib && (info.RuntimeType.FullName.StartsWith("System.Tuple") || info.RuntimeType.FullName.StartsWith("System.ValueTuple")))
                         {
                             SerializeTuple(state, (System.Runtime.CompilerServices.ITuple)obj, info.RuntimeType);
+                            return;
                         }
 
-                        else if (_reducers.TryGetValue(info.RuntimeType, out var reducer) || (info.RuntimeType.IsGenericType && _reducers.TryGetValue(info.RuntimeType.GetGenericTypeDefinition(), out reducer)))
+                        if (_reducers.TryGetValue(info.RuntimeType, out var reducer) || (info.RuntimeType.IsGenericType && _reducers.TryGetValue(info.RuntimeType.GetGenericTypeDefinition(), out reducer)))
                         {
                             SerializeReducer(state, obj, reducer, info.RuntimeType);
+                            return;
                         }
 
-                        else if (info.RuntimeType.IsAssignableTo(typeof(System.Runtime.Serialization.ISerializable)))
+                        if (obj is System.Runtime.Serialization.ISerializable serializable)
                         {
-                            SerializeISerializable(state, obj, info);
+                            SerializeISerializable(state, serializable, info);
+                            return;
                         }
 
-                        else if (info.RuntimeType.IsAssignableTo(typeof(MarshalByRefObject)))
+                        if (obj is MarshalByRefObject)
                         {
                             throw new Exception($"Type '{info.RuntimeType}' is not automaticly serializable as it inherits from MarshalByRefObject.");
                         }
 
-                        else
-                        {
-                            SerializeObject(state, obj, info);
-                        }
+                        SerializeObject(state, obj, info);
                         return;
                 }
 
