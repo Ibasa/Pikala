@@ -15,7 +15,7 @@ namespace Ibasa.Pikala.Tests
             return assemblyPath;
         }
 
-        private static Version[] GetDotnetSdks()
+        private static Lazy<Version[]> DotnetSdks = new Lazy<Version[]>(() =>
         {
             var psi = new System.Diagnostics.ProcessStartInfo();
             psi.FileName = "dotnet";
@@ -56,7 +56,7 @@ namespace Ibasa.Pikala.Tests
                     return new Version(parts[0]);
                 })
                 .ToArray();
-        }
+        });
 
         private string RunFsi(string script)
         {
@@ -67,16 +67,16 @@ namespace Ibasa.Pikala.Tests
             var scriptPath = Path.Combine(testDirectory.FullName, "script.fsx");
             File.WriteAllText(scriptPath, script);
 
+            // Copy the pikala assembly to temp, so we can't pick up the Pikala.Test assembly next to it
             // Copy in Pikala and other assemblies like xunit.assert
             var assemblyReference = CopyAssembly(testDirectory, typeof(Pickler).Assembly);
             CopyAssembly(testDirectory, typeof(Xunit.Assert).Assembly);
             CopyAssembly(testDirectory, typeof(Xunit.TheoryData).Assembly);
 
             // Find an SDK version to use that matches our runtime version (e.g. we might be running as 3.1.22 but want to find 3.1.416)
-            var versions = GetDotnetSdks();
             var runtimeVersion = Environment.Version;
             var sdkVersion =
-                versions
+                DotnetSdks.Value
                 .Where(sdkVersion => sdkVersion.Major == runtimeVersion.Major && sdkVersion.Minor == runtimeVersion.Minor)
                 .OrderBy(sdkVersion => sdkVersion.Build)
                 .Last();
@@ -86,8 +86,6 @@ namespace Ibasa.Pikala.Tests
 
             try
             {
-                // Copy the pikala assembly to temp, so we can't pick up the Pikala.Test assembly next to it
-
                 var psi = new System.Diagnostics.ProcessStartInfo();
                 psi.FileName = "dotnet";
                 psi.ArgumentList.Add("fsi");
@@ -99,7 +97,7 @@ namespace Ibasa.Pikala.Tests
                 psi.RedirectStandardError = true;
                 psi.RedirectStandardOutput = true;
 
-                var process = new System.Diagnostics.Process();
+                using var process = new System.Diagnostics.Process();
 
                 var stdout = new StringBuilder();
                 var stderr = new StringBuilder();
