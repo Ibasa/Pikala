@@ -156,9 +156,9 @@ namespace Ibasa.Pikala.Tests
             var methods = typeInstance.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly);
             Assert.Equal(2, methods.Length);
 
-            foreach (var prop in methods)
+            foreach (var method in methods)
             {
-                RoundTrip.Assert(pickler, prop);
+                RoundTrip.Assert(pickler, method);
             }
         }
     }
