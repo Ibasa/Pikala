@@ -140,7 +140,7 @@ namespace Ibasa.Pikala
             signature.Append(property.Name);
 
             {
-                signature.Append("[");
+                signature.Append("(");
                 bool first = true;
                 foreach (var param in property.GetIndexParameters())
                 {
@@ -172,7 +172,7 @@ namespace Ibasa.Pikala
                         signature.Append(parameterType.Namespace + parameterType.Name);
                     }
                 }
-                signature.Append("]");
+                signature.Append(")");
             }
 
             return signature.ToString();

@@ -869,7 +869,7 @@ namespace Ibasa.Pikala
             signature.Append(PropertyBuilder.Name);
 
             {
-                signature.Append("[");
+                signature.Append("(");
                 if (IndexParameters != null)
                 {
                     bool first = true;
@@ -903,7 +903,7 @@ namespace Ibasa.Pikala
                         }
                     }
                 }
-                signature.Append("]");
+                signature.Append(")");
             }
 
             return signature.ToString();
