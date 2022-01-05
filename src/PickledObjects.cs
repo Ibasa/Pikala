@@ -725,7 +725,8 @@ namespace Ibasa.Pikala
         {
             var signature = new StringBuilder();
 
-            signature.Append("System.Void ");
+            signature.Append(typeof(void).FullName);
+            signature.Append(" ");
             signature.Append(ConstructorBuilder.Name);
 
             {
