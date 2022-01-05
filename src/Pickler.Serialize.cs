@@ -13,11 +13,19 @@ namespace Ibasa.Pikala
         public Type StaticType { get; }
         public bool ShouldMemo { get; }
 
-        public SerializeInformation(Type? runtimeType, Type staticType, bool shouldMemo)
+        /// <summary>
+        /// This is an optional type that defines a parent contextual type.
+        /// For example if we're serialising a load of FieldInfos but we know their all for the same type then we still want 
+        /// to hit all our memo machinery but can elide serializing out the type.
+        /// </summary>
+        public Type? ContextType { get; }
+
+        public SerializeInformation(Type? runtimeType, Type staticType, bool shouldMemo, Type? contextType)
         {
             RuntimeType = runtimeType ?? typeof(object);
             StaticType = staticType;
             ShouldMemo = shouldMemo;
+            ContextType = contextType;
         }
     }
 
@@ -40,16 +48,16 @@ namespace Ibasa.Pikala
             return true;
         }
 
-        private SerializeInformation MakeInfo(object? obj, Type staticType, bool? shouldMemo = null)
+        private SerializeInformation MakeInfo(object? obj, Type staticType, bool? shouldMemo = null, Type? contextType = null)
         {
-            if (obj == null) { return new SerializeInformation(typeof(object), staticType, false); }
+            if (obj == null) { return new SerializeInformation(typeof(object), staticType, false, contextType); }
 
             if (!shouldMemo.HasValue)
             {
                 shouldMemo = ShouldMemo(obj, staticType);
             }
 
-            return new SerializeInformation(obj.GetType(), staticType, shouldMemo.Value);
+            return new SerializeInformation(obj.GetType(), staticType, shouldMemo.Value, contextType);
         }
 
         private bool PickleByValue(Assembly assembly)
@@ -839,7 +847,7 @@ namespace Ibasa.Pikala
                     result[i] = collection[i].Value;
                 }
                 // No point memoising this array, we just created it!
-                Serialize(state, result, new SerializeInformation(typeof(object?[]), typeof(object?[]), false));
+                Serialize(state, result, new SerializeInformation(typeof(object?[]), typeof(object?[]), false, null));
             }
             else
             {
@@ -854,7 +862,7 @@ namespace Ibasa.Pikala
             {
                 Serialize(state, attribute.AttributeType, MakeInfo(attribute.AttributeType, typeof(Type), true));
 
-                SerializeSignature(state, Signature.GetSignature(attribute.Constructor));
+                Serialize(state, attribute.Constructor, MakeInfo(attribute.Constructor, typeof(ConstructorInfo), true, attribute.AttributeType));
                 state.Writer.Write7BitEncodedInt(attribute.ConstructorArguments.Count);
                 foreach (var argument in attribute.ConstructorArguments)
                 {
@@ -870,7 +878,7 @@ namespace Ibasa.Pikala
                     if (!argument.IsField)
                     {
                         var property = (PropertyInfo)argument.MemberInfo;
-                        SerializeSignature(state, Signature.GetSignature(property));
+                        Serialize(state, property, MakeInfo(property, typeof(PropertyInfo), true, attribute.AttributeType));
                         var value = argument.TypedValue.Value;
                         var info = MakeInfo(argument.TypedValue.Value, typeof(object), ShouldMemo(value, property.PropertyType));
                         WriteCustomAttributeValue(state, value, info);
@@ -883,7 +891,7 @@ namespace Ibasa.Pikala
                     if (argument.IsField)
                     {
                         var field = (FieldInfo)argument.MemberInfo;
-                        state.Writer.Write(field.Name);
+                        Serialize(state, field, MakeInfo(field, typeof(FieldInfo), true, attribute.AttributeType));
                         var value = argument.TypedValue.Value;
                         var info = MakeInfo(argument.TypedValue.Value, typeof(object), ShouldMemo(value, field.FieldType));
                         WriteCustomAttributeValue(state, value, info);
@@ -1139,29 +1147,47 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeFieldInfo(PicklerSerializationState state, FieldInfo field)
+        private void SerializeFieldInfo(PicklerSerializationState state, SerializeInformation info, FieldInfo field)
         {
             state.RunWithTrailers(() =>
             {
-                Serialize(state, field.ReflectedType, MakeInfo(field.ReflectedType, typeof(Type), true));
+                System.Diagnostics.Debug.Assert(info.ContextType == null || info.ContextType == field.ReflectedType);
+
+                if (info.ContextType == null)
+                {
+                    Serialize(state, field.ReflectedType, MakeInfo(field.ReflectedType, typeof(Type), true));
+                }
+
                 state.Writer.Write(field.Name);
             });
         }
 
-        private void SerializePropertyInfo(PicklerSerializationState state, PropertyInfo property)
+        private void SerializePropertyInfo(PicklerSerializationState state, SerializeInformation info, PropertyInfo property)
         {
             state.RunWithTrailers(() =>
             {
-                Serialize(state, property.ReflectedType, MakeInfo(property.ReflectedType, typeof(Type), true));
+                System.Diagnostics.Debug.Assert(info.ContextType == null || info.ContextType == property.ReflectedType);
+
+                if (info.ContextType == null)
+                {
+                    Serialize(state, property.ReflectedType, MakeInfo(property.ReflectedType, typeof(Type), true));
+                }
+
                 SerializeSignature(state, Signature.GetSignature(property));
             });
         }
 
-        private void SerializeMethodInfo(PicklerSerializationState state, MethodInfo method)
+        private void SerializeMethodInfo(PicklerSerializationState state, SerializeInformation info, MethodInfo method)
         {
             state.RunWithTrailers(() =>
             {
-                Serialize(state, method.ReflectedType, MakeInfo(method.ReflectedType, typeof(Type), true));
+                System.Diagnostics.Debug.Assert(info.ContextType == null || info.ContextType == method.ReflectedType);
+
+                if (info.ContextType == null)
+                {
+                    Serialize(state, method.ReflectedType, MakeInfo(method.ReflectedType, typeof(Type), true));
+                }
+
                 if (method.IsConstructedGenericMethod)
                 {
                     var genericArguments = method.GetGenericArguments();
@@ -1180,11 +1206,17 @@ namespace Ibasa.Pikala
             });
         }
 
-        private void SerializeConstructorInfo(PicklerSerializationState state, ConstructorInfo constructor)
+        private void SerializeConstructorInfo(PicklerSerializationState state, SerializeInformation info, ConstructorInfo constructor)
         {
             state.RunWithTrailers(() =>
             {
-                Serialize(state, constructor.ReflectedType, MakeInfo(constructor.ReflectedType, typeof(Type), true));
+                System.Diagnostics.Debug.Assert(info.ContextType == null || info.ContextType == constructor.ReflectedType);
+
+                if (info.ContextType == null)
+                {
+                    Serialize(state, constructor.ReflectedType, MakeInfo(constructor.ReflectedType, typeof(Type), true));
+                }
+
                 SerializeSignature(state, Signature.GetSignature(constructor));
             });
         }
@@ -1552,16 +1584,16 @@ namespace Ibasa.Pikala
                                 SerializeArray(state, (Array)obj, info.RuntimeType);
                                 return;
                             case PickleOperation.FieldRef:
-                                SerializeFieldInfo(state, (FieldInfo)obj);
+                                SerializeFieldInfo(state, info, (FieldInfo)obj);
                                 return;
                             case PickleOperation.PropertyRef:
-                                SerializePropertyInfo(state, (PropertyInfo)obj);
+                                SerializePropertyInfo(state, info, (PropertyInfo)obj);
                                 return;
                             case PickleOperation.MethodRef:
-                                SerializeMethodInfo(state, (MethodInfo)obj);
+                                SerializeMethodInfo(state, info, (MethodInfo)obj);
                                 return;
                             case PickleOperation.ConstructorRef:
-                                SerializeConstructorInfo(state, (ConstructorInfo)obj);
+                                SerializeConstructorInfo(state, info, (ConstructorInfo)obj);
                                 return;
                             case PickleOperation.Delegate:
                                 SerializeMulticastDelegate(state, (MulticastDelegate)obj, info.RuntimeType);
