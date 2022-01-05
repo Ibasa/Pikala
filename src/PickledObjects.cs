@@ -17,7 +17,7 @@ namespace Ibasa.Pikala
 
         public abstract PickledFieldInfo GetField(string name);
 
-        public abstract PickledPropertyInfo GetProperty(string name);
+        public abstract PickledPropertyInfo GetProperty(string signature);
 
         public override void Emit(ILGenerator ilGenerator, OpCode opCode)
         {
@@ -72,18 +72,18 @@ namespace Ibasa.Pikala
             return new PickledFieldInfoRef(result);
         }
 
-        public override PickledPropertyInfo GetProperty(string name)
+        public override PickledPropertyInfo GetProperty(string signature)
         {
             var properties = Type.GetProperties(BindingsAll);
             foreach (var property in properties)
             {
-                if (property.Name == name)
+                if (Method.GetSignature(property) == signature)
                 {
                     return new PickledPropertyInfoRef(property);
                 }
             }
 
-            throw new Exception($"Could not load property '{name}' from type '{Type.Name}'");
+            throw new Exception($"Could not load property '{signature}' from type '{Type.Name}'");
         }
 
         public override PickledTypeInfo GetGenericArgument(int position)
@@ -119,7 +119,7 @@ namespace Ibasa.Pikala
             throw new NotImplementedException();
         }
 
-        public override PickledPropertyInfo GetProperty(string name)
+        public override PickledPropertyInfo GetProperty(string signature)
         {
             throw new NotImplementedException();
         }
@@ -158,7 +158,7 @@ namespace Ibasa.Pikala
             throw new NotImplementedException();
         }
 
-        public override PickledPropertyInfo GetProperty(string name)
+        public override PickledPropertyInfo GetProperty(string signature)
         {
             throw new NotImplementedException();
         }
@@ -268,20 +268,20 @@ namespace Ibasa.Pikala
             throw new Exception($"Could not load field '{name}' from type '{TypeBuilder.Name}'");
         }
 
-        public override PickledPropertyInfo GetProperty(string name)
+        public override PickledPropertyInfo GetProperty(string signature)
         {
             if (Properties != null)
             {
                 foreach (var property in Properties)
                 {
-                    if (property.PropertyBuilder.Name == name)
+                    if (property.GetSignature() == signature)
                     {
                         return property;
                     }
                 }
             }
 
-            throw new Exception($"Could not load property '{name}' from type '{TypeBuilder.Name}'");
+            throw new Exception($"Could not load property '{signature}' from type '{TypeBuilder.Name}'");
         }
 
         public override PickledTypeInfo GetGenericArgument(int position)
@@ -367,31 +367,34 @@ namespace Ibasa.Pikala
             throw new NotImplementedException();
         }
 
-        public override string GetSignature()
+        public string GetSignature()
         {
             var signature = new StringBuilder();
+
+            Method.AppendType(signature, MethodBuilder.ReturnType);
+            signature.Append(' ');
 
             signature.Append(MethodBuilder.Name);
 
             if (GenericParameters != null)
             {
-                signature.Append("<");
+                signature.Append('<');
                 bool first = true;
                 foreach (var param in GenericParameters)
                 {
                     if (!first)
                     {
-                        signature.Append(", ");
+                        signature.Append(',');
                     }
                     first = false;
                     // See Method.cs for comment about TypeParam names
                     //signature.Append(param.Name);
                 }
-                signature.Append(">");
+                signature.Append('>');
             }
 
             {
-                signature.Append("(");
+                signature.Append('(');
                 if (ParameterTypes != null)
                 {
                     bool first = true;
@@ -399,37 +402,14 @@ namespace Ibasa.Pikala
                     {
                         if (!first)
                         {
-                            signature.Append(", ");
+                            signature.Append(',');
                         }
                         first = false;
 
-                        if (parameterType.IsGenericParameter)
-                        {
-                            if (parameterType.DeclaringMethod != null)
-                            {
-                                signature.Append("!!");
-                            }
-                            else if (parameterType.DeclaringType != null)
-                            {
-                                signature.Append("!");
-                            }
-                            else
-                            {
-                                throw new Exception("Generic paramater had neither a DeclaringMethod or a DeclaringType!");
-                            }
-                            signature.Append(parameterType.GenericParameterPosition);
-                        }
-                        else if (parameterType.FullName != null)
-                        {
-                            signature.Append(parameterType.FullName);
-                        }
-                        else
-                        {
-                            signature.Append(parameterType.Namespace + parameterType.Name);
-                        }
+                        Method.AppendType(signature, parameterType);
                     }
                 }
-                signature.Append(")");
+                signature.Append(')');
             }
 
             return signature.ToString();
@@ -547,18 +527,18 @@ namespace Ibasa.Pikala
             }
         }
 
-        public override PickledPropertyInfo GetProperty(string name)
+        public override PickledPropertyInfo GetProperty(string signature)
         {
             var (type, isComplete) = ResolveType();
 
             if (isComplete)
             {
                 var infoRef = new PickledTypeInfoRef(type);
-                return infoRef.GetProperty(name);
+                return infoRef.GetProperty(signature);
             }
             else
             {
-                var propertyInfo = GenericType.GetProperty(name);
+                var propertyInfo = GenericType.GetProperty(signature);
                 return new PickledPropertyInfoRef(propertyInfo.PropertyInfo);
             }
         }
@@ -632,83 +612,6 @@ namespace Ibasa.Pikala
         public abstract MethodBase MethodBase { get; }
 
         public abstract object? Invoke(object? target, params object?[] args);
-
-        public virtual string GetSignature()
-        {
-            var signature = new StringBuilder();
-
-            // We want the open method handle
-            MethodBase methodBase = MethodBase;
-            if (methodBase.DeclaringType != null)
-            {
-                if (methodBase.DeclaringType.IsConstructedGenericType)
-                {
-                    var genericType = methodBase.DeclaringType.GetGenericTypeDefinition();
-                    methodBase = MethodBase.GetMethodFromHandle(methodBase.MethodHandle, genericType.TypeHandle)!;
-                }
-            }
-
-            signature.Append(methodBase.Name);
-
-            if (methodBase.IsGenericMethod)
-            {
-                signature.Append("<");
-                bool first = true;
-                foreach (var param in methodBase.GetGenericArguments())
-                {
-                    if (!first)
-                    {
-                        signature.Append(", ");
-                    }
-                    first = false;
-                    // See Method.cs for comment about TypeParam names
-                    //signature.Append(param.Name);
-                }
-                signature.Append(">");
-            }
-
-            {
-                signature.Append("(");
-                bool first = true;
-                foreach (var param in methodBase.GetParameters())
-                {
-                    if (!first)
-                    {
-                        signature.Append(", ");
-                    }
-                    first = false;
-
-                    var parameterType = param.ParameterType;
-                    if (parameterType.IsGenericParameter)
-                    {
-                        if (parameterType.DeclaringMethod != null)
-                        {
-                            signature.Append("!!");
-                        }
-                        else if (parameterType.DeclaringType != null)
-                        {
-                            signature.Append("!");
-                        }
-                        else
-                        {
-                            throw new Exception("Generic paramater had neither a DeclaringMethod or a DeclaringType!");
-                        }
-                        signature.Append(parameterType.GenericParameterPosition);
-                    }
-                    else if (parameterType.FullName != null)
-                    {
-                        signature.Append(parameterType.FullName);
-                    }
-                    else
-                    {
-                        signature.Append(parameterType.Namespace + parameterType.Name);
-                    }
-                }
-                signature.Append(")");
-            }
-
-            return signature.ToString();
-        }
     }
 
     abstract class PickledConstructorInfo : PickledMethodBase
@@ -771,14 +674,16 @@ namespace Ibasa.Pikala
             }
         }
 
-        public override string GetSignature()
+        public string GetSignature()
         {
             var signature = new StringBuilder();
 
+            Method.AppendType(signature, typeof(void));
+            signature.Append(' ');
             signature.Append(ConstructorBuilder.Name);
 
             {
-                signature.Append("(");
+                signature.Append('(');
                 if (ParameterTypes != null)
                 {
                     bool first = true;
@@ -786,33 +691,14 @@ namespace Ibasa.Pikala
                     {
                         if (!first)
                         {
-                            signature.Append(", ");
+                            signature.Append(',');
                         }
                         first = false;
 
-                        if (parameterType.IsGenericParameter)
-                        {
-                            if (parameterType.DeclaringType != null)
-                            {
-                                signature.Append("!");
-                            }
-                            else
-                            {
-                                throw new Exception("Generic paramater had no DeclaringType!");
-                            }
-                            signature.Append(parameterType.GenericParameterPosition);
-                        }
-                        else if (parameterType.FullName != null)
-                        {
-                            signature.Append(parameterType.FullName);
-                        }
-                        else
-                        {
-                            signature.Append(parameterType.Namespace + parameterType.Name);
-                        }
+                        Method.AppendType(signature, parameterType);
                     }
                 }
-                signature.Append(")");
+                signature.Append(')');
             }
 
             return signature.ToString();
@@ -885,6 +771,36 @@ namespace Ibasa.Pikala
 
                 throw new Exception($"Could not load property '{PropertyBuilder.Name}' from type '{DeclaringType.Type.Name}'");
             }
+        }
+
+        public string GetSignature()
+        {
+            var signature = new StringBuilder();
+
+            Method.AppendType(signature, PropertyBuilder.PropertyType);
+            signature.Append(' ');
+            signature.Append(PropertyBuilder.Name);
+
+            {
+                signature.Append('(');
+                if (IndexParameters != null)
+                {
+                    bool first = true;
+                    foreach (var parameterType in IndexParameters)
+                    {
+                        if (!first)
+                        {
+                            signature.Append(',');
+                        }
+                        first = false;
+
+                        Method.AppendType(signature, parameterType);
+                    }
+                }
+                signature.Append(')');
+            }
+
+            return signature.ToString();
         }
     }
 

@@ -1099,7 +1099,7 @@ namespace Ibasa.Pikala
             state.RunWithTrailers(() =>
             {
                 Serialize(state, property.ReflectedType, MakeInfo(property.ReflectedType, typeof(Type), true));
-                state.Writer.Write(property.Name);
+                state.Writer.Write(Method.GetSignature(property));
             });
         }
 
