@@ -87,6 +87,64 @@ namespace Ibasa.Pikala
             throw new NotImplementedException($"Unhandled type code '{typeCode}' for TypeFromTypeCode");
         }
 
+        private SignatureElement DeserializeSignatureElement(PicklerDeserializationState state)
+        {
+            var operation = (SignatureElementOperation)state.Reader.ReadByte();
+
+            switch (operation)
+            {
+                case SignatureElementOperation.Type:
+                    {
+                        var type = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, null, null);
+                        return new SignatureType(type.Type);
+                    }
+
+                case SignatureElementOperation.TVar:
+                case SignatureElementOperation.MVar:
+                    return new SignatureGenericParameter(operation == SignatureElementOperation.TVar, state.Reader.Read7BitEncodedInt());
+
+                case SignatureElementOperation.Generic:
+                    {
+                        var genericTypeDefinition = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, null, null);
+                        var genericArguments = new SignatureElement[state.Reader.Read7BitEncodedInt()];
+                        for (int i = 0; i < genericArguments.Length; ++i)
+                        {
+                            genericArguments[i] = DeserializeSignatureElement(state);
+                        }
+                        return new SignatureConstructedGenericType(genericTypeDefinition.Type, genericArguments);
+                    }
+
+                case SignatureElementOperation.Array:
+                    {
+                        var rank = state.Reader.Read7BitEncodedInt();
+                        var elementType = DeserializeSignatureElement(state);
+                        return new SignatureArray(rank, elementType);
+                    }
+
+                case SignatureElementOperation.ByRef:
+                    {
+                        var elementType = DeserializeSignatureElement(state);
+                        return new SignatureByRef(elementType);
+                    }
+            }
+
+            throw new NotImplementedException($"Unhandled SignatureElement: {operation}");
+        }
+
+
+        private Signature DeserializeSignature(PicklerDeserializationState state)
+        {
+            var name = state.Reader.ReadString();
+            var genericParameterCount = state.Reader.Read7BitEncodedInt();
+            var returnType = DeserializeSignatureElement(state);
+            var parameters = new SignatureElement[state.Reader.Read7BitEncodedInt()];
+            for (int i = 0; i < parameters.Length; ++i)
+            {
+                parameters[i] = DeserializeSignatureElement(state);
+            }
+            return new Signature(name, genericParameterCount, returnType, parameters);
+        }
+
         private void DeserializeConstructorHeader(PicklerDeserializationState state, Type[]? genericTypeParameters, PickledTypeInfoDef constructingType, out PickledConstructorInfoDef constructingConstructor)
         {
             var methodAttributes = (MethodAttributes)state.Reader.ReadInt32();
@@ -388,7 +446,7 @@ namespace Ibasa.Pikala
             }
 
             var interfaceCount = state.Reader.Read7BitEncodedInt();
-            var interfaceMap = new List<(PickledMethodInfo, string)>();
+            var interfaceMap = new List<(PickledMethodInfo, Signature)>();
             for (int i = 0; i < interfaceCount; ++i)
             {
                 var interfaceType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, constructingType.GenericParameters, null);
@@ -397,8 +455,8 @@ namespace Ibasa.Pikala
                 var mapCount = state.Reader.Read7BitEncodedInt();
                 for (int j = 0; j < mapCount; ++j)
                 {
-                    var interfaceMethodSignature = state.Reader.ReadString();
-                    var targetMethodSignature = state.Reader.ReadString();
+                    var interfaceMethodSignature = DeserializeSignature(state);
+                    var targetMethodSignature = DeserializeSignature(state);
                     var interfaceMethod = interfaceType.GetMethod(interfaceMethodSignature);
                     interfaceMap.Add((interfaceMethod, targetMethodSignature));
                 }
@@ -472,7 +530,7 @@ namespace Ibasa.Pikala
                 var otherCount = count >> 2;
 
 
-                MethodBuilder GetMethod(string signature)
+                MethodBuilder GetMethod(Signature signature)
                 {
                     var info = constructingType.GetMethod(signature);
                     // If we had covariant returns this cast wouldn't be needed.
@@ -482,15 +540,15 @@ namespace Ibasa.Pikala
 
                 if (hasGetter)
                 {
-                    propertyBuilder.SetGetMethod(GetMethod(state.Reader.ReadString()));
+                    propertyBuilder.SetGetMethod(GetMethod(DeserializeSignature(state)));
                 }
                 if (hasSetter)
                 {
-                    propertyBuilder.SetSetMethod(GetMethod(state.Reader.ReadString()));
+                    propertyBuilder.SetSetMethod(GetMethod(DeserializeSignature(state)));
                 }
                 for (var j = 0; j < otherCount; ++j)
                 {
-                    propertyBuilder.AddOtherMethod(GetMethod(state.Reader.ReadString()));
+                    propertyBuilder.AddOtherMethod(GetMethod(DeserializeSignature(state)));
                 }
             }
 
@@ -963,7 +1021,7 @@ namespace Ibasa.Pikala
                 {
                     type = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
                 }
-                var signature = state.Reader.ReadString();
+                var signature = DeserializeSignature(state);
                 return state.SetMemo(position, true, type.GetProperty(signature));
             });
         }
@@ -977,7 +1035,7 @@ namespace Ibasa.Pikala
                 {
                     type = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
                 }
-                var signature = state.Reader.ReadString();
+                var signature = DeserializeSignature(state);
                 return state.SetMemo(position, true, type.GetConstructor(signature));
             });
         }
@@ -991,7 +1049,7 @@ namespace Ibasa.Pikala
                 {
                     type = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
                 }
-                var signature = state.Reader.ReadString();
+                var signature = DeserializeSignature(state);
                 var genericArgumentCount = state.Reader.Read7BitEncodedInt();
                 PickledTypeInfo[]? genericArguments = null;
                 if (genericArgumentCount != 0)
@@ -1002,6 +1060,7 @@ namespace Ibasa.Pikala
                         genericArguments[i] = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
                     }
                 }
+
                 var methodInfo = type.GetMethod(signature);
 
                 if (genericArguments != null)

@@ -440,7 +440,7 @@ namespace Ibasa.Pikala.Tests
             var script = string.Join('\n', new[]
             {
                 ScriptHeader,
-                "let func = deserializeBase64 \"" +  Base64FromObject(value) + "\" :?> System.Func<int, string>",
+                "let func = deserializeBase64 \"" +   Base64FromObject(value) + "\" :?> System.Func<int, string>",
                 "printfn \"%s\" (func.Invoke 1)",
                 "printfn \"%s\" (func.Invoke 2)",
             });
