@@ -1553,7 +1553,7 @@ namespace Ibasa.Pikala
                     }
 
                 case PickleOperation.TypeRef:
-                    return DeserializeTypeRef(state, position,  genericTypeParameters, genericMethodParameters);
+                    return DeserializeTypeRef(state, position, genericTypeParameters, genericMethodParameters);
 
                 case PickleOperation.TypeDef:
                     return DeserializeTypeDef(state, position, genericTypeParameters, genericMethodParameters);
