@@ -24,7 +24,7 @@ namespace Ibasa.Pikala
                 }
                 signature.Append(type.GenericParameterPosition);
             }
-            else 
+            else
             {
                 if (type.DeclaringType != null)
                 {
