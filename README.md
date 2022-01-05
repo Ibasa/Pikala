@@ -110,7 +110,7 @@ Pikala makes a best effort to serialize most objects.
 * Pointers will be explicitly failed (this doesn't apply to `System.IntPtr` and `UIntPtr` which are serialized as 64bit integers).
 * Primitive types (like `int` or `string` are explicitly handled and written out by `System.IO.BinaryWriter`.
 * Reflection types like `Type` and `FieldInfo` are explicitly handled and either written out as named references or as full definitions that can be rebuilt into dynamic modules via `System.Reflection.Emit`.
-* The produt types `System.ValueTuple`, `System.Tuple` are explictly handled and written out as length, the type of the tuple, and each item. 
+* The produt types `System.ValueTuple`, `System.Tuple` are explictly handled and written out as length, the type of the tuple, and each item.
 * Arrays are explictly handled:
     * Arrays write out their rank, lower bound and length per dimension, the type of array, and then each item.
     * Single dimension arrays with a zero lower bound are special cased as an SZArray operation and don't write out rank or lower bounds just a single length.

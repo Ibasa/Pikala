@@ -4,7 +4,7 @@ using Xunit;
 namespace Ibasa.Pikala.Tests
 {
     /// <summary>
-    /// Theses tests are all by themselves because the lambda generates a type in the test and so we have to serialize the whole test class. 
+    /// Theses tests are all by themselves because the lambda generates a type in the test and so we have to serialize the whole test class.
     /// While serialising the whole test class should work for Pikala having this by itself makes investigation into just lambdas much easier.
     /// </summary>
     public class EmitLambdaTests
@@ -243,6 +243,26 @@ namespace Ibasa.Pikala.Tests
             var result = RoundTrip.Do(pickler, value);
 
             Assert.Equal(value.FullName, result.FullName);
+
+            void Check(System.Reflection.MemberInfo member, int expectedTag)
+            {
+                var attrs = member.GetCustomAttributes(result, false);
+                var attr = Assert.Single(attrs);
+
+                Assert.Equal(result, attr.GetType());
+
+                var propertyValue = (string)result.GetProperty("Property").GetValue(attr);
+                var tagValue = (int)result.GetField("Tag").GetValue(attr);
+
+                Assert.Equal(member.Name, propertyValue);
+                Assert.Equal(expectedTag, tagValue);
+            }
+
+            // Check everything has the attributes with set properties
+            Check(result, 0);
+            Check(result.GetConstructor(Type.EmptyTypes), 1);
+            Check(result.GetProperty("Property"), 2);
+            Check(result.GetField("Tag"), 3);
         }
 
         [Fact]
@@ -291,6 +311,35 @@ namespace Ibasa.Pikala.Tests
             var result = RoundTrip.Do<object>(pickler, value);
 
             Assert.Equal(value.ToString(), result.ToString());
+        }
+
+        [Fact]
+        public void TestSelfReferenceStatic()
+        {
+            var pickler = CreatePickler();
+
+            var a = new TestTypes.SelfReferenceStatic() { Tag = 1 };
+            var b = new TestTypes.SelfReferenceStatic() { Tag = 2 };
+            TestTypes.SelfReferenceStatic.Selves = new[] { a, b };
+            TestTypes.SelfReferenceStatic.TagField = typeof(TestTypes.SelfReferenceStatic).GetField("Tag");
+
+            var result = RoundTrip.Do<Array>(pickler, TestTypes.SelfReferenceStatic.Selves);
+
+            Assert.Equal(2, result.Length);
+            Assert.Equal("1", result.GetValue(0).ToString());
+            Assert.Equal("2", result.GetValue(1).ToString());
+            // Check that the array on the type matches via reflection
+            var type = result.GetValue(0).GetType();
+            Assert.Equal("SelfReferenceStatic", type.Name);
+            var field = type.GetField("Selves");
+            Assert.NotNull(field);
+            var array = field.GetValue(null);
+            Assert.Same(result, array);
+
+            // fresh pickler so we get a new dynamic assembly
+            pickler = CreatePickler();
+            var tagField = RoundTrip.Do(pickler, TestTypes.SelfReferenceStatic.TagField);
+            Assert.Equal("Tag", tagField.Name);
         }
     }
 }

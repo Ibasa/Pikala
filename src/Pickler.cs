@@ -95,6 +95,65 @@ namespace Ibasa.Pikala
         PickleByValue,
     }
 
+    /// <summary>
+    /// Sometimes our operation cache doesn't know the exact operation to do but we do know a rough grouping.
+    /// E.g. The Type "Assembly" is always an AssemblyRef or Def or Mscorlib but we need to look at the value itself to work that out while our cache is by type.
+    /// </summary>
+    enum OperationGroup
+    {
+        FullyKnown,
+        Assembly,
+        Module,
+        Type
+    }
+
+    readonly struct OperationCacheEntry
+    {
+        public readonly OperationGroup Group;
+        public readonly TypeCode TypeCode;
+        public readonly PickleOperation? Operation;
+        public readonly IReducer? Reducer;
+        public readonly FieldInfo[]? Fields;
+
+        public OperationCacheEntry(TypeCode typeCode, OperationGroup group)
+        {
+            System.Diagnostics.Debug.Assert(group != OperationGroup.FullyKnown);
+            TypeCode = typeCode;
+            Group = group;
+            Operation = null;
+            Reducer = null;
+            Fields = null;
+        }
+
+        public OperationCacheEntry(TypeCode typeCode, PickleOperation operation)
+        {
+            TypeCode = typeCode;
+            Group = OperationGroup.FullyKnown;
+            Operation = operation;
+            Reducer = null;
+            Fields = null;
+        }
+
+
+        public OperationCacheEntry(TypeCode typeCode, IReducer reducer)
+        {
+            TypeCode = typeCode;
+            Group = OperationGroup.FullyKnown;
+            Operation = PickleOperation.Reducer;
+            Reducer = reducer;
+            Fields = null;
+        }
+
+        public OperationCacheEntry(TypeCode typeCode, FieldInfo[] fields)
+        {
+            TypeCode = typeCode;
+            Group = OperationGroup.FullyKnown;
+            Operation = PickleOperation.Object;
+            Reducer = null;
+            Fields = fields;
+        }
+    }
+
     public sealed partial class Pickler
     {
         private static readonly Assembly mscorlib = typeof(int).Assembly;
@@ -126,6 +185,10 @@ namespace Ibasa.Pikala
 
         private Func<Assembly, AssemblyPickleMode> _assemblyPickleMode;
         private Dictionary<Type, IReducer> _reducers;
+        // This is keyed by the static type of the object we're serialising or deserialising
+        private Dictionary<Type, PickleOperation?> _inferCache;
+        // This is keyed by the runtime type of the object we're serialising
+        private Dictionary<Type, OperationCacheEntry> _operationCache;
 
         // Variables that are written to the start of the Pikala stream for framing checks
         private const uint _header = ((byte)'P' << 0 | (byte)'K' << 8 | (byte)'L' << 16 | (byte)'A' << 24);
@@ -139,8 +202,96 @@ namespace Ibasa.Pikala
             AssemblyLoadContext = (assemblyLoadContext ?? AssemblyLoadContext.CurrentContextualReflectionContext) ?? AssemblyLoadContext.Default;
             _assemblyPickleMode = assemblyPickleMode ?? (_ => AssemblyPickleMode.Default);
             _reducers = new Dictionary<Type, IReducer>();
+            _inferCache = new Dictionary<Type, PickleOperation?>();
+            _operationCache = new Dictionary<Type, OperationCacheEntry>();
 
             RegisterReducer(new DictionaryReducer());
+        }
+
+
+        private PickleOperation? InferOperationFromStaticType(Type staticType)
+        {
+            PickleOperation? Infer(Type staticType)
+            {
+                if (staticType.IsValueType)
+                {
+                    // This is a static value type, we probably didn't write an operation out for this
+
+                    if (staticType.IsEnum)
+                    {
+                        return PickleOperation.Enum;
+                    }
+                    else if (staticType == typeof(bool))
+                    {
+                        return PickleOperation.Boolean;
+                    }
+                    else if (staticType == typeof(char))
+                    {
+                        return PickleOperation.Char;
+                    }
+                    else if (staticType == typeof(sbyte))
+                    {
+                        return PickleOperation.SByte;
+                    }
+                    else if (staticType == typeof(short))
+                    {
+                        return PickleOperation.Int16;
+                    }
+                    else if (staticType == typeof(int))
+                    {
+                        return PickleOperation.Int32;
+                    }
+                    else if (staticType == typeof(long))
+                    {
+                        return PickleOperation.Int64;
+                    }
+                    else if (staticType == typeof(byte))
+                    {
+                        return PickleOperation.Byte;
+                    }
+                    else if (staticType == typeof(ushort))
+                    {
+                        return PickleOperation.UInt16;
+                    }
+                    else if (staticType == typeof(uint))
+                    {
+                        return PickleOperation.UInt32;
+                    }
+                    else if (staticType == typeof(ulong))
+                    {
+                        return PickleOperation.UInt64;
+                    }
+                    else if (staticType == typeof(float))
+                    {
+                        return PickleOperation.Single;
+                    }
+                    else if (staticType == typeof(double))
+                    {
+                        return PickleOperation.Double;
+                    }
+                    else if (staticType == typeof(decimal))
+                    {
+                        return PickleOperation.Decimal;
+                    }
+                    else if (staticType == typeof(IntPtr))
+                    {
+                        return PickleOperation.IntPtr;
+                    }
+                    else if (staticType == typeof(UIntPtr))
+                    {
+                        return PickleOperation.UIntPtr;
+                    }
+                }
+
+                return null;
+            }
+
+            if (!_inferCache.TryGetValue(staticType, out var operation))
+            {
+                operation = Infer(staticType);
+                _inferCache.Add(staticType, operation);
+            }
+            return operation;
         }
 
         public bool RegisterReducer(IReducer reducer)

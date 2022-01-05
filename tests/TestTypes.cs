@@ -358,13 +358,20 @@ namespace Ibasa.Pikala.Tests
             }
         }
 
-        [SelfReferencing]
+        [SelfReferencing(Property = "SelfReferencingAttribute", Tag = 0)]
         [System.AttributeUsage(AttributeTargets.All, Inherited = false, AllowMultiple = true)]
         sealed class SelfReferencingAttribute : Attribute
         {
+            [SelfReferencing(Property = ".ctor", Tag = 1)]
             public SelfReferencingAttribute()
             {
             }
+
+            [SelfReferencing(Property = "Property", Tag = 2)]
+            public string Property { get; set; }
+
+            [SelfReferencing(Property = "Tag", Tag = 3)]
+            public int Tag;
         }
 
         public abstract class AbstractClass
@@ -434,6 +441,42 @@ namespace Ibasa.Pikala.Tests
             public override string ToString()
             {
                 return _current;
+            }
+        }
+
+        /// <summary>
+        /// Class to test that memoization only cares about reference equality, not overriden Equals
+        /// </summary>
+        public sealed class ReferenceEqualityClass
+        {
+            public int Tag { get; set; }
+
+            public override bool Equals(object obj)
+            {
+                if (obj is ReferenceEqualityClass other)
+                {
+                    return other.Tag == Tag;
+                }
+                return false;
+            }
+
+            public override int GetHashCode()
+            {
+                return Tag.GetHashCode();
+            }
+        }
+
+        public class SelfReferenceStatic
+        {
+            public int Tag;
+
+            public static System.Reflection.FieldInfo TagField;
+
+            public static SelfReferenceStatic[] Selves;
+
+            public override string ToString()
+            {
+                return Tag.ToString();
             }
         }
     }

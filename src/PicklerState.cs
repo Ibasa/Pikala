@@ -57,7 +57,6 @@ namespace Ibasa.Pikala
     {
         Dictionary<long, object> memo;
         Dictionary<long, MemoCallback> memoCallbacks;
-        List<(long, Action<object>)> fixups;
         List<Action> staticFields;
         public BinaryReader Reader { get; private set; }
 
@@ -67,7 +66,6 @@ namespace Ibasa.Pikala
         {
             memo = new Dictionary<long, object>();
             memoCallbacks = new Dictionary<long, MemoCallback>();
-            fixups = new List<(long, Action<object>)>();
             staticFields = new List<Action>();
             Reader = new BinaryReader(new PickleStream(stream));
             _constructedTypes = new Dictionary<System.Reflection.Assembly, Dictionary<string, PickledTypeInfoDef>>();
@@ -125,27 +123,6 @@ namespace Ibasa.Pikala
         public void Dispose()
         {
             AppDomain.CurrentDomain.TypeResolve -= CurrentDomain_TypeResolve;
-        }
-
-
-        public void RegisterFixup(long position, Action<object> fixup)
-        {
-            fixups.Add((position, fixup));
-        }
-
-        public void DoFixups()
-        {
-            foreach (var (position, fixup) in fixups)
-            {
-                if (memo.TryGetValue(position, out var value))
-                {
-                    fixup(value);
-                }
-                else
-                {
-                    throw new MemoException(position);
-                }
-            }
         }
 
         public void DoStaticFields()
@@ -261,12 +238,33 @@ namespace Ibasa.Pikala
 
     sealed class PicklerSerializationState
     {
+        // This is built in from .NET 5 onwards.
+        class ReferenceEqualityComparer : EqualityComparer<object>
+        {
+            private static IEqualityComparer<object>? _defaultComparer;
+
+            public new static IEqualityComparer<object> Default
+            {
+                get { return _defaultComparer ?? (_defaultComparer = new ReferenceEqualityComparer()); }
+            }
+
+            public override bool Equals(object? x, object? y)
+            {
+                return ReferenceEquals(x, y);
+            }
+
+            public override int GetHashCode(object obj)
+            {
+                return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+            }
+        }
+
         Dictionary<object, long> memo;
         public BinaryWriter Writer { get; private set; }
 
         public PicklerSerializationState(Stream stream)
         {
-            memo = new Dictionary<object, long>();
+            memo = new Dictionary<object, long>(ReferenceEqualityComparer.Default);
             Writer = new BinaryWriter(new PickleStream(stream));
         }
 
