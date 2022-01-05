@@ -1152,8 +1152,6 @@ namespace Ibasa.Pikala
         {
             state.RunWithTrailers(() =>
             {
-
-                state.Writer.Write((byte)PickleOperation.PropertyRef);
                 Serialize(state, property.ReflectedType, MakeInfo(property.ReflectedType, typeof(Type), true));
                 SerializeSignature(state, Signature.GetSignature(property));
             });
