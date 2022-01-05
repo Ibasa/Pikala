@@ -15,7 +15,7 @@ namespace Ibasa.Pikala.Tests
             }
 
             var eventName = Environment.GetEnvironmentVariable("GITHUB_EVENT_NAME");
-            if (isLongRunning && eventName == "pull_request")
+            if (isLongRunning)// && eventName == "pull_request")
             {
                 Skip = "Skipping long running test for pull request";
             }

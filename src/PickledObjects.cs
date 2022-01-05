@@ -371,54 +371,30 @@ namespace Ibasa.Pikala
         {
             var signature = new StringBuilder();
 
-            var returnType = MethodBuilder.ReturnType;
-            if (returnType.IsGenericParameter)
-            {
-                if (returnType.DeclaringMethod != null)
-                {
-                    signature.Append("!!");
-                }
-                else if (returnType.DeclaringType != null)
-                {
-                    signature.Append("!");
-                }
-                else
-                {
-                    throw new Exception("Generic paramater had neither a DeclaringMethod or a DeclaringType!");
-                }
-                signature.Append(returnType.GenericParameterPosition);
-            }
-            else if (returnType.FullName != null)
-            {
-                signature.Append(returnType.FullName);
-            }
-            else
-            {
-                signature.Append(returnType.Namespace + returnType.Name);
-            }
-            signature.Append(" ");
+            Method.AppendType(signature, MethodBuilder.ReturnType);
+            signature.Append(' ');
 
             signature.Append(MethodBuilder.Name);
 
             if (GenericParameters != null)
             {
-                signature.Append("<");
+                signature.Append('<');
                 bool first = true;
                 foreach (var param in GenericParameters)
                 {
                     if (!first)
                     {
-                        signature.Append(", ");
+                        signature.Append(',');
                     }
                     first = false;
                     // See Method.cs for comment about TypeParam names
                     //signature.Append(param.Name);
                 }
-                signature.Append(">");
+                signature.Append('>');
             }
 
             {
-                signature.Append("(");
+                signature.Append('(');
                 if (ParameterTypes != null)
                 {
                     bool first = true;
@@ -426,37 +402,14 @@ namespace Ibasa.Pikala
                     {
                         if (!first)
                         {
-                            signature.Append(", ");
+                            signature.Append(',');
                         }
                         first = false;
 
-                        if (parameterType.IsGenericParameter)
-                        {
-                            if (parameterType.DeclaringMethod != null)
-                            {
-                                signature.Append("!!");
-                            }
-                            else if (parameterType.DeclaringType != null)
-                            {
-                                signature.Append("!");
-                            }
-                            else
-                            {
-                                throw new Exception("Generic paramater had neither a DeclaringMethod or a DeclaringType!");
-                            }
-                            signature.Append(parameterType.GenericParameterPosition);
-                        }
-                        else if (parameterType.FullName != null)
-                        {
-                            signature.Append(parameterType.FullName);
-                        }
-                        else
-                        {
-                            signature.Append(parameterType.Namespace + parameterType.Name);
-                        }
+                        Method.AppendType(signature, parameterType);
                     }
                 }
-                signature.Append(")");
+                signature.Append(')');
             }
 
             return signature.ToString();
@@ -725,12 +678,12 @@ namespace Ibasa.Pikala
         {
             var signature = new StringBuilder();
 
-            signature.Append(typeof(void).FullName);
-            signature.Append(" ");
+            Method.AppendType(signature, typeof(void));
+            signature.Append(' ');
             signature.Append(ConstructorBuilder.Name);
 
             {
-                signature.Append("(");
+                signature.Append('(');
                 if (ParameterTypes != null)
                 {
                     bool first = true;
@@ -738,33 +691,14 @@ namespace Ibasa.Pikala
                     {
                         if (!first)
                         {
-                            signature.Append(", ");
+                            signature.Append(',');
                         }
                         first = false;
 
-                        if (parameterType.IsGenericParameter)
-                        {
-                            if (parameterType.DeclaringType != null)
-                            {
-                                signature.Append("!");
-                            }
-                            else
-                            {
-                                throw new Exception("Generic paramater had no DeclaringType!");
-                            }
-                            signature.Append(parameterType.GenericParameterPosition);
-                        }
-                        else if (parameterType.FullName != null)
-                        {
-                            signature.Append(parameterType.FullName);
-                        }
-                        else
-                        {
-                            signature.Append(parameterType.Namespace + parameterType.Name);
-                        }
+                        Method.AppendType(signature, parameterType);
                     }
                 }
-                signature.Append(")");
+                signature.Append(')');
             }
 
             return signature.ToString();
@@ -843,33 +777,12 @@ namespace Ibasa.Pikala
         {
             var signature = new StringBuilder();
 
-            var returnType = PropertyInfo.PropertyType;
-            if (returnType.IsGenericParameter)
-            {
-                if (returnType.DeclaringType != null)
-                {
-                    signature.Append("!");
-                }
-                else
-                {
-                    throw new Exception("Generic paramater had no DeclaringType!");
-                }
-                signature.Append(returnType.GenericParameterPosition);
-            }
-            else if (returnType.FullName != null)
-            {
-                signature.Append(returnType.FullName);
-            }
-            else
-            {
-                signature.Append(returnType.Namespace + returnType.Name);
-            }
-
-            signature.Append(" ");
+            Method.AppendType(signature, PropertyBuilder.PropertyType);
+            signature.Append(' ');
             signature.Append(PropertyBuilder.Name);
 
             {
-                signature.Append("(");
+                signature.Append('(');
                 if (IndexParameters != null)
                 {
                     bool first = true;
@@ -877,33 +790,14 @@ namespace Ibasa.Pikala
                     {
                         if (!first)
                         {
-                            signature.Append(", ");
+                            signature.Append(',');
                         }
                         first = false;
 
-                        if (parameterType.IsGenericParameter)
-                        {
-                            if (parameterType.DeclaringType != null)
-                            {
-                                signature.Append("!");
-                            }
-                            else
-                            {
-                                throw new Exception("Generic paramater had no DeclaringType!");
-                            }
-                            signature.Append(parameterType.GenericParameterPosition);
-                        }
-                        else if (parameterType.FullName != null)
-                        {
-                            signature.Append(parameterType.FullName);
-                        }
-                        else
-                        {
-                            signature.Append(parameterType.Namespace + parameterType.Name);
-                        }
+                        Method.AppendType(signature, parameterType);
                     }
                 }
-                signature.Append(")");
+                signature.Append(')');
             }
 
             return signature.ToString();

@@ -6,6 +6,62 @@ namespace Ibasa.Pikala
 {
     static class Method
     {
+        public static void AppendType(StringBuilder signature, Type type)
+        {
+            if (type.IsGenericParameter)
+            {
+                if (type.DeclaringMethod != null)
+                {
+                    signature.Append("!!");
+                }
+                else if (type.DeclaringType != null)
+                {
+                    signature.Append('!');
+                }
+                else
+                {
+                    throw new Exception("Generic paramater had neither a DeclaringMethod or a DeclaringType!");
+                }
+                signature.Append(type.GenericParameterPosition);
+            }
+            else 
+            {
+                if (type.DeclaringType != null)
+                {
+                    AppendType(signature, type.DeclaringType);
+                    signature.Append('+');
+                    signature.Append(type.Name);
+                }
+                else if (string.IsNullOrEmpty(type.Namespace))
+                {
+                    signature.Append(type.Name);
+                }
+                else
+                {
+                    signature.Append(type.Namespace);
+                    signature.Append('.');
+                    signature.Append(type.Name);
+                }
+
+                if (type.IsGenericType)
+                {
+                    signature.Append('<');
+                    bool first = true;
+                    foreach (var arg in type.GetGenericArguments())
+                    {
+                        if (!first)
+                        {
+                            signature.Append(',');
+                        }
+                        first = false;
+
+                        AppendType(signature, arg);
+                    }
+                    signature.Append('>');
+                }
+            }
+        }
+
         public static string GetSignature(MethodBase method)
         {
             var signature = new StringBuilder();
@@ -20,91 +76,43 @@ namespace Ibasa.Pikala
                 }
             }
 
-            var returnType = (method is MethodInfo methodInfo) ? methodInfo.ReturnType : typeof(void);
-            if (returnType.IsGenericParameter)
-            {
-                if (returnType.DeclaringMethod != null)
-                {
-                    signature.Append("!!");
-                }
-                else if (returnType.DeclaringType != null)
-                {
-                    signature.Append("!");
-                }
-                else
-                {
-                    throw new Exception("Generic paramater had neither a DeclaringMethod or a DeclaringType!");
-                }
-                signature.Append(returnType.GenericParameterPosition);
-            }
-            else if (returnType.FullName != null)
-            {
-                signature.Append(returnType.FullName);
-            }
-            else
-            {
-                signature.Append(returnType.Namespace + returnType.Name);
-            }
-            signature.Append(" ");
+            AppendType(signature, (method is MethodInfo methodInfo) ? methodInfo.ReturnType : typeof(void));
+            signature.Append(' ');
 
             signature.Append(method.Name);
 
             if (method.IsGenericMethod)
             {
-                signature.Append("<");
+                signature.Append('<');
                 bool first = true;
                 foreach (var param in method.GetGenericArguments())
                 {
                     if (!first)
                     {
-                        signature.Append(", ");
+                        signature.Append(',');
                     }
                     first = false;
                     // TypeVar names don't make up part of the signature, but when we do the signature
                     // redesign we probably want to keep them for pretty printing but not for equality checks.
                     //signature.Append(param.Name);
                 }
-                signature.Append(">");
+                signature.Append('>');
             }
 
             {
-                signature.Append("(");
+                signature.Append('(');
                 bool first = true;
                 foreach (var param in method.GetParameters())
                 {
                     if (!first)
                     {
-                        signature.Append(", ");
+                        signature.Append(',');
                     }
                     first = false;
 
-                    var parameterType = param.ParameterType;
-                    if (parameterType.IsGenericParameter)
-                    {
-                        if (parameterType.DeclaringMethod != null)
-                        {
-                            signature.Append("!!");
-                        }
-                        else if (parameterType.DeclaringType != null)
-                        {
-                            signature.Append("!");
-                        }
-                        else
-                        {
-                            throw new Exception("Generic paramater had neither a DeclaringMethod or a DeclaringType!");
-                        }
-                        signature.Append(parameterType.GenericParameterPosition);
-                    }
-                    else if (parameterType.FullName != null)
-                    {
-                        signature.Append(parameterType.FullName);
-                    }
-                    else
-                    {
-                        signature.Append(parameterType.Namespace + parameterType.Name);
-                    }
+                    AppendType(signature, param.ParameterType);
                 }
-                signature.Append(")");
+                signature.Append(')');
             }
 
             return signature.ToString();
@@ -114,65 +122,24 @@ namespace Ibasa.Pikala
         {
             var signature = new StringBuilder();
 
-            var returnType = property.PropertyType;
-            if (returnType.IsGenericParameter)
-            {
-                if (returnType.DeclaringType != null)
-                {
-                    signature.Append("!");
-                }
-                else
-                {
-                    throw new Exception("Generic paramater has no DeclaringType!");
-                }
-                signature.Append(returnType.GenericParameterPosition);
-            }
-            else if (returnType.FullName != null)
-            {
-                signature.Append(returnType.FullName);
-            }
-            else
-            {
-                signature.Append(returnType.Namespace + returnType.Name);
-            }
-            signature.Append(" ");
-
+            AppendType(signature, property.PropertyType);
+            signature.Append(' ');
             signature.Append(property.Name);
 
             {
-                signature.Append("(");
+                signature.Append('(');
                 bool first = true;
                 foreach (var param in property.GetIndexParameters())
                 {
                     if (!first)
                     {
-                        signature.Append(", ");
+                        signature.Append(',');
                     }
                     first = false;
 
-                    var parameterType = param.ParameterType;
-                    if (parameterType.IsGenericParameter)
-                    {
-                        if (parameterType.DeclaringType != null)
-                        {
-                            signature.Append("!");
-                        }
-                        else
-                        {
-                            throw new Exception("Generic paramater has no DeclaringType!");
-                        }
-                        signature.Append(parameterType.GenericParameterPosition);
-                    }
-                    else if (parameterType.FullName != null)
-                    {
-                        signature.Append(parameterType.FullName);
-                    }
-                    else
-                    {
-                        signature.Append(parameterType.Namespace + parameterType.Name);
-                    }
+                    AppendType(signature, param.ParameterType);
                 }
-                signature.Append(")");
+                signature.Append(')');
             }
 
             return signature.ToString();
