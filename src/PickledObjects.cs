@@ -352,7 +352,6 @@ namespace Ibasa.Pikala
                 }
 
                 throw new Exception($"Could not load method '{signature}' from type '{DeclaringType.Type.Name}'");
-
             }
         }
 
