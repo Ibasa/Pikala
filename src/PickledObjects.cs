@@ -654,11 +654,6 @@ namespace Ibasa.Pikala
         {
             throw new Exception("Properties do not have generic arguments");
         }
-
-        public virtual Signature GetSignature()
-        {
-            return Signature.GetSignature(PropertyInfo);
-        }
     }
 
     sealed class PickledPropertyInfoRef : PickledPropertyInfo
