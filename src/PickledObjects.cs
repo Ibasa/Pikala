@@ -623,7 +623,17 @@ namespace Ibasa.Pikala
                     return ConstructorBuilder;
                 }
 
-                return ConstructingType.GetConstructor(GetSignature()).ConstructorInfo;
+                var signature = GetSignature();
+                var constructors = ConstructingType.Type.GetConstructors(BindingsAll);
+                foreach (var constructor in constructors)
+                {
+                    if (Signature.GetSignature(constructor) == signature)
+                    {
+                        return constructor;
+                    }
+                }
+
+                throw new Exception($"Could not load constructor '{signature}' from type '{ConstructingType.Type.Name}'");
             }
         }
 
