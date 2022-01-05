@@ -964,8 +964,8 @@ namespace Ibasa.Pikala
             return state.RunWithTrailers(() =>
             {
                 var type = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
-                var name = state.Reader.ReadString();
-                return state.SetMemo(position, true, type.GetProperty(name));
+                var signature = state.Reader.ReadString();
+                return state.SetMemo(position, true, type.GetProperty(signature));
             });
         }
 

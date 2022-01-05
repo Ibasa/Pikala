@@ -10,14 +10,12 @@ namespace Ibasa.Pikala.Tests
     /// </summary>
     public class EsotericTests
     {
-        private static AssemblyName DynamicAssemblyName = new AssemblyName("DynamicTest");
-
         [Fact]
         public void TestModuleData()
         {
             var pickler = Utils.CreateIsolatedPickler();
 
-            var assembly = AssemblyBuilder.DefineDynamicAssembly(DynamicAssemblyName, AssemblyBuilderAccess.Run);
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestModuleData"), AssemblyBuilderAccess.Run);
             var module = assembly.DefineDynamicModule("main");
             var undata = module.DefineUninitializedData("uninit", 128, FieldAttributes.Public);
             var indata = module.DefineInitializedData("init", new byte[] { 1, 2 }, FieldAttributes.Private);
@@ -58,7 +56,7 @@ namespace Ibasa.Pikala.Tests
         {
             var pickler = Utils.CreateIsolatedPickler();
 
-            var assembly = AssemblyBuilder.DefineDynamicAssembly(DynamicAssemblyName, AssemblyBuilderAccess.Run);
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestPropertyOther"), AssemblyBuilderAccess.Run);
             var module = assembly.DefineDynamicModule("main");
             var type = module.DefineType("type");
             var property = type.DefineProperty("prop", PropertyAttributes.None, typeof(int), null);
@@ -86,7 +84,82 @@ namespace Ibasa.Pikala.Tests
 
             var otherMethod = accessors[1];
             Assert.Equal("other", otherMethod.Name);
+        }
 
+        private static PropertyBuilder DefineAutomaticProperty(TypeBuilder type, string name, PropertyAttributes attributes, Type returnType)
+        {
+            var field = type.DefineField("@backingfield_" + name, returnType, FieldAttributes.Private);
+            var getmethod = type.DefineMethod("get_" + name, MethodAttributes.SpecialName, returnType, null);
+            var setmethod = type.DefineMethod("set_" + name, MethodAttributes.SpecialName, typeof(void), new[] { returnType });
+
+            var getgen = getmethod.GetILGenerator();
+            getgen.Emit(OpCodes.Ldarg_0);
+            getgen.Emit(OpCodes.Ldfld, field);
+            getgen.Emit(OpCodes.Ret);
+
+            var setgen = setmethod.GetILGenerator();
+            setgen.Emit(OpCodes.Ldarg_0);
+            setgen.Emit(OpCodes.Ldarg_1);
+            setgen.Emit(OpCodes.Stfld, field);
+            setgen.Emit(OpCodes.Ret);
+
+            var property = type.DefineProperty(name, attributes, returnType, null);
+            property.SetGetMethod(getmethod);
+            property.SetSetMethod(setmethod);
+            return property;
+        }
+
+        [Fact]
+        public void TestPropertyOverloadByReturnType()
+        {
+            var pickler = new Pickler(_ => AssemblyPickleMode.PickleByReference);
+
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestPropertyOverloadByReturnType"), AssemblyBuilderAccess.Run);
+            var module = assembly.DefineDynamicModule("main");
+            var type = module.DefineType("test");
+            var intProp = DefineAutomaticProperty(type, "Prop", PropertyAttributes.None, typeof(int));
+            var longProp = DefineAutomaticProperty(type, "Prop", PropertyAttributes.None, typeof(long));
+            var typeInstance = type.CreateType();
+
+            var properties = typeInstance.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
+            Assert.Equal(2, properties.Length);
+
+            foreach (var prop in properties)
+            {
+                RoundTrip.Assert(pickler, prop);
+            }
+        }
+
+        private static MethodBuilder DefineBasicMethod(TypeBuilder type, string name, MethodAttributes attributes, Type returnType)
+        {
+            var method = type.DefineMethod(name, attributes, returnType, null);
+
+            var getgen = method.GetILGenerator();
+            getgen.Emit(OpCodes.Newobj, returnType);
+            getgen.Emit(OpCodes.Ret);
+
+            return method;
+        }
+
+        [Fact]
+        public void TestMethodOverloadByReturnType()
+        {
+            var pickler = new Pickler(_ => AssemblyPickleMode.PickleByReference);
+
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestMethodOverloadByReturnType"), AssemblyBuilderAccess.Run);
+            var module = assembly.DefineDynamicModule("main");
+            var type = module.DefineType("test");
+            var intMethod = DefineBasicMethod(type, "Method", MethodAttributes.Public, typeof(int));
+            var longMethod = DefineBasicMethod(type, "Method", MethodAttributes.Public, typeof(long));
+            var typeInstance = type.CreateType();
+
+            var methods = typeInstance.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly);
+            Assert.Equal(2, methods.Length);
+
+            foreach (var prop in methods)
+            {
+                RoundTrip.Assert(pickler, prop);
+            }
         }
     }
 }
