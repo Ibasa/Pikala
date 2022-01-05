@@ -35,7 +35,12 @@ namespace Ibasa.Pikala
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            var result = _stream.Read(buffer, offset, count);
+            return Read(new Span<byte>(buffer, offset, count));
+        }
+
+        public override int Read(Span<byte> buffer)
+        {
+            var result = _stream.Read(buffer);
             _position += result;
             return result;
         }
@@ -52,8 +57,13 @@ namespace Ibasa.Pikala
 
         public override void Write(byte[] buffer, int offset, int count)
         {
-            _stream.Write(buffer, offset, count);
-            _position += count;
+            Write(new ReadOnlySpan<byte>(buffer, offset, count));
+        }
+
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            _stream.Write(buffer);
+            _position += buffer.Length;
         }
     }
 }
