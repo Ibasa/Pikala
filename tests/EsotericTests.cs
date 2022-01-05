@@ -129,5 +129,37 @@ namespace Ibasa.Pikala.Tests
                 RoundTrip.Assert(pickler, prop);
             }
         }
+
+        private static MethodBuilder DefineBasicMethod(TypeBuilder type, string name, MethodAttributes attributes, Type returnType)
+        {
+            var method = type.DefineMethod(name, attributes, returnType, null);
+
+            var getgen = method.GetILGenerator();
+            getgen.Emit(OpCodes.Newobj, returnType);
+            getgen.Emit(OpCodes.Ret);
+
+            return method;
+        }
+
+        [Fact]
+        public void TestMethodOverloadByReturnType()
+        {
+            var pickler = new Pickler(_ => AssemblyPickleMode.PickleByReference);
+
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestMethodOverloadByReturnType"), AssemblyBuilderAccess.Run);
+            var module = assembly.DefineDynamicModule("main");
+            var type = module.DefineType("test");
+            var intMethod = DefineBasicMethod(type, "Method", MethodAttributes.Public, typeof(int));
+            var longMethod = DefineBasicMethod(type, "Method", MethodAttributes.Public, typeof(long));
+            var typeInstance = type.CreateType();
+
+            var methods = typeInstance.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly);
+            Assert.Equal(2, methods.Length);
+
+            foreach (var method in methods)
+            {
+                RoundTrip.Assert(pickler, method);
+            }
+        }
     }
 }

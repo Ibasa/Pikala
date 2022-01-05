@@ -368,7 +368,7 @@ namespace Ibasa.Pikala
             throw new NotImplementedException();
         }
 
-        public override Signature GetSignature()
+        public Signature GetSignature()
         {
             return new Signature(MethodBuilder.Name, GenericParameters?.Length ?? 0, SignatureElement.FromType(MethodBuilder.ReturnType), SignatureElement.FromTypes(ParameterTypes));
         }
@@ -570,11 +570,6 @@ namespace Ibasa.Pikala
         public abstract MethodBase MethodBase { get; }
 
         public abstract object? Invoke(object? target, params object?[] args);
-
-        public virtual Signature GetSignature()
-        {
-            return Signature.GetSignature(MethodBase);
-        }
     }
 
     abstract class PickledConstructorInfo : PickledMethodBase
@@ -632,7 +627,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        public override Signature GetSignature()
+        public Signature GetSignature()
         {
             return new Signature(ConstructorBuilder.Name, 0, SignatureElement.FromType(ConstructingType.Type), SignatureElement.FromTypes(ParameterTypes));
         }
@@ -712,7 +707,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        public override Signature GetSignature()
+        public Signature GetSignature()
         {
             return new Signature(PropertyBuilder.Name, 0, SignatureElement.FromType(PropertyBuilder.PropertyType), SignatureElement.FromTypes(IndexParameters));
         }

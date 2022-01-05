@@ -201,6 +201,20 @@ namespace Ibasa.Pikala.Tests
         }
 
         [Fact]
+        public void TestFSharpUnit()
+        {
+            var script = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "let base64 = serializeBase64 typeof<unit>",
+                "printf \"%s\" base64",
+            });
+
+            var result = Base64ToObject(RunFsi(script)) as Type;
+            Assert.Same(typeof(Microsoft.FSharp.Core.Unit), result);
+        }
+
+        [Fact]
         public void TestInt()
         {
             AssertFsiToStringObject(2);
@@ -455,6 +469,25 @@ namespace Ibasa.Pikala.Tests
 
             Assert.Equal("2", result(1));
             Assert.Equal("4", result(2));
+        }
+
+        [Fact]
+        public void TestReturnFSharpMethod()
+        {
+            var script = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "let func = fun list -> \"hello\" :: list",
+                "let base64 = serializeBase64 func",
+                "printf \"%s\" base64",
+            });
+
+            var result = Base64ToObject(RunFsi(script)) as Microsoft.FSharp.Core.FSharpFunc<
+                Microsoft.FSharp.Collections.FSharpList<string>, Microsoft.FSharp.Collections.FSharpList<string>>;
+
+            var nil = Microsoft.FSharp.Collections.FSharpList<string>.Empty;
+            var expected = Microsoft.FSharp.Collections.FSharpList<string>.Cons("hello", nil);
+            Assert.Equal(expected, result.Invoke(nil));
         }
 
         [Fact]
