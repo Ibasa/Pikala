@@ -38,7 +38,7 @@ Deserialize a `Func<int, int>`:
 using Ibasa.Pikala
 
 // This is a snapshot of serializing `(Func<int, int>)Math.Abs`
-var memoryStream = new MemoryStream(Convert.FromBase64String("UEtMQQEAAAApJRwaGA1TeXN0ZW0uRnVuY2AyAhwaGAxTeXN0ZW0uSW50MzIXHAAAAAAAAAABAB8eU3lzdGVtLkludDMyIEFicyhTeXN0ZW0uSW50MzIpABwaGAtTeXN0ZW0uTWF0aA=="));
+var memoryStream = new MemoryStream(Convert.FromBase64String("UEtMQQEAAAApJRwaGA1TeXN0ZW0uRnVuY2AyAhwaGAxTeXN0ZW0uSW50MzIXHAAAAAAAAAABAB8cGhgLU3lzdGVtLk1hdGgeU3lzdGVtLkludDMyIEFicyhTeXN0ZW0uSW50MzIpAA=="));
 
 var pickler = new Pickler();
 var function = pickler.Deserialize(memoryStream) as Func<int, int>;
