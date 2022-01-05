@@ -20,7 +20,7 @@ namespace Ibasa.Pikala
                 }
             }
 
-            var returnType = (method is MethodInfo methodInfo) ? methodInfo.ReturnType: typeof(void);
+            var returnType = (method is MethodInfo methodInfo) ? methodInfo.ReturnType : typeof(void);
             if (returnType.IsGenericParameter)
             {
                 if (returnType.DeclaringMethod != null)
