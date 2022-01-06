@@ -438,10 +438,10 @@ namespace Ibasa.Pikala
 
             if (!isValueType)
             {
-                var baseType = Deserialize<PickledTypeInfo>(state, TypeInfo, constructingType.GenericParameters, null);
+                var baseType = Deserialize(state, TypeInfo, constructingType.GenericParameters, null);
                 if (baseType != null)
                 {
-                    typeBuilder.SetParent(baseType.Type);
+                    typeBuilder.SetParent(((PickledTypeInfo)baseType).Type);
                 }
             }
 
@@ -953,7 +953,7 @@ namespace Ibasa.Pikala
 
         private object DeserializeReducer(PicklerDeserializationState state, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
-            var method = Deserialize<PickledMethodBase>(state, MakeInfo(typeof(MethodBase)), genericTypeParameters, genericMethodParameters);
+            var method = DeserializeNonNull<PickledMethodBase>(state, MakeInfo(typeof(MethodBase)), genericTypeParameters, genericMethodParameters);
 
             object? target;
             if (method is PickledConstructorInfo)
@@ -1587,13 +1587,6 @@ namespace Ibasa.Pikala
             var memo = state.RegisterMemoCallback(position, callback);
             var result = DeserializeNonNull<T>(state, info, genericTypeParameters, genericMethodParameters);
             return (memo, result);
-        }
-
-        [return: MaybeNull]
-        private T Deserialize<T>(PicklerDeserializationState state, DeserializeInformation info, Type[]? genericTypeParameters, Type[]? genericMethodParameters) where T : class
-        {
-            var obj = Deserialize(state, info, genericTypeParameters, genericMethodParameters);
-            return obj as T;
         }
 
         private T DeserializeNonNull<T>(PicklerDeserializationState state, DeserializeInformation info, Type[]? genericTypeParameters, Type[]? genericMethodParameters) where T : class
