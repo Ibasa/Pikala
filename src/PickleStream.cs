@@ -65,5 +65,11 @@ namespace Ibasa.Pikala
             _stream.Write(buffer);
             _position += buffer.Length;
         }
+
+        public override void WriteByte(byte value)
+        {
+            _stream.WriteByte(value);
+            ++_position;
+        }
     }
 }
