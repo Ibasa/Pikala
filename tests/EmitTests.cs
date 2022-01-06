@@ -341,5 +341,43 @@ namespace Ibasa.Pikala.Tests
             var tagField = RoundTrip.Do(pickler, TestTypes.SelfReferenceStatic.TagField);
             Assert.Equal("Tag", tagField.Name);
         }
+
+        [Fact]
+        public void TestEvents()
+        {
+            var pickler = CreatePickler();
+
+            var obj = new TestTypes.ClassTypeWithEvents();
+            var result = RoundTrip.Do<object>(pickler, obj);
+
+            Assert.NotNull(result);
+            var resultType = result.GetType();
+
+            // Check we've got two events
+            var events = resultType.GetEvents();
+            Assert.Equal(2, events.Length);
+            Assert.Contains(events, evt => evt.Name == "FieldEvent");
+            Assert.Contains(events, evt => evt.Name == "PropertyEvent");
+
+            var addHandler = (Action<EventHandler>)(resultType.GetMethod("AddHandler").CreateDelegate(typeof(Action<EventHandler>), result));
+            var removeHandler = (Action<EventHandler>)(resultType.GetMethod("RemoveHandler").CreateDelegate(typeof(Action<EventHandler>), result));
+            var invoke = (Action)(resultType.GetMethod("Invoke").CreateDelegate(typeof(Action), result));
+
+            var invokeCount = 0;
+            void Handler(object sender, EventArgs e)
+            {
+                ++invokeCount;
+                Assert.Same(result, sender);
+            }
+
+            addHandler(Handler);
+            invoke();
+            // 2 because we invoke the field event and property event
+            Assert.Equal(2, invokeCount);
+            removeHandler(Handler);
+            invoke();
+            // handler was removed so invoke shouldn't of invoked our method again
+            Assert.Equal(2, invokeCount);
+        }
     }
 }

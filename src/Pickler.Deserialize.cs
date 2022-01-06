@@ -507,6 +507,14 @@ namespace Ibasa.Pikala
                 typeBuilder.DefineMethodOverride(targetMethod, interfaceMethod.MethodInfo);
             }
 
+            MethodBuilder GetMethod(Signature signature)
+            {
+                var info = constructingType.GetMethod(signature);
+                // If we had covariant returns this cast wouldn't be needed.
+                var def = (PickledMethodInfoDef)info;
+                return def.MethodBuilder;
+            }
+
             var propertyCount = state.Reader.Read7BitEncodedInt();
             constructingType.Properties = new PickledPropertyInfoDef[propertyCount];
             for (int i = 0; i < propertyCount; ++i)
@@ -529,15 +537,6 @@ namespace Ibasa.Pikala
                 var hasSetter = (count & 0x2) != 0;
                 var otherCount = count >> 2;
 
-
-                MethodBuilder GetMethod(Signature signature)
-                {
-                    var info = constructingType.GetMethod(signature);
-                    // If we had covariant returns this cast wouldn't be needed.
-                    var def = (PickledMethodInfoDef)info;
-                    return def.MethodBuilder;
-                }
-
                 if (hasGetter)
                 {
                     propertyBuilder.SetGetMethod(GetMethod(DeserializeSignature(state)));
@@ -552,6 +551,35 @@ namespace Ibasa.Pikala
                 }
             }
 
+            var eventCount = state.Reader.Read7BitEncodedInt();
+            constructingType.Events = new PickledEventInfoDef[eventCount];
+            for (int i = 0; i < eventCount; ++i)
+            {
+                var eventName = state.Reader.ReadString();
+                var eventAttributes = (EventAttributes)state.Reader.ReadInt32();
+                var eventType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, constructingType.GenericParameters, null);
+
+
+                var eventBuilder = typeBuilder.DefineEvent(eventName, eventAttributes, eventType.Type);
+                constructingType.Events[i] = new PickledEventInfoDef(constructingType, eventBuilder, eventName);
+
+                var count = state.Reader.Read7BitEncodedInt();
+                var hasRaiser = (count & 0x1) != 0;
+                var otherCount = count >> 1;
+
+                eventBuilder.SetAddOnMethod(GetMethod(DeserializeSignature(state)));
+                eventBuilder.SetRemoveOnMethod(GetMethod(DeserializeSignature(state)));
+
+                if (hasRaiser)
+                {
+                    eventBuilder.SetRaiseMethod(GetMethod(DeserializeSignature(state)));
+                }
+                for (var j = 0; j < otherCount; ++j)
+                {
+                    eventBuilder.AddOtherMethod(GetMethod(DeserializeSignature(state)));
+                }
+            }
+
             state.PushTrailer(() =>
             {
                 ReadCustomAttributes(state, constructingType.TypeBuilder.SetCustomAttribute);
@@ -559,10 +587,6 @@ namespace Ibasa.Pikala
                 foreach (var field in constructingType.Fields)
                 {
                     ReadCustomAttributes(state, field.FieldBuilder.SetCustomAttribute);
-                }
-                foreach (var property in constructingType.Properties)
-                {
-                    ReadCustomAttributes(state, property.PropertyBuilder.SetCustomAttribute);
                 }
                 foreach (var constructor in constructingType.Constructors)
                 {
@@ -585,6 +609,14 @@ namespace Ibasa.Pikala
                         var ilGenerator = methodBuilder.GetILGenerator();
                         DeserializeMethodBody(state, constructingType.GenericParameters, method.GenericParameters, method.Locals!, ilGenerator);
                     }
+                }
+                foreach (var property in constructingType.Properties)
+                {
+                    ReadCustomAttributes(state, property.PropertyBuilder.SetCustomAttribute);
+                }
+                foreach (var evt in constructingType.Events)
+                {
+                    ReadCustomAttributes(state, evt.EventBuilder.SetCustomAttribute);
                 }
 
                 constructingType.FullyDefined = true;
@@ -1023,6 +1055,20 @@ namespace Ibasa.Pikala
                 }
                 var signature = DeserializeSignature(state);
                 return state.SetMemo(position, true, type.GetProperty(signature));
+            });
+        }
+
+        private PickledEventInfo DeserializeEventInfo(PicklerDeserializationState state, long position, DeserializeInformation info, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
+        {
+            return state.RunWithTrailers(() =>
+            {
+                var type = info.ContextType;
+                if (type == null)
+                {
+                    type = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+                }
+                var name = state.Reader.ReadString();
+                return state.SetMemo(position, true, type.GetEvent(name));
             });
         }
 
@@ -1622,6 +1668,9 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.PropertyRef:
                     return DeserializePropertyInfo(state, position, info, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.EventRef:
+                    return DeserializeEventInfo(state, position, info, genericTypeParameters, genericMethodParameters);
 
                 case PickleOperation.MethodRef:
                     return DeserializeMethodInfo(state, position, info, genericTypeParameters, genericMethodParameters);

@@ -709,6 +709,35 @@ namespace Ibasa.Pikala
                 }
             }
 
+            var events = type.GetEvents(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+            state.Writer.Write7BitEncodedInt(events.Length);
+            foreach (var evt in events)
+            {
+                state.Writer.Write(evt.Name);
+                state.Writer.Write((int)evt.Attributes);
+                Serialize(state, evt.EventHandlerType, MakeInfo(evt.EventHandlerType, typeof(Type), true), genericParameters);
+
+                var others = evt.GetOtherMethods();
+                var raiser = evt.RaiseMethod;
+
+                var count = (others.Length << 1) + (raiser == null ? 0 : 1);
+                state.Writer.Write7BitEncodedInt(count);
+                // add and remove look to be required so we don't include them in count
+                // 22.13 Event : 0x14
+                // 9. For each row, there shall be one add_ and one remove_ row in the MethodSemantics table [ERROR]
+                SerializeSignature(state, Signature.GetSignature(evt.AddMethod!));
+                SerializeSignature(state, Signature.GetSignature(evt.RemoveMethod!));
+
+                if (raiser != null)
+                {
+                    SerializeSignature(state, Signature.GetSignature(raiser));
+                }
+                foreach (var other in others)
+                {
+                    SerializeSignature(state, Signature.GetSignature(other));
+                }
+            }
+
             state.PushTrailer(() =>
             {
                 // Custom attributes might be self referencing so make sure all ctors and things are setup first
@@ -717,10 +746,6 @@ namespace Ibasa.Pikala
                 foreach (var field in fields)
                 {
                     WriteCustomAttributes(state, field.CustomAttributes.ToArray());
-                }
-                foreach (var property in properties)
-                {
-                    WriteCustomAttributes(state, property.CustomAttributes.ToArray());
                 }
                 foreach (var constructor in constructors)
                 {
@@ -735,6 +760,14 @@ namespace Ibasa.Pikala
                     {
                         SerializeMethodBody(state, genericParameters, method.Module, method.GetGenericArguments(), methodBody);
                     }
+                }
+                foreach (var property in properties)
+                {
+                    WriteCustomAttributes(state, property.CustomAttributes.ToArray());
+                }
+                foreach (var evt in events)
+                {
+                    WriteCustomAttributes(state, evt.CustomAttributes.ToArray());
                 }
             }, () =>
             {
@@ -1177,6 +1210,21 @@ namespace Ibasa.Pikala
             });
         }
 
+        private void SerializeEventInfo(PicklerSerializationState state, SerializeInformation info, EventInfo evt)
+        {
+            state.RunWithTrailers(() =>
+            {
+                System.Diagnostics.Debug.Assert(info.ContextType == null || info.ContextType == evt.ReflectedType);
+
+                if (info.ContextType == null)
+                {
+                    Serialize(state, evt.ReflectedType, MakeInfo(evt.ReflectedType, typeof(Type), true));
+                }
+
+                state.Writer.Write(evt.Name);
+            });
+        }
+
         private void SerializeMethodInfo(PicklerSerializationState state, SerializeInformation info, MethodInfo method)
         {
             state.RunWithTrailers(() =>
@@ -1421,6 +1469,10 @@ namespace Ibasa.Pikala
                             {
                                 return new OperationCacheEntry(typeCode, PickleOperation.PropertyRef);
                             }
+                            else if (runtimeType.IsAssignableTo(typeof(EventInfo)))
+                            {
+                                return new OperationCacheEntry(typeCode, PickleOperation.EventRef);
+                            }
                             else if (runtimeType.IsAssignableTo(typeof(MethodInfo)))
                             {
                                 return new OperationCacheEntry(typeCode, PickleOperation.MethodRef);
@@ -1429,8 +1481,6 @@ namespace Ibasa.Pikala
                             {
                                 return new OperationCacheEntry(typeCode, PickleOperation.ConstructorRef);
                             }
-
-                            // TODO Events!
                         }
                         // End of reflection handlers
 
@@ -1588,6 +1638,9 @@ namespace Ibasa.Pikala
                                 return;
                             case PickleOperation.PropertyRef:
                                 SerializePropertyInfo(state, info, (PropertyInfo)obj);
+                                return;
+                            case PickleOperation.EventRef:
+                                SerializeEventInfo(state, info, (EventInfo)obj);
                                 return;
                             case PickleOperation.MethodRef:
                                 SerializeMethodInfo(state, info, (MethodInfo)obj);
