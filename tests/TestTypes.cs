@@ -479,5 +479,42 @@ namespace Ibasa.Pikala.Tests
                 return Tag.ToString();
             }
         }
+
+        public sealed class ClassTypeWithEvents
+        {
+            public event EventHandler FieldEvent;
+
+            private EventHandler? _delegate = null;
+            public event EventHandler PropertyEvent
+            {
+                add { _delegate += value; }
+                remove { _delegate -= value; }
+            }
+
+            public void Invoke()
+            {
+                var args = new EventArgs();
+                if (FieldEvent != null)
+                {
+                    FieldEvent(this, args);
+                }
+                if (_delegate != null)
+                {
+                    _delegate(this, args);
+                }
+            }
+
+            public void AddHandler(EventHandler handler)
+            {
+                FieldEvent += handler;
+                PropertyEvent += handler;
+            }
+
+            public void RemoveHandler(EventHandler handler)
+            {
+                FieldEvent -= handler;
+                PropertyEvent -= handler;
+            }
+        }
     }
 }

@@ -161,6 +161,7 @@ namespace Ibasa.Pikala.Tests
             new[] { typeof(Dictionary<,>) },
             new[] { typeof(Pickler) },
             new[] { typeof(TestTypes.ClassTypeWithIndexers) },
+            new[] { typeof(TestTypes.ClassTypeWithEvents) },
         };
 
         [Theory]
@@ -270,6 +271,19 @@ namespace Ibasa.Pikala.Tests
             foreach (var ctor in ctors)
             {
                 RoundTrip.Assert(pickler, ctor);
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(ExampleTypeSet))]
+        public void TestEventRef(Type type)
+        {
+            var pickler = new Pickler();
+
+            var events = type.GetEvents(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
+            foreach (var evt in events)
+            {
+                RoundTrip.Assert(pickler, evt);
             }
         }
 

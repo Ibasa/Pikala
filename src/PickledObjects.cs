@@ -19,6 +19,8 @@ namespace Ibasa.Pikala
 
         public abstract PickledPropertyInfo GetProperty(Signature signature);
 
+        public abstract PickledEventInfo GetEvent(string name);
+
         public override void Emit(ILGenerator ilGenerator, OpCode opCode)
         {
             ilGenerator.Emit(opCode, Type);
@@ -72,6 +74,16 @@ namespace Ibasa.Pikala
             return new PickledFieldInfoRef(result);
         }
 
+        public override PickledEventInfo GetEvent(string name)
+        {
+            var result = Type.GetEvent(name, BindingsAll);
+            if (result == null)
+            {
+                throw new Exception($"Could not load event '{name}' from type '{Type.Name}'");
+            }
+            return new PickledEventInfoRef(result);
+        }
+
         public override PickledPropertyInfo GetProperty(Signature signature)
         {
             var properties = Type.GetProperties(BindingsAll);
@@ -119,6 +131,11 @@ namespace Ibasa.Pikala
             throw new NotImplementedException();
         }
 
+        public override PickledEventInfo GetEvent(string name)
+        {
+            throw new NotImplementedException();
+        }
+
         public override PickledPropertyInfo GetProperty(Signature signature)
         {
             throw new NotImplementedException();
@@ -154,6 +171,11 @@ namespace Ibasa.Pikala
         }
 
         public override PickledFieldInfo GetField(string name)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override PickledEventInfo GetEvent(string name)
         {
             throw new NotImplementedException();
         }
@@ -214,6 +236,7 @@ namespace Ibasa.Pikala
         public PickledPropertyInfoDef[]? Properties { get; set; }
         public PickledMethodInfoDef[]? Methods { get; set; }
         public PickledConstructorInfoDef[]? Constructors { get; set; }
+        public PickledEventInfoDef[]? Events { get; set; }
 
         public override string ToString()
         {
@@ -266,6 +289,21 @@ namespace Ibasa.Pikala
             }
 
             throw new Exception($"Could not load field '{name}' from type '{TypeBuilder.Name}'");
+        }
+        public override PickledEventInfo GetEvent(string name)
+        {
+            if (Events != null)
+            {
+                foreach (var evt in Events)
+                {
+                    if (evt.Name == name)
+                    {
+                        return evt;
+                    }
+                }
+            }
+
+            throw new Exception($"Could not load event '{name}' from type '{TypeBuilder.Name}'");
         }
 
         public override PickledPropertyInfo GetProperty(Signature signature)
@@ -481,6 +519,22 @@ namespace Ibasa.Pikala
             {
                 var fieldInfo = GenericType.GetField(name);
                 return new PickledFieldInfoRef(TypeBuilder.GetField(type, fieldInfo.FieldInfo));
+            }
+        }
+
+        public override PickledEventInfo GetEvent(string name)
+        {
+            var (type, isComplete) = ResolveType();
+
+            if (isComplete)
+            {
+                var infoRef = new PickledTypeInfoRef(type);
+                return infoRef.GetEvent(name);
+            }
+            else
+            {
+                var eventInfo = GenericType.GetEvent(name);
+                return new PickledEventInfoRef(eventInfo.EventInfo);
             }
         }
 
@@ -714,6 +768,65 @@ namespace Ibasa.Pikala
         public Signature GetSignature()
         {
             return new Signature(PropertyBuilder.Name, 0, SignatureElement.FromType(PropertyBuilder.PropertyType), SignatureElement.FromTypes(IndexParameters));
+        }
+    }
+
+    abstract class PickledEventInfo : PickledMemberInfo
+    {
+        public override MemberInfo MemberInfo { get { return EventInfo; } }
+
+        public abstract EventInfo EventInfo { get; }
+
+        public override void Emit(ILGenerator ilGenerator, OpCode opCode)
+        {
+            throw new Exception("Can't emit event info to IL stream");
+        }
+
+        public override PickledTypeInfo GetGenericArgument(int position)
+        {
+            throw new Exception("Events do not have generic arguments");
+        }
+    }
+
+    sealed class PickledEventInfoRef : PickledEventInfo
+    {
+        public override EventInfo EventInfo { get; }
+
+        public PickledEventInfoRef(EventInfo eventInfo)
+        {
+            EventInfo = eventInfo;
+        }
+    }
+
+    sealed class PickledEventInfoDef : PickledEventInfo
+    {
+        public PickledEventInfoDef(PickledTypeInfoDef declaringType, EventBuilder eventBuilder, string name)
+        {
+            DeclaringType = declaringType;
+            EventBuilder = eventBuilder;
+            Name = name;
+        }
+
+        public PickledTypeInfoDef DeclaringType { get; }
+        public EventBuilder EventBuilder { get; }
+        public string Name { get; }
+
+        public override EventInfo EventInfo
+        {
+            get
+            {
+                if (!DeclaringType.IsCreated)
+                {
+                    throw new Exception("EventBuilder can't create an EventInfo until the type is created");
+                }
+
+                var result = DeclaringType.Type.GetEvent(Name, BindingsAll);
+                if (result == null)
+                {
+                    throw new Exception($"GetField for {DeclaringType.Type.Name} unexpectedly returned null");
+                }
+                return result;
+            }
         }
     }
 
