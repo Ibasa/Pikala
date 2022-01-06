@@ -787,45 +787,44 @@ namespace Ibasa.Pikala
             // B) We wouldn't do this for user defined type because they might change layout been write and read
             if (elementType.IsPrimitive)
             {
-                unsafe
+                // TODO We should just use Unsafe.SizeOf here but that's a net5.0 addition
+                long byteCount;
+                if (elementType == typeof(bool))
                 {
-                    var arrayHandle = System.Runtime.InteropServices.GCHandle.Alloc(array, System.Runtime.InteropServices.GCHandleType.Pinned);
-                    try
-                    {
-                        var pin = arrayHandle.AddrOfPinnedObject();
-                        // TODO We should just use Unsafe.SizeOf here but that's a net5.0 addition
-                        long byteCount;
-                        if (elementType == typeof(bool))
-                        {
-                            byteCount = array.LongLength;
-                        }
-                        else if (elementType == typeof(char))
-                        {
-                            byteCount = 2 * array.LongLength;
-                        }
-                        else
-                        {
-                            byteCount = System.Runtime.InteropServices.Marshal.SizeOf(elementType) * array.LongLength;
-                        }
+                    byteCount = array.LongLength;
+                }
+                else if (elementType == typeof(char))
+                {
+                    byteCount = 2 * array.LongLength;
+                }
+                else
+                {
+                    byteCount = System.Runtime.InteropServices.Marshal.SizeOf(elementType) * array.LongLength;
+                }
 
+                var arrayHandle = System.Runtime.InteropServices.GCHandle.Alloc(array, System.Runtime.InteropServices.GCHandleType.Pinned);
+                try
+                {
+                    unsafe
+                    {
+                        var pin = (byte*)arrayHandle.AddrOfPinnedObject().ToPointer();
                         while (byteCount > 0)
                         {
-                            // Read 4k at a time
-                            var bufferSize = 4096L;
-                            var length = (int)(byteCount < bufferSize ? byteCount : bufferSize);
+                            // Read upto 4k at a time
+                            var length = (int)Math.Min(byteCount, 4096);
 
-                            var span = new Span<byte>(pin.ToPointer(), length);
+                            var span = new Span<byte>(pin, length);
                             state.Reader.Read(span);
 
-                            pin = IntPtr.Add(pin, length);
+                            pin += length;
                             byteCount -= length;
                         }
                     }
-                    finally
-                    {
-                        arrayHandle.Free();
+                }
+                finally
+                {
+                    arrayHandle.Free();
 
-                    }
                 }
             }
             else

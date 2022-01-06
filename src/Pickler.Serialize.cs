@@ -798,6 +798,7 @@ namespace Ibasa.Pikala
             }
 
             var elementType = objType.GetElementType();
+            System.Diagnostics.Debug.Assert(elementType != null, "GetElementType returned null for an array type");
             Serialize(state, elementType, MakeInfo(elementType, typeof(Type), true));
 
             // Special case szarray (i.e. Rank 1, lower bound 0)
@@ -818,45 +819,43 @@ namespace Ibasa.Pikala
             // If this is a primitive type just block copy it across to the stream
             if (elementType.IsPrimitive)
             {
-                unsafe
+                var arrayHandle = System.Runtime.InteropServices.GCHandle.Alloc(obj, System.Runtime.InteropServices.GCHandleType.Pinned);
+                try
                 {
-                    var arrayHandle = System.Runtime.InteropServices.GCHandle.Alloc(obj, System.Runtime.InteropServices.GCHandleType.Pinned);
-                    try
+                    // TODO We should just use Unsafe.SizeOf here but that's a net5.0 addition
+                    long byteCount;
+                    if (elementType == typeof(bool))
                     {
-                        var pin = arrayHandle.AddrOfPinnedObject();
-                        // TODO We should just use Unsafe.SizeOf here but that's a net5.0 addition
-                        long byteCount;
-                        if (elementType == typeof(bool))
-                        {
-                            byteCount = obj.LongLength;
-                        }
-                        else if (elementType == typeof(char))
-                        {
-                            byteCount = 2 * obj.LongLength;
-                        }
-                        else
-                        {
-                            byteCount = System.Runtime.InteropServices.Marshal.SizeOf(elementType) * obj.LongLength;
-                        }
+                        byteCount = obj.LongLength;
+                    }
+                    else if (elementType == typeof(char))
+                    {
+                        byteCount = 2 * obj.LongLength;
+                    }
+                    else
+                    {
+                        byteCount = System.Runtime.InteropServices.Marshal.SizeOf(elementType) * obj.LongLength;
+                    }
 
+                    unsafe
+                    {
+                        var pin = (byte*)arrayHandle.AddrOfPinnedObject().ToPointer();
                         while (byteCount > 0)
                         {
-                            // Write 4k at a time
-                            var bufferSize = 4096L;
-                            var length = (int)(byteCount < bufferSize ? byteCount : bufferSize);
+                            // Write upto 4k at a time
+                            var length = (int)Math.Min(byteCount, 4096);
 
-                            var span = new ReadOnlySpan<byte>(pin.ToPointer(), length);
+                            var span = new ReadOnlySpan<byte>(pin, length);
                             state.Writer.Write(span);
 
-                            pin = IntPtr.Add(pin, length);
+                            pin += length;
                             byteCount -= length;
                         }
                     }
-                    finally
-                    {
-                        arrayHandle.Free();
-
-                    }
+                }
+                finally
+                {
+                    arrayHandle.Free();
                 }
             }
             else
