@@ -16,7 +16,7 @@ namespace Ibasa.Pikala
         {
             get
             {
-                if(_type == null)
+                if (_type == null)
                 {
                     _type = _value?.GetType() ?? typeof(object);
                 }
@@ -1596,8 +1596,8 @@ namespace Ibasa.Pikala
                     {
                         System.Diagnostics.Debug.Assert(inferedOperationToken.Value == operation);
                     }
-                    else 
-                    { 
+                    else
+                    {
                         state.Writer.Write((byte)operation);
                     }
 
