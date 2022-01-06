@@ -26,7 +26,6 @@ namespace Ibasa.Pikala.Tests
     {
         private void LargeArrayTest<X, Y>(Func<X> generator, Func<X, Y> checker)
         {
-            var pickler = new Pickler();
             // Large array tests output so much data they won't fit into a .NET byte array, we have to serialize to a FileStream.
             var file = Path.GetTempFileName();
             try
@@ -36,6 +35,7 @@ namespace Ibasa.Pikala.Tests
                     var value = generator();
 
                     using var fileStream = File.OpenWrite(file);
+                    var pickler = new Pickler();
                     pickler.Serialize(fileStream, value);
 
                     // These are huge arrays so we just check a subset of properties
@@ -45,6 +45,7 @@ namespace Ibasa.Pikala.Tests
                 Y Read()
                 {
                     using var fileStream = File.OpenRead(file);
+                    var pickler = new Pickler();
                     var value = (X)pickler.Deserialize(fileStream);
                     return checker(value);
                 }
