@@ -1582,159 +1582,6 @@ namespace Ibasa.Pikala
             });
         }
 
-        private object DeserializeComplex(PicklerDeserializationState state, PickleOperation operation, DeserializeInformation info, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
-        {
-            // Operation won't be any of the primitive operations once this is called
-
-            // -1 for the operation code we've already read
-            var position = state.Reader.BaseStream.Position - 1;
-
-            switch (operation)
-            {
-                case PickleOperation.SZArray:
-                case PickleOperation.Array:
-                    return DeserializeArray(state, operation == PickleOperation.SZArray, position, genericTypeParameters, genericMethodParameters);
-
-                case PickleOperation.Mscorlib:
-                    // We don't memo mscorlib, it's cheaper to just have the single byte token
-                    return mscorlib;
-
-                case PickleOperation.AssemblyRef:
-                    return DeserializeAsesmblyRef(state, position);
-
-                case PickleOperation.AssemblyDef:
-                    return DeserializeAsesmblyDef(state, position, genericTypeParameters, genericMethodParameters);
-
-                case PickleOperation.ManifestModuleRef:
-                    return DeserializeManifestModuleRef(state, position, genericTypeParameters, genericMethodParameters);
-
-                case PickleOperation.ModuleRef:
-                    return DeserializeModuleRef(state, position, genericTypeParameters, genericMethodParameters);
-
-                case PickleOperation.ModuleDef:
-                    return DeserializeModuleDef(state, position, genericTypeParameters, genericMethodParameters);
-
-                case PickleOperation.ArrayType:
-                    {
-                        var rank = state.Reader.ReadByte();
-                        var elementType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
-                        Type arrayType;
-                        if (rank == 0)
-                        {
-                            arrayType = elementType.Type.MakeArrayType();
-                        }
-                        else
-                        {
-                            arrayType = elementType.Type.MakeArrayType(rank);
-                        }
-                        return state.SetMemo(position, true, new PickledTypeInfoRef(arrayType));
-                    }
-
-                case PickleOperation.GenericInstantiation:
-                    return DeserializeGenericInstantiation(state, position, genericTypeParameters, genericMethodParameters);
-
-                case PickleOperation.GenericParameter:
-                    return DeserializeGenericParameter(state, position, genericTypeParameters, genericMethodParameters);
-
-                case PickleOperation.MVar:
-                    {
-                        var genericParameterPosition = state.Reader.Read7BitEncodedInt();
-                        if (genericMethodParameters == null)
-                        {
-                            throw new Exception("Encountered an MVar operation without a current method context");
-                        }
-                        return state.SetMemo(position, true, new PickledTypeInfoRef(genericMethodParameters[genericParameterPosition]));
-                    }
-
-                case PickleOperation.TVar:
-                    {
-                        var genericParameterPosition = state.Reader.Read7BitEncodedInt();
-                        if (genericTypeParameters == null)
-                        {
-                            throw new Exception("Encountered an TVar operation without a current type context");
-                        }
-                        return state.SetMemo(position, true, new PickledTypeInfoRef(genericTypeParameters[genericParameterPosition]));
-                    }
-
-                case PickleOperation.TypeRef:
-                    return DeserializeTypeRef(state, position, genericTypeParameters, genericMethodParameters);
-
-                case PickleOperation.TypeDef:
-                    return DeserializeTypeDef(state, position, genericTypeParameters, genericMethodParameters);
-
-                case PickleOperation.FieldRef:
-                    return DeserializeFieldInfo(state, position, info, genericTypeParameters, genericMethodParameters);
-
-                case PickleOperation.PropertyRef:
-                    return DeserializePropertyInfo(state, position, info, genericTypeParameters, genericMethodParameters);
-
-                case PickleOperation.EventRef:
-                    return DeserializeEventInfo(state, position, info, genericTypeParameters, genericMethodParameters);
-
-                case PickleOperation.MethodRef:
-                    return DeserializeMethodInfo(state, position, info, genericTypeParameters, genericMethodParameters);
-
-                case PickleOperation.ConstructorRef:
-                    return DeserializeConstructorInfo(state, position, info, genericTypeParameters, genericMethodParameters);
-
-                case PickleOperation.Delegate:
-                    return DeserializeDelegate(state, position, genericTypeParameters, genericMethodParameters);
-
-                case PickleOperation.Tuple:
-                case PickleOperation.ValueTuple:
-                    return state.SetMemo(position, info.ShouldMemo, DeserializeTuple(state, operation == PickleOperation.ValueTuple, genericTypeParameters, genericMethodParameters));
-
-                case PickleOperation.Reducer:
-                    {
-                        return state.SetMemo(position, info.ShouldMemo, DeserializeReducer(state, genericTypeParameters, genericMethodParameters));
-                    }
-
-                case PickleOperation.ISerializable:
-                    {
-                        Type objType;
-                        if (info.StaticType.IsValueType)
-                        {
-                            objType = info.StaticType;
-                        }
-                        else
-                        {
-                            var pickledObjType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
-                            objType = pickledObjType.Type;
-                        }
-                        return state.SetMemo(position, info.ShouldMemo, DeserializeISerializable(state, objType, genericTypeParameters, genericMethodParameters));
-                    }
-
-                case PickleOperation.Object:
-                    {
-                        object uninitalizedObject;
-                        Type objectType;
-                        if (info.StaticType.IsValueType)
-                        {
-                            objectType = info.StaticType;
-                            uninitalizedObject = state.SetMemo(position, info.ShouldMemo, System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objectType));
-                        }
-                        else
-                        {
-                            var (callback, objType) = DeserializeWithMemo(state, position, (PickledTypeInfo objType) =>
-                            {
-                                var result = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objType.Type);
-                                return state.SetMemo(position, info.ShouldMemo, result);
-                            }, TypeInfo, genericTypeParameters, genericMethodParameters);
-
-                            objectType = objType.Type;
-                            uninitalizedObject = callback.Invoke();
-                        }
-                        DeserializeObject(state, uninitalizedObject, objectType, genericTypeParameters, genericMethodParameters);
-                        return uninitalizedObject;
-                    }
-
-                default:
-                    {
-                        throw new Exception($"Unhandled PickleOperation '{operation}'");
-                    }
-            }
-        }
-
         private (MemoCallback<R>, T) DeserializeWithMemo<T, R>(PicklerDeserializationState state, long position, Func<T, R> callback, DeserializeInformation info, Type[]? genericTypeParameters, Type[]? genericMethodParameters) where T : class where R : class
         {
             var memo = state.RegisterMemoCallback(position, callback);
@@ -1901,9 +1748,146 @@ namespace Ibasa.Pikala
                         state.SetMemo(position, info.ShouldMemo, result);
                         return result;
                     }
+
+                case PickleOperation.SZArray:
+                case PickleOperation.Array:
+                    return DeserializeArray(state, operation == PickleOperation.SZArray, position, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.Mscorlib:
+                    // We don't memo mscorlib, it's cheaper to just have the single byte token
+                    return mscorlib;
+
+                case PickleOperation.AssemblyRef:
+                    return DeserializeAsesmblyRef(state, position);
+
+                case PickleOperation.AssemblyDef:
+                    return DeserializeAsesmblyDef(state, position, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.ManifestModuleRef:
+                    return DeserializeManifestModuleRef(state, position, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.ModuleRef:
+                    return DeserializeModuleRef(state, position, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.ModuleDef:
+                    return DeserializeModuleDef(state, position, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.ArrayType:
+                    {
+                        var rank = state.Reader.ReadByte();
+                        var elementType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+                        Type arrayType;
+                        if (rank == 0)
+                        {
+                            arrayType = elementType.Type.MakeArrayType();
+                        }
+                        else
+                        {
+                            arrayType = elementType.Type.MakeArrayType(rank);
+                        }
+                        return state.SetMemo(position, true, new PickledTypeInfoRef(arrayType));
+                    }
+
+                case PickleOperation.GenericInstantiation:
+                    return DeserializeGenericInstantiation(state, position, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.GenericParameter:
+                    return DeserializeGenericParameter(state, position, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.MVar:
+                    {
+                        var genericParameterPosition = state.Reader.Read7BitEncodedInt();
+                        if (genericMethodParameters == null)
+                        {
+                            throw new Exception("Encountered an MVar operation without a current method context");
+                        }
+                        return state.SetMemo(position, true, new PickledTypeInfoRef(genericMethodParameters[genericParameterPosition]));
+                    }
+
+                case PickleOperation.TVar:
+                    {
+                        var genericParameterPosition = state.Reader.Read7BitEncodedInt();
+                        if (genericTypeParameters == null)
+                        {
+                            throw new Exception("Encountered an TVar operation without a current type context");
+                        }
+                        return state.SetMemo(position, true, new PickledTypeInfoRef(genericTypeParameters[genericParameterPosition]));
+                    }
+
+                case PickleOperation.TypeRef:
+                    return DeserializeTypeRef(state, position, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.TypeDef:
+                    return DeserializeTypeDef(state, position, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.FieldRef:
+                    return DeserializeFieldInfo(state, position, info, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.PropertyRef:
+                    return DeserializePropertyInfo(state, position, info, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.EventRef:
+                    return DeserializeEventInfo(state, position, info, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.MethodRef:
+                    return DeserializeMethodInfo(state, position, info, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.ConstructorRef:
+                    return DeserializeConstructorInfo(state, position, info, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.Delegate:
+                    return DeserializeDelegate(state, position, genericTypeParameters, genericMethodParameters);
+
+                case PickleOperation.Tuple:
+                case PickleOperation.ValueTuple:
+                    return state.SetMemo(position, info.ShouldMemo, DeserializeTuple(state, operation == PickleOperation.ValueTuple, genericTypeParameters, genericMethodParameters));
+
+                case PickleOperation.Reducer:
+                    {
+                        return state.SetMemo(position, info.ShouldMemo, DeserializeReducer(state, genericTypeParameters, genericMethodParameters));
+                    }
+
+                case PickleOperation.ISerializable:
+                    {
+                        Type objType;
+                        if (info.StaticType.IsValueType)
+                        {
+                            objType = info.StaticType;
+                        }
+                        else
+                        {
+                            var pickledObjType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+                            objType = pickledObjType.Type;
+                        }
+                        return state.SetMemo(position, info.ShouldMemo, DeserializeISerializable(state, objType, genericTypeParameters, genericMethodParameters));
+                    }
+
+                case PickleOperation.Object:
+                    {
+                        object uninitalizedObject;
+                        Type objectType;
+                        if (info.StaticType.IsValueType)
+                        {
+                            objectType = info.StaticType;
+                            uninitalizedObject = state.SetMemo(position, info.ShouldMemo, System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objectType));
+                        }
+                        else
+                        {
+                            var (callback, objType) = DeserializeWithMemo(state, position, (PickledTypeInfo objType) =>
+                            {
+                                var result = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objType.Type);
+                                return state.SetMemo(position, info.ShouldMemo, result);
+                            }, TypeInfo, genericTypeParameters, genericMethodParameters);
+
+                            objectType = objType.Type;
+                            uninitalizedObject = callback.Invoke();
+                        }
+                        DeserializeObject(state, uninitalizedObject, objectType, genericTypeParameters, genericMethodParameters);
+                        return uninitalizedObject;
+                    }
             }
 
-            return DeserializeComplex(state, operation, info, genericTypeParameters, genericMethodParameters);
+            throw new Exception($"Unhandled PickleOperation '{operation}'");
         }
 
         public object? Deserialize(Stream stream)

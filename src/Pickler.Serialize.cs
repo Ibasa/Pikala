@@ -9,7 +9,20 @@ namespace Ibasa.Pikala
 {
     public struct SerializeInformation
     {
-        public Type RuntimeType { get; }
+        private readonly object? _value;
+        private Type? _type;
+
+        public Type RuntimeType
+        {
+            get
+            {
+                if (_type == null)
+                {
+                    _type = _value?.GetType() ?? typeof(object);
+                }
+                return _type;
+            }
+        }
         public Type StaticType { get; }
         public bool ShouldMemo { get; }
 
@@ -20,9 +33,10 @@ namespace Ibasa.Pikala
         /// </summary>
         public Type? ContextType { get; }
 
-        public SerializeInformation(Type? runtimeType, Type staticType, bool shouldMemo, Type? contextType)
+        public SerializeInformation(object? value, Type staticType, bool shouldMemo, Type? contextType)
         {
-            RuntimeType = runtimeType ?? typeof(object);
+            _value = value;
+            _type = null;
             StaticType = staticType;
             ShouldMemo = shouldMemo;
             ContextType = contextType;
@@ -50,14 +64,14 @@ namespace Ibasa.Pikala
 
         private SerializeInformation MakeInfo(object? obj, Type staticType, bool? shouldMemo = null, Type? contextType = null)
         {
-            if (obj == null) { return new SerializeInformation(typeof(object), staticType, false, contextType); }
+            if (obj == null) { return new SerializeInformation(obj, staticType, false, contextType); }
 
             if (!shouldMemo.HasValue)
             {
                 shouldMemo = ShouldMemo(obj, staticType);
             }
 
-            return new SerializeInformation(obj.GetType(), staticType, shouldMemo.Value, contextType);
+            return new SerializeInformation(obj, staticType, shouldMemo.Value, contextType);
         }
 
         private bool PickleByValue(Assembly assembly)
@@ -893,7 +907,7 @@ namespace Ibasa.Pikala
                     result[i] = collection[i].Value;
                 }
                 // No point memoising this array, we just created it!
-                Serialize(state, result, new SerializeInformation(typeof(object?[]), typeof(object?[]), false, null));
+                Serialize(state, result, new SerializeInformation(result, typeof(object?[]), false, null));
             }
             else
             {
@@ -1438,6 +1452,13 @@ namespace Ibasa.Pikala
                 case TypeCode.DateTime:
                 case TypeCode.Object:
                     {
+                        // Most pointers we'll reject but we special case IntPtr and UIntPtr as they're often
+                        // used for native sized numbers
+                        if (runtimeType.IsPointer || runtimeType == typeof(Pointer))
+                        {
+                            throw new Exception($"Pointer types are not serializable: '{runtimeType}'");
+                        }
+
                         if (runtimeType.IsArray)
                         {
                             if (runtimeType.IsSZArray)
@@ -1549,157 +1570,153 @@ namespace Ibasa.Pikala
             if (Object.ReferenceEquals(obj, null))
             {
                 state.Writer.Write((byte)PickleOperation.Null);
+                return;
             }
-            else
+            else if (info.ShouldMemo && state.DoMemo(obj))
             {
-                // Most pointers we'll reject but we special case IntPtr and UIntPtr as they're often
-                // used for native sized numbers
-                if (info.RuntimeType.IsPointer || info.RuntimeType == typeof(Pointer))
-                {
-                    throw new Exception($"Pointer types are not serializable: '{info.RuntimeType}'");
-                }
-
-                if (info.ShouldMemo && state.DoMemo(obj))
-                {
-                    return;
-                }
-
-                OperationCacheEntry operationEntry;
-                if (!_operationCache.TryGetValue(info.RuntimeType, out operationEntry))
-                {
-                    operationEntry = GetOperation(info.RuntimeType);
-                    _operationCache.Add(info.RuntimeType, operationEntry);
-                }
-
-                switch (operationEntry.Group)
-                {
-                    case OperationGroup.FullyKnown:
-                        System.Diagnostics.Debug.Assert(operationEntry.Operation.HasValue);
-                        var operation = operationEntry.Operation.Value;
-                        // This is exactly the same method we use when deserialising, if we can infer the operation from the static type we
-                        // don't write out operation tokens (and some other info like type refs)
-                        var needsOperationToken = !InferOperationFromStaticType(info.StaticType).HasValue;
-                        if (needsOperationToken)
-                        {
-                            state.Writer.Write((byte)operation);
-                        }
-                        switch (operation)
-                        {
-                            case PickleOperation.Enum:
-                                // typeCode for an enum will be something like Int32
-                                if (needsOperationToken)
-                                {
-                                    Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
-                                }
-                                WriteEnumerationValue(state.Writer, operationEntry.TypeCode, obj);
-                                return;
-
-                            case PickleOperation.Boolean:
-                                state.Writer.Write((bool)obj);
-                                return;
-                            case PickleOperation.Char:
-                                state.Writer.Write((char)obj);
-                                return;
-                            case PickleOperation.SByte:
-                                state.Writer.Write((sbyte)obj);
-                                return;
-                            case PickleOperation.Int16:
-                                state.Writer.Write((short)obj);
-                                return;
-                            case PickleOperation.Int32:
-                                state.Writer.Write((int)obj);
-                                return;
-                            case PickleOperation.Int64:
-                                state.Writer.Write((long)obj);
-                                return;
-                            case PickleOperation.Byte:
-                                state.Writer.Write((byte)obj);
-                                return;
-                            case PickleOperation.UInt16:
-                                state.Writer.Write((ushort)obj);
-                                return;
-                            case PickleOperation.UInt32:
-                                state.Writer.Write((uint)obj);
-                                return;
-                            case PickleOperation.UInt64:
-                                state.Writer.Write((ulong)obj);
-                                return;
-                            case PickleOperation.Single:
-                                state.Writer.Write((float)obj);
-                                return;
-                            case PickleOperation.Double:
-                                state.Writer.Write((double)obj);
-                                return;
-                            case PickleOperation.Decimal:
-                                state.Writer.Write((decimal)obj);
-                                return;
-                            case PickleOperation.DBNull:
-                                return;
-                            case PickleOperation.String:
-                                state.Writer.Write((string)obj);
-                                return;
-                            case PickleOperation.IntPtr:
-                                state.Writer.Write((long)(IntPtr)obj);
-                                return;
-                            case PickleOperation.UIntPtr:
-                                state.Writer.Write((ulong)(UIntPtr)obj);
-                                return;
-                            case PickleOperation.Array:
-                            case PickleOperation.SZArray:
-                                SerializeArray(state, (Array)obj, info.RuntimeType);
-                                return;
-                            case PickleOperation.FieldRef:
-                                SerializeFieldInfo(state, info, (FieldInfo)obj);
-                                return;
-                            case PickleOperation.PropertyRef:
-                                SerializePropertyInfo(state, info, (PropertyInfo)obj);
-                                return;
-                            case PickleOperation.EventRef:
-                                SerializeEventInfo(state, info, (EventInfo)obj);
-                                return;
-                            case PickleOperation.MethodRef:
-                                SerializeMethodInfo(state, info, (MethodInfo)obj);
-                                return;
-                            case PickleOperation.ConstructorRef:
-                                SerializeConstructorInfo(state, info, (ConstructorInfo)obj);
-                                return;
-                            case PickleOperation.Delegate:
-                                SerializeMulticastDelegate(state, (MulticastDelegate)obj, info.RuntimeType);
-                                return;
-                            case PickleOperation.Tuple:
-                            case PickleOperation.ValueTuple:
-                                SerializeTuple(state, (System.Runtime.CompilerServices.ITuple)obj, info.RuntimeType);
-                                return;
-                            case PickleOperation.ISerializable:
-                                SerializeISerializable(state, (System.Runtime.Serialization.ISerializable)obj, info);
-                                return;
-                            case PickleOperation.Reducer:
-                                System.Diagnostics.Debug.Assert(operationEntry.Reducer != null);
-                                SerializeReducer(state, obj, operationEntry.Reducer, info.RuntimeType);
-                                return;
-                            case PickleOperation.Object:
-                                System.Diagnostics.Debug.Assert(operationEntry.Fields != null);
-                                SerializeObject(state, obj, info, operationEntry.Fields);
-                                return;
-
-                            default:
-                                throw new Exception($"Unexpected operation {operationEntry.Operation} for a fully known operation");
-                        }
-
-                    case OperationGroup.Assembly:
-                        SerializeAssembly(state, (Assembly)obj);
-                        return;
-                    case OperationGroup.Module:
-                        SerializeModule(state, (Module)obj);
-                        return;
-                    case OperationGroup.Type:
-                        SerializeType(state, (Type)obj, genericTypeParameters, genericMethodParameters);
-                        return;
-
-                }
-
-                throw new Exception($"Unhandled OperationGroup '{operationEntry.Group}' for type '{info.RuntimeType}'");
+                return;
             }
+
+            OperationCacheEntry? operationEntry;
+            if (!_operationCache.TryGetValue(info.RuntimeType, out operationEntry))
+            {
+                operationEntry = GetOperation(info.RuntimeType);
+                _operationCache.Add(info.RuntimeType, operationEntry);
+            }
+
+            switch (operationEntry.Group)
+            {
+                case OperationGroup.FullyKnown:
+                    System.Diagnostics.Debug.Assert(operationEntry.Operation.HasValue);
+                    var operation = operationEntry.Operation.Value;
+                    // This is exactly the same method we use when deserialising, if we can infer the operation from the static type we
+                    // don't write out operation tokens (and some other info like type refs)
+                    var inferedOperationToken = InferOperationFromStaticType(info.StaticType);
+                    if (inferedOperationToken.HasValue)
+                    {
+                        System.Diagnostics.Debug.Assert(inferedOperationToken.Value == operation);
+                    }
+                    else
+                    {
+                        state.Writer.Write((byte)operation);
+                    }
+
+                    switch (operation)
+                    {
+                        case PickleOperation.Enum:
+                            // typeCode for an enum will be something like Int32, but we might of infered the type from the static type
+                            if (!inferedOperationToken.HasValue)
+                            {
+                                Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
+                            }
+                            WriteEnumerationValue(state.Writer, operationEntry.TypeCode, obj);
+                            return;
+
+                        case PickleOperation.Boolean:
+                            state.Writer.Write((bool)obj);
+                            return;
+                        case PickleOperation.Char:
+                            state.Writer.Write((char)obj);
+                            return;
+                        case PickleOperation.SByte:
+                            state.Writer.Write((sbyte)obj);
+                            return;
+                        case PickleOperation.Int16:
+                            state.Writer.Write((short)obj);
+                            return;
+                        case PickleOperation.Int32:
+                            state.Writer.Write((int)obj);
+                            return;
+                        case PickleOperation.Int64:
+                            state.Writer.Write((long)obj);
+                            return;
+                        case PickleOperation.Byte:
+                            state.Writer.Write((byte)obj);
+                            return;
+                        case PickleOperation.UInt16:
+                            state.Writer.Write((ushort)obj);
+                            return;
+                        case PickleOperation.UInt32:
+                            state.Writer.Write((uint)obj);
+                            return;
+                        case PickleOperation.UInt64:
+                            state.Writer.Write((ulong)obj);
+                            return;
+                        case PickleOperation.Single:
+                            state.Writer.Write((float)obj);
+                            return;
+                        case PickleOperation.Double:
+                            state.Writer.Write((double)obj);
+                            return;
+                        case PickleOperation.Decimal:
+                            state.Writer.Write((decimal)obj);
+                            return;
+                        case PickleOperation.DBNull:
+                            return;
+                        case PickleOperation.String:
+                            state.Writer.Write((string)obj);
+                            return;
+                        case PickleOperation.IntPtr:
+                            state.Writer.Write((long)(IntPtr)obj);
+                            return;
+                        case PickleOperation.UIntPtr:
+                            state.Writer.Write((ulong)(UIntPtr)obj);
+                            return;
+                        case PickleOperation.Array:
+                        case PickleOperation.SZArray:
+                            SerializeArray(state, (Array)obj, info.RuntimeType);
+                            return;
+                        case PickleOperation.FieldRef:
+                            SerializeFieldInfo(state, info, (FieldInfo)obj);
+                            return;
+                        case PickleOperation.PropertyRef:
+                            SerializePropertyInfo(state, info, (PropertyInfo)obj);
+                            return;
+                        case PickleOperation.EventRef:
+                            SerializeEventInfo(state, info, (EventInfo)obj);
+                            return;
+                        case PickleOperation.MethodRef:
+                            SerializeMethodInfo(state, info, (MethodInfo)obj);
+                            return;
+                        case PickleOperation.ConstructorRef:
+                            SerializeConstructorInfo(state, info, (ConstructorInfo)obj);
+                            return;
+                        case PickleOperation.Delegate:
+                            SerializeMulticastDelegate(state, (MulticastDelegate)obj, info.RuntimeType);
+                            return;
+                        case PickleOperation.Tuple:
+                        case PickleOperation.ValueTuple:
+                            SerializeTuple(state, (System.Runtime.CompilerServices.ITuple)obj, info.RuntimeType);
+                            return;
+                        case PickleOperation.ISerializable:
+                            SerializeISerializable(state, (System.Runtime.Serialization.ISerializable)obj, info);
+                            return;
+                        case PickleOperation.Reducer:
+                            System.Diagnostics.Debug.Assert(operationEntry.Reducer != null);
+                            SerializeReducer(state, obj, operationEntry.Reducer, info.RuntimeType);
+                            return;
+                        case PickleOperation.Object:
+                            System.Diagnostics.Debug.Assert(operationEntry.Fields != null);
+                            SerializeObject(state, obj, info, operationEntry.Fields);
+                            return;
+
+                        default:
+                            throw new Exception($"Unexpected operation {operationEntry.Operation} for a fully known operation");
+                    }
+
+                case OperationGroup.Assembly:
+                    SerializeAssembly(state, (Assembly)obj);
+                    return;
+                case OperationGroup.Module:
+                    SerializeModule(state, (Module)obj);
+                    return;
+                case OperationGroup.Type:
+                    SerializeType(state, (Type)obj, genericTypeParameters, genericMethodParameters);
+                    return;
+
+            }
+
+            throw new Exception($"Unhandled OperationGroup '{operationEntry.Group}' for type '{info.RuntimeType}'");
         }
 
         public void Serialize(Stream stream, object? rootObject)

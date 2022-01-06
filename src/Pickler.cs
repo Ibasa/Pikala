@@ -108,7 +108,7 @@ namespace Ibasa.Pikala
         Type
     }
 
-    readonly struct OperationCacheEntry
+    sealed class OperationCacheEntry
     {
         public readonly OperationGroup Group;
         public readonly TypeCode TypeCode;
