@@ -722,11 +722,11 @@ namespace Ibasa.Pikala
 
                 var returnType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, constructingType.GenericParameters, null);
                 var parameterCount = state.Reader.Read7BitEncodedInt();
-                var parameterNames = new string[parameterCount];
+                var parameterNames = new string?[parameterCount];
                 var parameterTypes = new Type[parameterCount];
                 for (int i = 0; i < parameterCount; ++i)
                 {
-                    parameterNames[i] = state.Reader.ReadString();
+                    parameterNames[i] = state.Reader.ReadNullableString();
                     var parameterType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, constructingType.GenericParameters, null);
                     parameterTypes[i] = parameterType.Type;
                 }
@@ -1127,7 +1127,7 @@ namespace Ibasa.Pikala
                 var method = DeserializeNonNull<PickledMethodInfo>(state, info, genericTypeParameters, genericMethodParameters);
                 invocationList[i] = Delegate.CreateDelegate(objType.Type, target, method.MethodInfo);
             }
-            return state.SetMemo(position, true, Delegate.Combine(invocationList));
+            return state.SetMemo(position, true, Delegate.Combine(invocationList)!);
         }
 
         private Assembly DeserializeAsesmblyRef(PicklerDeserializationState state, long position)

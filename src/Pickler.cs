@@ -169,7 +169,9 @@ namespace Ibasa.Pikala
             _twoByteOpCodes = new OpCode[0xef];
             foreach (var field in typeof(OpCodes).GetFields(BindingFlags.Public | BindingFlags.Static))
             {
-                var opCode = (OpCode)field.GetValue(null);
+                var opCodeObj = field.GetValue(null);
+                System.Diagnostics.Debug.Assert(opCodeObj != null, "GetValue for OpCode field returned null");
+                var opCode = (OpCode)opCodeObj;
 
                 if (opCode.OpCodeType == OpCodeType.Nternal) continue;
 

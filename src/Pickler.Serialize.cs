@@ -180,6 +180,7 @@ namespace Ibasa.Pikala
             }
 
             var methodBody = constructor.GetMethodBody();
+            System.Diagnostics.Debug.Assert(methodBody != null, "GetMethodBody returned null for a constructor");
 
             state.Writer.Write(methodBody.InitLocals);
 
@@ -233,6 +234,7 @@ namespace Ibasa.Pikala
             else
             {
                 var methodBody = method.GetMethodBody();
+                System.Diagnostics.Debug.Assert(methodBody != null, "GetMethodBody returned null unexpectedly");
 
                 state.Writer.Write(methodBody.InitLocals);
 
@@ -308,7 +310,11 @@ namespace Ibasa.Pikala
                         {
                             var fieldToken = ilReader.ReadInt32();
                             var fieldInfo = methodModule.ResolveField(fieldToken, genericTypeParameters, genericMethodParameters);
-                            types.Add(fieldInfo.DeclaringType);
+                            System.Diagnostics.Debug.Assert(fieldInfo != null, "ResolveField unexpectedly returned null");
+                            if (fieldInfo.DeclaringType != null)
+                            {
+                                types.Add(fieldInfo.DeclaringType);
+                            }
                             break;
                         }
 
@@ -316,7 +322,11 @@ namespace Ibasa.Pikala
                         {
                             var methodToken = ilReader.ReadInt32();
                             var methodInfo = methodModule.ResolveMethod(methodToken, genericTypeParameters, genericMethodParameters);
-                            types.Add(methodInfo.DeclaringType);
+                            System.Diagnostics.Debug.Assert(methodInfo != null, "ResolveMethod unexpectedly returned null");
+                            if (methodInfo.DeclaringType != null)
+                            {
+                                types.Add(methodInfo.DeclaringType);
+                            }
                             break;
                         }
 
@@ -324,7 +334,11 @@ namespace Ibasa.Pikala
                         {
                             var memberToken = ilReader.ReadInt32();
                             var memberInfo = methodModule.ResolveMember(memberToken, genericTypeParameters, genericMethodParameters);
-                            types.Add(memberInfo.DeclaringType);
+                            System.Diagnostics.Debug.Assert(memberInfo != null, "ResolveMember unexpectedly returned null");
+                            if (memberInfo.DeclaringType != null)
+                            {
+                                types.Add(memberInfo.DeclaringType);
+                            }
                             break;
                         }
 
@@ -1139,12 +1153,14 @@ namespace Ibasa.Pikala
                     {
                         // delegates are a name, optionally generic parameters, a return type and parameter types
                         var invoke = type.GetMethod("Invoke");
+                        System.Diagnostics.Debug.Assert(invoke != null, "GetMethod(\"Invoke\") unexpectedly returned null for a delegate type");
+
                         Serialize(state, invoke.ReturnType, MakeInfo(invoke.ReturnType, typeof(Type), true));
                         var parameters = invoke.GetParameters();
                         state.Writer.Write7BitEncodedInt(parameters.Length);
                         foreach (var parameter in parameters)
                         {
-                            state.Writer.Write(parameter.Name);
+                            state.Writer.WriteNullableString(parameter.Name);
                             Serialize(state, parameter.ParameterType, MakeInfo(parameter.ParameterType, typeof(Type), true), genericParameters);
                         }
                     }
@@ -1490,7 +1506,7 @@ namespace Ibasa.Pikala
 
                         // Tuples!
 
-                        if (runtimeType.Assembly == mscorlib && (runtimeType.FullName.StartsWith("System.Tuple") || runtimeType.FullName.StartsWith("System.ValueTuple")))
+                        if (runtimeType.Assembly == mscorlib && runtimeType.FullName != null && (runtimeType.FullName.StartsWith("System.Tuple") || runtimeType.FullName.StartsWith("System.ValueTuple")))
                         {
                             if (runtimeType.FullName.StartsWith("System.Tuple"))
                             {
