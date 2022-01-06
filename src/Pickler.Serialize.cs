@@ -327,7 +327,7 @@ namespace Ibasa.Pikala
                             {
                                 types.Add(methodInfo.DeclaringType);
                             }
-                                break;
+                            break;
                         }
 
                     case OperandType.InlineTok:
