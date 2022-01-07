@@ -1440,7 +1440,8 @@ namespace Ibasa.Pikala
                         fieldBuilder = moduleBuilder.DefineInitializedData(fieldName, data, fieldAttributes);
                     }
 
-                    fields[i] = new PickledFieldInfoDef(null, fieldBuilder);
+                    // TODO This isn't right, FieldInfo needs to handle that it might be on a module
+                    fields[i] = new PickledFieldInfoDef(null!, fieldBuilder);
                 }
 
                 var methodCount = state.Reader.Read7BitEncodedInt();
