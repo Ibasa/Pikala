@@ -1395,10 +1395,7 @@ namespace Ibasa.Pikala
             var serializationInfo = new System.Runtime.Serialization.SerializationInfo(info.RuntimeType, new System.Runtime.Serialization.FormatterConverter());
             iserializable.GetObjectData(serializationInfo, context);
 
-            if (!info.StaticType.IsValueType || info.StaticType != info.RuntimeType)
-            {
-                Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
-            }
+            Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
             state.Writer.Write7BitEncodedInt(serializationInfo.MemberCount);
             foreach (var member in serializationInfo)
             {
@@ -1410,10 +1407,7 @@ namespace Ibasa.Pikala
         private void SerializeObject(PicklerSerializationState state, object obj, SerializeInformation info, FieldInfo[] fields)
         {
             // Must be an object, try and dump all it's fields
-            if (!info.StaticType.IsValueType || info.StaticType != info.RuntimeType)
-            {
-                Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
-            }
+            Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
 
             state.Writer.Write7BitEncodedInt(fields.Length);
             foreach (var field in fields)
@@ -1615,11 +1609,8 @@ namespace Ibasa.Pikala
                     switch (operation)
                     {
                         case PickleOperation.Enum:
-                            // typeCode for an enum will be something like Int32, but we might of infered the type from the static type
-                            if (!inferedOperationToken.HasValue)
-                            {
-                                Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
-                            }
+                            Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
+                            // typeCode for an enum will be something like Int32
                             WriteEnumerationValue(state.Writer, operationEntry.TypeCode, obj);
                             return;
 

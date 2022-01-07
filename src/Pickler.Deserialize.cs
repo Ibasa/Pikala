@@ -1742,15 +1742,12 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.Enum:
                     {
-                        Type enumType;
-                        if (info.StaticType.IsValueType)
+                        var pickledEnumType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+                        var enumType = pickledEnumType.Type;
+                        if (!enumType.IsEnum)
                         {
-                            enumType = info.StaticType;
-                        }
-                        else
-                        {
-                            var pickledEnumType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
-                            enumType = pickledEnumType.Type;
+                            // This was an enum when it was serialised out, but no longer
+                            throw new Exception($"Can not deserialise {enumType} expected it to be an enumeration type");
                         }
                         var enumTypeCode = Type.GetTypeCode(enumType);
                         var result = Enum.ToObject(enumType, ReadEnumerationValue(state.Reader, enumTypeCode));
@@ -1858,39 +1855,15 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.ISerializable:
                     {
-                        Type objType;
-                        if (info.StaticType.IsValueType)
-                        {
-                            objType = info.StaticType;
-                        }
-                        else
-                        {
-                            var pickledObjType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
-                            objType = pickledObjType.Type;
-                        }
-                        return state.SetMemo(position, info.ShouldMemo, DeserializeISerializable(state, objType, genericTypeParameters, genericMethodParameters));
+                        var pickledObjType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+                        return state.SetMemo(position, info.ShouldMemo, DeserializeISerializable(state, pickledObjType.Type, genericTypeParameters, genericMethodParameters));
                     }
 
                 case PickleOperation.Object:
                     {
-                        object uninitalizedObject;
-                        Type objectType;
-                        if (info.StaticType.IsValueType)
-                        {
-                            objectType = info.StaticType;
-                            uninitalizedObject = state.SetMemo(position, info.ShouldMemo, System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objectType));
-                        }
-                        else
-                        {
-                            var (callback, objType) = DeserializeWithMemo(state, position, (PickledTypeInfo objType) =>
-                            {
-                                var result = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objType.Type);
-                                return state.SetMemo(position, info.ShouldMemo, result);
-                            }, TypeInfo, genericTypeParameters, genericMethodParameters);
-
-                            objectType = objType.Type;
-                            uninitalizedObject = callback.Invoke();
-                        }
+                        var pickledObjType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+                        var objectType = pickledObjType.Type;
+                        var uninitalizedObject = state.SetMemo(position, info.ShouldMemo, System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objectType));
                         DeserializeObject(state, uninitalizedObject, objectType, genericTypeParameters, genericMethodParameters);
                         return uninitalizedObject;
                     }
