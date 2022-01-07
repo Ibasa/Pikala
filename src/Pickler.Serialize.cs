@@ -1423,7 +1423,9 @@ namespace Ibasa.Pikala
                 // through as the static type. At derserialisation time we could be running a new program where the field has
                 // changed type, that change will fail to deserialise but it needs to fail safely(ish). Imagine changing FieldType
                 // from an Int32 to Int32[], we're going to try and read the 4 Int32 bytes as the length of the array and then start
-                // churning through the rest of the data stream trying to fill it.
+                // churning through the rest of the data stream trying to fill it. Despite this we do want to memo based on if the field is
+                // currently a value type or not. There's no pointing adding this object to the memo map if it's a value type because it's
+                // guaranteed to not be seen again (it's not a reference).
                 var value = field.GetValue(obj);
                 var fieldInfo = MakeInfo(value, typeof(object), ShouldMemo(value, field.FieldType));
                 Serialize(state, value, fieldInfo);
