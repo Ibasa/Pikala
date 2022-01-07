@@ -194,7 +194,7 @@ namespace Ibasa.Pikala.Tests
             var rebuiltType = RoundTrip.Do(pickler, customAttributeType);
             var rebuiltModule = rebuiltType.Assembly.ManifestModule;
             var rebuiltField = rebuiltModule.GetField("field");
-            Assert.Equal(FieldAttributes.Public, rebuiltField.Attributes);
+            Assert.Equal(FieldAttributes.Public | FieldAttributes.Static | FieldAttributes.HasFieldRVA, rebuiltField.Attributes);
             var rebuiltAttr = Assert.Single(rebuiltField.GetCustomAttributes(true));
             Assert.Equal(1, (int)rebuiltType.GetField("Tag").GetValue(rebuiltAttr));
         }

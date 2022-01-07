@@ -1422,8 +1422,6 @@ namespace Ibasa.Pikala
                 }, AssemblyInfo, genericTypeParameters, genericMethodParameters);
                 var moduleBuilder = callback.Invoke();
 
-                ReadCustomAttributes(state, moduleBuilder.SetCustomAttribute);
-
                 var fieldCount = state.Reader.Read7BitEncodedInt();
                 var fields = new PickledFieldInfoDef[fieldCount];
                 for (int i = 0; i < fieldCount; ++i)
@@ -1441,7 +1439,8 @@ namespace Ibasa.Pikala
                         var data = state.Reader.ReadBytes(fieldSize);
                         fieldBuilder = moduleBuilder.DefineInitializedData(fieldName, data, fieldAttributes);
                     }
-                    ReadCustomAttributes(state, fieldBuilder.SetCustomAttribute);
+
+                    fields[i] = new PickledFieldInfoDef(null, fieldBuilder);
                 }
 
                 var methodCount = state.Reader.Read7BitEncodedInt();
@@ -1455,8 +1454,16 @@ namespace Ibasa.Pikala
 
                 state.PushTrailer(() =>
                 {
+                    ReadCustomAttributes(state, moduleBuilder.SetCustomAttribute);
+
+                    foreach (var field in fields)
+                    {
+                        ReadCustomAttributes(state, field.FieldBuilder.SetCustomAttribute);
+                    }
+
                     foreach (var method in methods)
                     {
+                        ReadCustomAttributes(state, method.MethodBuilder.SetCustomAttribute);
                         var ilGenerator = method.MethodBuilder.GetILGenerator();
                         DeserializeMethodBody(state, null, method.GenericParameters, method.Locals!, ilGenerator);
                     }
