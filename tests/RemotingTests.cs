@@ -705,5 +705,36 @@ namespace Ibasa.Pikala.Tests
 
             Assert.Equal("doWork", result);
         }
+
+        [Fact]
+        public void TestCustomAttributesOnAssembly()
+        {
+            var script = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "type MyAttribute() =",
+                "   inherit System.Attribute()",
+                "   member val public Property = \"hello\" with get, set",
+                "   override this.ToString() = this.Property",
+                "[<assembly: MyAttribute(Property = \"testing\")>]",
+                "do ()",
+                "let value = MyAttribute(Property = \"return\")",
+                "let base64 = serializeBase64 value",
+                "printf \"%s\" base64",
+            });
+
+            var result = Base64ToObject(RunFsi(script));
+
+            Assert.Equal("return", result.ToString());
+            var customAttributeType = result.GetType();
+            Assert.Equal("MyAttribute", customAttributeType.Name);
+
+            var assembly = customAttributeType.Assembly;
+            var name = assembly.GetName();
+            Assert.Equal("FSI-ASSEMBLY", name.Name);
+
+            var customAttribute = Assert.Single(assembly.GetCustomAttributes(customAttributeType, true));
+            Assert.Equal("testing", customAttribute.ToString());
+        }
     }
 }

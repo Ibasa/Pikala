@@ -555,8 +555,6 @@ namespace Ibasa.Pikala
             state.Writer.Write(module.Name);
             Serialize(state, module.Assembly, MakeInfo(module.Assembly, typeof(Assembly)));
 
-            WriteCustomAttributes(state, module.CustomAttributes.ToArray());
-
             var fields = module.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             state.Writer.Write7BitEncodedInt(fields.Length);
             foreach (var field in fields)
@@ -605,8 +603,6 @@ namespace Ibasa.Pikala
                 {
                     pin.Free();
                 }
-
-                WriteCustomAttributes(state, field.CustomAttributes.ToArray());
             }
 
             var methods = module.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
@@ -614,13 +610,20 @@ namespace Ibasa.Pikala
             foreach (var method in methods)
             {
                 SerializeMethodHeader(state, null, method);
-                WriteCustomAttributes(state, method.CustomAttributes.ToArray());
             }
 
             state.PushTrailer(() =>
             {
+                WriteCustomAttributes(state, module.CustomAttributes.ToArray());
+
+                foreach (var field in fields)
+                {
+                    WriteCustomAttributes(state, field.CustomAttributes.ToArray());
+                }
+
                 foreach (var method in methods)
                 {
+                    WriteCustomAttributes(state, method.CustomAttributes.ToArray());
                     SerializeMethodBody(state, null, method.Module, method.GetGenericArguments(), method.GetMethodBody());
                 }
             },
@@ -972,10 +975,16 @@ namespace Ibasa.Pikala
             // Is this assembly one we should save by value?
             else if (PickleByValue(assembly))
             {
-                // Write out an assembly definition, we'll build a dynamic assembly for this on the other side
-                state.Writer.Write((byte)PickleOperation.AssemblyDef);
-                state.Writer.Write(assembly.FullName);
-                WriteCustomAttributes(state, assembly.CustomAttributes.ToArray());
+                state.RunWithTrailers(() =>
+                {
+                    // Write out an assembly definition, we'll build a dynamic assembly for this on the other side
+                    state.Writer.Write((byte)PickleOperation.AssemblyDef);
+                    state.Writer.Write(assembly.FullName);
+                    state.PushTrailer(() =>
+                    {
+                        WriteCustomAttributes(state, assembly.CustomAttributes.ToArray());
+                    }, () => { });
+                });
             }
             else
             {

@@ -161,5 +161,42 @@ namespace Ibasa.Pikala.Tests
                 RoundTrip.Assert(pickler, method);
             }
         }
+
+        private static ConstructorInfo DefineDefaultCtor(TypeBuilder typeBuilder)
+        {
+            var ctor = typeBuilder.DefineConstructor(MethodAttributes.Public, CallingConventions.Standard, Type.EmptyTypes);
+            var getgen = ctor.GetILGenerator();
+            getgen.Emit(OpCodes.Ret);
+            return ctor;
+        }
+
+        [Fact]
+        public void TestModuleAttributes()
+        {
+            var pickler = Utils.CreateIsolatedPickler();
+
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestModuleAttributes"), AssemblyBuilderAccess.Run);
+            var module = assembly.DefineDynamicModule("main");
+
+            var customAttributeTypeBuilder = module.DefineType("MyAttribute", TypeAttributes.Class, typeof(System.Attribute));
+            customAttributeTypeBuilder.DefineField("Tag", typeof(int), FieldAttributes.Public);
+            DefineDefaultCtor(customAttributeTypeBuilder);
+            var customAttributeType = customAttributeTypeBuilder.CreateType();
+
+            var moduleField = module.DefineInitializedData("field", new byte[] { 1, 2 }, FieldAttributes.Public);
+            moduleField.SetCustomAttribute(new CustomAttributeBuilder(
+                customAttributeType.GetConstructor(Type.EmptyTypes),
+                new object[0],
+                new FieldInfo[] { customAttributeType.GetField("Tag") },
+                new object[] { 1 }));
+            module.CreateGlobalFunctions();
+
+            var rebuiltType = RoundTrip.Do(pickler, customAttributeType);
+            var rebuiltModule = rebuiltType.Assembly.ManifestModule;
+            var rebuiltField = rebuiltModule.GetField("field");
+            Assert.Equal(FieldAttributes.Public | FieldAttributes.Static | FieldAttributes.HasFieldRVA, rebuiltField.Attributes);
+            var rebuiltAttr = Assert.Single(rebuiltField.GetCustomAttributes(true));
+            Assert.Equal(1, (int)rebuiltType.GetField("Tag").GetValue(rebuiltAttr));
+        }
     }
 }
