@@ -1013,7 +1013,8 @@ namespace Ibasa.Pikala
 
                 // We always need to memo this value even if it looks like the field type is currently a ValueType. We could of changed the type from a reference type
                 // to a value type between serialisation and now. So when written out it might of used memos to refer to these objects and so we need to track them.
-                var deserInfo = new DeserializeInformation(typeof(object), true);
+                // TODO But we can't actually afford to do this! Because it can consume VAST amounts of memory, so for now fall back to guessing based on current type.
+                var deserInfo = new DeserializeInformation(typeof(object), !toSet.FieldType.IsValueType);
                 object? value = ReducePickle(Deserialize(state, deserInfo, genericTypeParameters, genericMethodParameters));
 
                 toSet.SetValue(uninitializedObject, value);
