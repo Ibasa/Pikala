@@ -284,10 +284,6 @@ namespace Ibasa.Pikala
                     {
                         return PickleOperation.UIntPtr;
                     }
-                    else if (staticType.Assembly == mscorlib && staticType.FullName != null && staticType.FullName.StartsWith("System.ValueTuple`"))
-                    {
-                        return PickleOperation.ValueTuple;
-                    }
                 }
 
                 return null;
