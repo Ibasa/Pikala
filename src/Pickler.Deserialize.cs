@@ -1011,7 +1011,9 @@ namespace Ibasa.Pikala
                     throw new Exception($"Can not deserialize type '{type}', could not find expected field '{name}'");
                 }
 
-                var deserInfo = new DeserializeInformation(typeof(object), !toSet.FieldType.IsValueType);
+                // We always need to memo this value even if it looks like the field type is currently a ValueType. We could of changed the type from a reference type
+                // to a value type between serialisation and now. So when written out it might of used memos to refer to these objects and so we need to track them.
+                var deserInfo = new DeserializeInformation(typeof(object), true);
                 object? value = ReducePickle(Deserialize(state, deserInfo, genericTypeParameters, genericMethodParameters));
 
                 toSet.SetValue(uninitializedObject, value);
