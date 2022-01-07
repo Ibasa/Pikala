@@ -1377,7 +1377,6 @@ namespace Ibasa.Pikala
 
             state.SetMemo(position, true, assembly);
 
-
             ReadCustomAttributes(state, assembly.SetCustomAttribute);
             return assembly;
         }
