@@ -1329,56 +1329,63 @@ namespace Ibasa.Pikala
 
         private Assembly DeserializeAsesmblyDef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
-            var assemblyName = new AssemblyName(state.Reader.ReadString());
-            var access = AssemblyLoadContext.IsCollectible ? AssemblyBuilderAccess.RunAndCollect : AssemblyBuilderAccess.Run;
-            var currentContextualReflectionContextOrDefault =
-                System.Runtime.Loader.AssemblyLoadContext.CurrentContextualReflectionContext ?? System.Runtime.Loader.AssemblyLoadContext.Default;
-            AssemblyBuilder assembly;
-            if (AssemblyLoadContext == currentContextualReflectionContextOrDefault)
+            return state.RunWithTrailers(() =>
             {
-                // If the assembly load context is the current contextual one then we can just call DefineDynamicAssembly.
-                assembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, access);
-
-            }
-            else if (Environment.Version.Major >= 6)
-            {
-                // Else for runtime 6.0 onwards we can set our AssemblyLoadContext as the current contextual context and then call DefineDynamicAssembly
-                using var scope = AssemblyLoadContext.EnterContextualReflection();
-                assembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, access);
-            }
-            else
-            {
-                // Else before net6 DefineDynamicAssembly did not check the contextual ALC, it instead used the callers ALC. So to get around this we do some "fun" here
-                // where we build a tiny assembly with one method to call AssemblyBuilder.DefineDynamicAssembly, load that into the ALC we want to use then invoke
-                // the method on it. We can reuse this method, so we cache it via a Func.
-                if (_defineDynamicAssembly == null)
+                var assemblyName = new AssemblyName(state.Reader.ReadString());
+                var access = AssemblyLoadContext.IsCollectible ? AssemblyBuilderAccess.RunAndCollect : AssemblyBuilderAccess.Run;
+                var currentContextualReflectionContextOrDefault =
+                    System.Runtime.Loader.AssemblyLoadContext.CurrentContextualReflectionContext ?? System.Runtime.Loader.AssemblyLoadContext.Default;
+                AssemblyBuilder assembly;
+                if (AssemblyLoadContext == currentContextualReflectionContextOrDefault)
                 {
-                    lock (_ddaLock)
+                    // If the assembly load context is the current contextual one then we can just call DefineDynamicAssembly.
+                    assembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, access);
+
+                }
+                else if (Environment.Version.Major >= 6)
+                {
+                    // Else for runtime 6.0 onwards we can set our AssemblyLoadContext as the current contextual context and then call DefineDynamicAssembly
+                    using var scope = AssemblyLoadContext.EnterContextualReflection();
+                    assembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, access);
+                }
+                else
+                {
+                    // Else before net6 DefineDynamicAssembly did not check the contextual ALC, it instead used the callers ALC. So to get around this we do some "fun" here
+                    // where we build a tiny assembly with one method to call AssemblyBuilder.DefineDynamicAssembly, load that into the ALC we want to use then invoke
+                    // the method on it. We can reuse this method, so we cache it via a Func.
+                    if (_defineDynamicAssembly == null)
                     {
-                        if (_defineDynamicAssembly == null)
+                        lock (_ddaLock)
                         {
-                            var ddaAssembly = LookupWorkaroundAssembly(AssemblyLoadContext) ?? BuildAndLoadWorkaroundAssembly(AssemblyLoadContext);
-                            var context = System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(ddaAssembly);
-                            System.Diagnostics.Debug.Assert(context == AssemblyLoadContext, "Failed to load into defined ALC");
-                            var ddaMethod = ddaAssembly.ManifestModule.GetMethod("DefineDynamicAssembly");
-                            System.Diagnostics.Debug.Assert(ddaMethod != null, "Failed to GetMethod(\"DefineDynamicAssembly\")");
-                            var ddaDelegate = ddaMethod.CreateDelegate(typeof(Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>));
-                            _defineDynamicAssembly = (Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>)ddaDelegate;
+                            if (_defineDynamicAssembly == null)
+                            {
+                                var ddaAssembly = LookupWorkaroundAssembly(AssemblyLoadContext) ?? BuildAndLoadWorkaroundAssembly(AssemblyLoadContext);
+                                var context = System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(ddaAssembly);
+                                System.Diagnostics.Debug.Assert(context == AssemblyLoadContext, "Failed to load into defined ALC");
+                                var ddaMethod = ddaAssembly.ManifestModule.GetMethod("DefineDynamicAssembly");
+                                System.Diagnostics.Debug.Assert(ddaMethod != null, "Failed to GetMethod(\"DefineDynamicAssembly\")");
+                                var ddaDelegate = ddaMethod.CreateDelegate(typeof(Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>));
+                                _defineDynamicAssembly = (Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>)ddaDelegate;
+                            }
                         }
                     }
+                    assembly = _defineDynamicAssembly(assemblyName, access);
                 }
-                assembly = _defineDynamicAssembly(assemblyName, access);
-            }
 
-            if (assembly == null)
-            {
-                throw new Exception($"Could not define assembly '{assemblyName}'");
-            }
+                if (assembly == null)
+                {
+                    throw new Exception($"Could not define assembly '{assemblyName}'");
+                }
 
-            state.SetMemo(position, true, assembly);
+                state.SetMemo(position, true, assembly);
 
-            ReadCustomAttributes(state, assembly.SetCustomAttribute);
-            return assembly;
+                state.PushTrailer(() =>
+                {
+                    ReadCustomAttributes(state, assembly.SetCustomAttribute);
+                }, () => { }, null);
+                
+                return assembly;
+            });
         }
 
         private Module DeserializeManifestModuleRef(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)

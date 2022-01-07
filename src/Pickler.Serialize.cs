@@ -972,10 +972,16 @@ namespace Ibasa.Pikala
             // Is this assembly one we should save by value?
             else if (PickleByValue(assembly))
             {
-                // Write out an assembly definition, we'll build a dynamic assembly for this on the other side
-                state.Writer.Write((byte)PickleOperation.AssemblyDef);
-                state.Writer.Write(assembly.FullName);
-                WriteCustomAttributes(state, assembly.CustomAttributes.ToArray());
+                state.RunWithTrailers(() =>
+                {
+                    // Write out an assembly definition, we'll build a dynamic assembly for this on the other side
+                    state.Writer.Write((byte)PickleOperation.AssemblyDef);
+                    state.Writer.Write(assembly.FullName);
+                    state.PushTrailer(() =>
+                    {
+                        WriteCustomAttributes(state, assembly.CustomAttributes.ToArray());
+                    }, () => { });
+                });
             }
             else
             {
