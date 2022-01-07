@@ -1383,7 +1383,7 @@ namespace Ibasa.Pikala
                 {
                     ReadCustomAttributes(state, assembly.SetCustomAttribute);
                 }, () => { }, null);
-                
+
                 return assembly;
             });
         }
