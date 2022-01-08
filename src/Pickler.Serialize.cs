@@ -1605,7 +1605,7 @@ namespace Ibasa.Pikala
                     var inferedOperationToken = InferOperationFromStaticType(info.StaticType);
                     if (inferedOperationToken.HasValue)
                     {
-                        System.Diagnostics.Debug.Assert(inferedOperationToken.Value == operation);
+                        System.Diagnostics.Debug.Assert(inferedOperationToken.Value == operation, "Infered operation from static type didn't match intended operation");
                     }
                     else
                     {
