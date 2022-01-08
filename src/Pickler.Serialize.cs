@@ -1406,7 +1406,7 @@ namespace Ibasa.Pikala
 
         private void SerializeObject(PicklerSerializationState state, object obj, SerializeInformation info, Tuple<ValueTuple<string, Type>[], FieldInfo[]> fields)
         {
-            // Must be an object, try and dump all it's fields            
+            // Must be an object, try and dump all it's fields
             Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
 
             var (namesAndTypes, fieldInfos) = fields;
