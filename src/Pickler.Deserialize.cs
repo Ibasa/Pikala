@@ -984,20 +984,21 @@ namespace Ibasa.Pikala
 
         private void DeserializeObject(PicklerDeserializationState state, object uninitializedObject, Type type, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
-            var fields = GetSerializedFields(type);
-            var fieldCount = state.Reader.Read7BitEncodedInt();
-            if (fields.Length != fieldCount)
+            var currentFields = GetSerializedFields(type);
+
+            var writtenFields = DeserializeNonNull<ValueTuple<string, Type>[]>(state, MakeInfo(typeof(ValueTuple<string, Type>[])), genericTypeParameters, genericMethodParameters);
+
+            if (currentFields.Length != writtenFields.Length)
             {
-                throw new Exception($"Can not deserialize type '{type}', serialised {fieldCount} fields but type expects {fields.Length}");
+                throw new Exception($"Can not deserialize type '{type}', serialised {writtenFields.Length} fields but type expects {currentFields.Length}");
             }
 
-            for (int i = 0; i < fieldCount; ++i)
+            for (int i = 0; i < writtenFields.Length; ++i)
             {
-                var fieldName = state.Reader.ReadString();
-                var fieldType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+                var (fieldName, fieldType) = writtenFields[i];
 
                 FieldInfo? toSet = null;
-                foreach (var field in fields)
+                foreach (var field in currentFields)
                 {
                     if (field.Name == fieldName)
                     {
@@ -1011,8 +1012,7 @@ namespace Ibasa.Pikala
                     throw new Exception($"Can not deserialize type '{type}', could not find expected field '{fieldName}'");
                 }
 
-                var deserInfo = new DeserializeInformation(fieldType.Type);
-                object? value = ReducePickle(Deserialize(state, deserInfo, genericTypeParameters, genericMethodParameters));
+                object? value = ReducePickle(Deserialize(state, MakeInfo(fieldType), genericTypeParameters, genericMethodParameters));
 
                 toSet.SetValue(uninitializedObject, value);
             }

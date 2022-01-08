@@ -1404,17 +1404,17 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeObject(PicklerSerializationState state, object obj, SerializeInformation info, FieldInfo[] fields)
+        private void SerializeObject(PicklerSerializationState state, object obj, SerializeInformation info, Tuple<ValueTuple<string, Type>[], FieldInfo[]> fields)
         {
             // Must be an object, try and dump all it's fields            
             Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
 
-            state.Writer.Write7BitEncodedInt(fields.Length);
-            foreach (var field in fields)
-            {
-                state.Writer.Write(field.Name);
-                Serialize(state, field.FieldType, MakeInfo(field.FieldType, typeof(Type), true));
+            var (namesAndTypes, fieldInfos) = fields;
 
+            Serialize(state, namesAndTypes, MakeInfo(namesAndTypes, typeof(ValueTuple<string, Type>[]), true));
+
+            foreach (var field in fieldInfos)
+            {
                 var value = field.GetValue(obj);
                 Serialize(state, value, MakeInfo(value, field.FieldType));
             }
@@ -1553,12 +1553,8 @@ namespace Ibasa.Pikala
                             throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from MarshalByRefObject.");
                         }
 
-                        var fields = GetSerializedFields(runtimeType);
-                        // Sort the fields by name so we serialise in deterministic order
-                        Array.Sort(fields, (x, y) => x.Name.CompareTo(y.Name));
-                        return new OperationCacheEntry(typeCode, fields);
+                        return new OperationCacheEntry(typeCode, GetSerializedFields(runtimeType));
                     }
-
             }
 
             throw new Exception($"Unhandled TypeCode '{typeCode}' for type '{runtimeType}'");

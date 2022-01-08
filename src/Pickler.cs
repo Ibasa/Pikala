@@ -114,7 +114,7 @@ namespace Ibasa.Pikala
         public readonly TypeCode TypeCode;
         public readonly PickleOperation? Operation;
         public readonly IReducer? Reducer;
-        public readonly FieldInfo[]? Fields;
+        public readonly Tuple<ValueTuple<string, Type>[], FieldInfo[]>? Fields;
 
         public OperationCacheEntry(TypeCode typeCode, OperationGroup group)
         {
@@ -151,7 +151,13 @@ namespace Ibasa.Pikala
             Group = OperationGroup.FullyKnown;
             Operation = PickleOperation.Object;
             Reducer = null;
-            Fields = fields;
+            
+            var fieldNamesAndTypes = new ValueTuple<string, Type>[fields.Length];
+            for(int i = 0; i < fields.Length; ++i)
+            {
+                fieldNamesAndTypes[i] = ValueTuple.Create(fields[i].Name, fields[i].FieldType);
+            }
+            Fields = Tuple.Create(fieldNamesAndTypes, fields);
         }
     }
 
@@ -309,8 +315,8 @@ namespace Ibasa.Pikala
         private static FieldInfo[] GetSerializedFields(Type type)
         {
             var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
-            return fields.Where(field => !field.IsLiteral && !field.IsNotSerialized).ToArray();
+            // Sort the fields by name so we serialise in deterministic order
+            return fields.Where(field => !field.IsLiteral && !field.IsNotSerialized).OrderBy(field => field.Name).ToArray();
         }
     }
 }
