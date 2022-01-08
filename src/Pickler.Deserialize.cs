@@ -1853,7 +1853,7 @@ namespace Ibasa.Pikala
                 case PickleOperation.ISerializable:
                     {
                         var pickledObjType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
-                        var  objType = pickledObjType.Type;
+                        var objType = pickledObjType.Type;
                         return state.SetMemo(position, shouldMemo, DeserializeISerializable(state, objType, genericTypeParameters, genericMethodParameters));
                     }
 

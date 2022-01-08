@@ -151,9 +151,9 @@ namespace Ibasa.Pikala
             Group = OperationGroup.FullyKnown;
             Operation = PickleOperation.Object;
             Reducer = null;
-            
+
             var fieldNamesAndTypes = new ValueTuple<string, Type>[fields.Length];
-            for(int i = 0; i < fields.Length; ++i)
+            for (int i = 0; i < fields.Length; ++i)
             {
                 fieldNamesAndTypes[i] = ValueTuple.Create(fields[i].Name, fields[i].FieldType);
             }
