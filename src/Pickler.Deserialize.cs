@@ -11,13 +11,11 @@ namespace Ibasa.Pikala
     struct DeserializeInformation
     {
         public Type StaticType { get; }
-        public bool ShouldMemo { get; }
         public PickledTypeInfo? ContextType { get; }
 
-        public DeserializeInformation(Type staticType, bool shouldMemo, PickledTypeInfo? contextType = null)
+        public DeserializeInformation(Type staticType, PickledTypeInfo? contextType = null)
         {
             StaticType = staticType;
-            ShouldMemo = shouldMemo;
             ContextType = contextType;
         }
 
@@ -26,13 +24,13 @@ namespace Ibasa.Pikala
 
     public sealed partial class Pickler
     {
-        private static DeserializeInformation AssemblyInfo = new DeserializeInformation(typeof(Assembly), true);
-        private static DeserializeInformation TypeInfo = new DeserializeInformation(typeof(Type), true);
-        private static DeserializeInformation ObjectInfo = new DeserializeInformation(typeof(object), true);
+        private static DeserializeInformation AssemblyInfo = new DeserializeInformation(typeof(Assembly));
+        private static DeserializeInformation TypeInfo = new DeserializeInformation(typeof(Type));
+        private static DeserializeInformation ObjectInfo = new DeserializeInformation(typeof(object));
 
         private DeserializeInformation MakeInfo(Type staticType, PickledTypeInfo? contextType = null)
         {
-            return new DeserializeInformation(staticType, !staticType.IsValueType, contextType);
+            return new DeserializeInformation(staticType, contextType);
         }
 
         private static object ReadEnumerationValue(BinaryReader reader, TypeCode typeCode)
@@ -337,7 +335,7 @@ namespace Ibasa.Pikala
 
                     case OperandType.InlineTok:
                         {
-                            var memberInfo = DeserializeNonNull<PickledMemberInfo>(state, new DeserializeInformation(typeof(MemberInfo), true), genericTypeParameters, genericMethodParameters);
+                            var memberInfo = DeserializeNonNull<PickledMemberInfo>(state, new DeserializeInformation(typeof(MemberInfo)), genericTypeParameters, genericMethodParameters);
                             memberInfo.Emit(ilGenerator, opCode);
                             break;
                         }
@@ -351,14 +349,14 @@ namespace Ibasa.Pikala
 
                     case OperandType.InlineField:
                         {
-                            var fieldInfo = DeserializeNonNull<PickledFieldInfo>(state, new DeserializeInformation(typeof(FieldInfo), true), genericTypeParameters, genericMethodParameters);
+                            var fieldInfo = DeserializeNonNull<PickledFieldInfo>(state, new DeserializeInformation(typeof(FieldInfo)), genericTypeParameters, genericMethodParameters);
                             ilGenerator.Emit(opCode, fieldInfo.FieldInfo);
                             break;
                         }
 
                     case OperandType.InlineMethod:
                         {
-                            var methodBase = DeserializeNonNull<PickledMethodBase>(state, new DeserializeInformation(typeof(MethodBase), true), genericTypeParameters, genericMethodParameters);
+                            var methodBase = DeserializeNonNull<PickledMethodBase>(state, new DeserializeInformation(typeof(MethodBase)), genericTypeParameters, genericMethodParameters);
                             methodBase.Emit(ilGenerator, opCode);
                             break;
                         }
@@ -649,7 +647,7 @@ namespace Ibasa.Pikala
                         throw new Exception($"Could not find static field '{fieldName}' on type '{type.Name}'");
                     }
 
-                    var deserInfo = new DeserializeInformation(typeof(object), !fieldInfo.FieldType.IsValueType);
+                    var deserInfo = new DeserializeInformation(typeof(object));
                     var fieldValue = ReducePickle(Deserialize(state, deserInfo, null, null));
                     fieldInfo.SetValue(null, fieldValue);
                 }
@@ -829,7 +827,7 @@ namespace Ibasa.Pikala
             }
             else
             {
-                var elementInfo = new DeserializeInformation(elementType, !elementType.IsValueType);
+                var elementInfo = new DeserializeInformation(elementType);
 
                 if (isSZArray)
                 {
@@ -1014,7 +1012,7 @@ namespace Ibasa.Pikala
                 // We always need to memo this value even if it looks like the field type is currently a ValueType. We could of changed the type from a reference type
                 // to a value type between serialisation and now. So when written out it might of used memos to refer to these objects and so we need to track them.
                 // TODO But we can't actually afford to do this! Because it can consume VAST amounts of memory, so for now fall back to guessing based on current type.
-                var deserInfo = new DeserializeInformation(typeof(object), !toSet.FieldType.IsValueType);
+                var deserInfo = new DeserializeInformation(typeof(object));
                 object? value = ReducePickle(Deserialize(state, deserInfo, genericTypeParameters, genericMethodParameters));
 
                 toSet.SetValue(uninitializedObject, value);
@@ -1126,7 +1124,7 @@ namespace Ibasa.Pikala
             for (int i = 0; i < invocationList.Length; ++i)
             {
                 var target = Deserialize(state, ObjectInfo, genericTypeParameters, genericMethodParameters);
-                var info = new DeserializeInformation(typeof(MethodInfo), true);
+                var info = new DeserializeInformation(typeof(MethodInfo));
                 var method = DeserializeNonNull<PickledMethodInfo>(state, info, genericTypeParameters, genericMethodParameters);
                 invocationList[i] = Delegate.CreateDelegate(objType.Type, target, method.MethodInfo);
             }
@@ -1177,7 +1175,7 @@ namespace Ibasa.Pikala
                 {
                     var propertyInfo = DeserializeNonNull<PickledPropertyInfo>(state, MakeInfo(typeof(PropertyInfo), attributeType), null, null);
                     namedProperties[j] = propertyInfo.PropertyInfo;
-                    var deserInfo = new DeserializeInformation(typeof(object), !namedProperties[j].PropertyType.IsValueType);
+                    var deserInfo = new DeserializeInformation(typeof(object));
                     propertyValues[j] = ReducePickle(Deserialize(state, deserInfo, null, null));
                 }
 
@@ -1187,7 +1185,7 @@ namespace Ibasa.Pikala
                 {
                     var pickledField = DeserializeNonNull<PickledFieldInfo>(state, MakeInfo(typeof(FieldInfo), attributeType), null, null);
                     namedFields[j] = pickledField.FieldInfo;
-                    var deserInfo = new DeserializeInformation(typeof(object), !pickledField.FieldInfo.FieldType.IsValueType);
+                    var deserInfo = new DeserializeInformation(typeof(object));
                     fieldValues[j] = ReducePickle(Deserialize(state, deserInfo, null, null));
                 }
 
@@ -1491,7 +1489,7 @@ namespace Ibasa.Pikala
 
         private PickledTypeInfo DeserializeGenericParameter(PicklerDeserializationState state, long position, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
-            var info = new DeserializeInformation(typeof(MemberInfo), true);
+            var info = new DeserializeInformation(typeof(MemberInfo));
             var genericTypeOrMethod = DeserializeNonNull<PickledMemberInfo>(state, info, genericTypeParameters, genericMethodParameters);
             var genericParameter = state.Reader.Read7BitEncodedInt();
             return state.SetMemo(position, true, genericTypeOrMethod.GetGenericArgument(genericParameter));
@@ -1624,14 +1622,18 @@ namespace Ibasa.Pikala
 
             var maybeOperation = InferOperationFromStaticType(info.StaticType);
             PickleOperation operation;
+            bool shouldMemo;
             if (maybeOperation.HasValue)
             {
                 operation = maybeOperation.Value;
+                shouldMemo = false;
             }
             else
             {
                 // Could not infer operation from static type, read the operation token
-                operation = (PickleOperation)state.Reader.ReadByte();
+                var opByte = state.Reader.ReadByte();
+                operation = (PickleOperation)(opByte & 0x7F);
+                shouldMemo = (opByte & 0x80) == 0;
             }
 
             switch (operation)
@@ -1645,79 +1647,79 @@ namespace Ibasa.Pikala
                 case PickleOperation.Boolean:
                     {
                         var result = (object)state.Reader.ReadBoolean();
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
                 case PickleOperation.Char:
                     {
                         var result = (object)state.Reader.ReadChar();
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
                 case PickleOperation.Byte:
                     {
                         var result = (object)state.Reader.ReadByte();
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
                 case PickleOperation.Int16:
                     {
                         var result = (object)state.Reader.ReadInt16();
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
                 case PickleOperation.Int32:
                     {
                         var result = (object)state.Reader.ReadInt32();
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
                 case PickleOperation.Int64:
                     {
                         var result = (object)state.Reader.ReadInt64();
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
                 case PickleOperation.SByte:
                     {
                         var result = (object)state.Reader.ReadSByte();
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
                 case PickleOperation.UInt16:
                     {
                         var result = (object)state.Reader.ReadUInt16();
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
                 case PickleOperation.UInt32:
                     {
                         var result = (object)state.Reader.ReadUInt32();
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
                 case PickleOperation.UInt64:
                     {
                         var result = (object)state.Reader.ReadUInt64();
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
                 case PickleOperation.Single:
                     {
                         var result = (object)state.Reader.ReadSingle();
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
                 case PickleOperation.Double:
                     {
                         var result = (object)state.Reader.ReadDouble();
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
                 case PickleOperation.Decimal:
                     {
                         var result = (object)state.Reader.ReadDecimal();
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
                 case PickleOperation.DBNull:
@@ -1725,19 +1727,19 @@ namespace Ibasa.Pikala
                 case PickleOperation.String:
                     {
                         var result = state.Reader.ReadString();
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
                 case PickleOperation.IntPtr:
                     {
                         var result = new IntPtr(state.Reader.ReadInt64());
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
                 case PickleOperation.UIntPtr:
                     {
                         var result = new UIntPtr(state.Reader.ReadUInt64());
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
 
@@ -1755,7 +1757,7 @@ namespace Ibasa.Pikala
                         }
                         var enumTypeCode = Type.GetTypeCode(enumType);
                         var result = Enum.ToObject(enumType, ReadEnumerationValue(state.Reader, enumTypeCode));
-                        state.SetMemo(position, info.ShouldMemo, result);
+                        state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
 
@@ -1850,11 +1852,11 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.Tuple:
                 case PickleOperation.ValueTuple:
-                    return state.SetMemo(position, info.ShouldMemo, DeserializeTuple(state, operation == PickleOperation.ValueTuple, genericTypeParameters, genericMethodParameters));
+                    return state.SetMemo(position, shouldMemo, DeserializeTuple(state, operation == PickleOperation.ValueTuple, genericTypeParameters, genericMethodParameters));
 
                 case PickleOperation.Reducer:
                     {
-                        return state.SetMemo(position, info.ShouldMemo, DeserializeReducer(state, genericTypeParameters, genericMethodParameters));
+                        return state.SetMemo(position, shouldMemo, DeserializeReducer(state, genericTypeParameters, genericMethodParameters));
                     }
 
                 case PickleOperation.ISerializable:
@@ -1869,7 +1871,7 @@ namespace Ibasa.Pikala
                             var pickledObjType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
                             objType = pickledObjType.Type;
                         }
-                        return state.SetMemo(position, info.ShouldMemo, DeserializeISerializable(state, objType, genericTypeParameters, genericMethodParameters));
+                        return state.SetMemo(position, shouldMemo, DeserializeISerializable(state, objType, genericTypeParameters, genericMethodParameters));
                     }
 
                 case PickleOperation.Object:
@@ -1879,14 +1881,14 @@ namespace Ibasa.Pikala
                         if (info.StaticType.IsValueType)
                         {
                             objectType = info.StaticType;
-                            uninitalizedObject = state.SetMemo(position, info.ShouldMemo, System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objectType));
+                            uninitalizedObject = state.SetMemo(position, shouldMemo, System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objectType));
                         }
                         else
                         {
                             var (callback, objType) = DeserializeWithMemo(state, position, (PickledTypeInfo objType) =>
                             {
                                 var result = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objType.Type);
-                                return state.SetMemo(position, info.ShouldMemo, result);
+                                return state.SetMemo(position, shouldMemo, result);
                             }, TypeInfo, genericTypeParameters, genericMethodParameters);
 
                             objectType = objType.Type;

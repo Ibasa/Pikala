@@ -1611,7 +1611,9 @@ namespace Ibasa.Pikala
                     }
                     else
                     {
-                        state.Writer.Write((byte)operation);
+                        // Set the high bit for operations that shouldn't memo
+                        var opByte = (int)operation | (info.ShouldMemo ? 0 : 0x80);
+                        state.Writer.Write((byte)opByte);
                     }
 
                     switch (operation)
