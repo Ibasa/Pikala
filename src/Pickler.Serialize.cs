@@ -1395,10 +1395,7 @@ namespace Ibasa.Pikala
             var serializationInfo = new System.Runtime.Serialization.SerializationInfo(info.RuntimeType, new System.Runtime.Serialization.FormatterConverter());
             iserializable.GetObjectData(serializationInfo, context);
 
-            if (!info.StaticType.IsValueType || info.StaticType != info.RuntimeType)
-            {
-                Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
-            }
+            Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
             state.Writer.Write7BitEncodedInt(serializationInfo.MemberCount);
             foreach (var member in serializationInfo)
             {
@@ -1409,26 +1406,17 @@ namespace Ibasa.Pikala
 
         private void SerializeObject(PicklerSerializationState state, object obj, SerializeInformation info, FieldInfo[] fields)
         {
-            // Must be an object, try and dump all it's fields
-            if (!info.StaticType.IsValueType || info.StaticType != info.RuntimeType)
-            {
-                Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
-            }
+            // Must be an object, try and dump all it's fields            
+            Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
 
             state.Writer.Write7BitEncodedInt(fields.Length);
             foreach (var field in fields)
             {
                 state.Writer.Write(field.Name);
-                // While it looks like we statically know the type here (it's the field type), it's not safe to pass it
-                // through as the static type. At derserialisation time we could be running a new program where the field has
-                // changed type, that change will fail to deserialise but it needs to fail safely(ish). Imagine changing FieldType
-                // from an Int32 to Int32[], we're going to try and read the 4 Int32 bytes as the length of the array and then start
-                // churning through the rest of the data stream trying to fill it. Despite this we do want to memo based on if the field is
-                // currently a value type or not. There's no pointing adding this object to the memo map if it's a value type because it's
-                // guaranteed to not be seen again (it's not a reference).
+                Serialize(state, field.FieldType, MakeInfo(field.FieldType, typeof(Type), true));
+
                 var value = field.GetValue(obj);
-                var fieldInfo = MakeInfo(value, typeof(object), ShouldMemo(value, field.FieldType));
-                Serialize(state, value, fieldInfo);
+                Serialize(state, value, MakeInfo(value, field.FieldType));
             }
         }
 
@@ -1619,11 +1607,8 @@ namespace Ibasa.Pikala
                     switch (operation)
                     {
                         case PickleOperation.Enum:
+                            Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
                             // typeCode for an enum will be something like Int32, but we might of infered the type from the static type
-                            if (!inferedOperationToken.HasValue)
-                            {
-                                Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
-                            }
                             WriteEnumerationValue(state.Writer, operationEntry.TypeCode, obj);
                             return;
 

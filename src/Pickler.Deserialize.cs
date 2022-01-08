@@ -993,11 +993,13 @@ namespace Ibasa.Pikala
 
             for (int i = 0; i < fieldCount; ++i)
             {
-                var name = state.Reader.ReadString();
+                var fieldName = state.Reader.ReadString();
+                var fieldType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+
                 FieldInfo? toSet = null;
                 foreach (var field in fields)
                 {
-                    if (field.Name == name)
+                    if (field.Name == fieldName)
                     {
                         toSet = field;
                         break;
@@ -1006,13 +1008,10 @@ namespace Ibasa.Pikala
 
                 if (toSet == null)
                 {
-                    throw new Exception($"Can not deserialize type '{type}', could not find expected field '{name}'");
+                    throw new Exception($"Can not deserialize type '{type}', could not find expected field '{fieldName}'");
                 }
 
-                // We always need to memo this value even if it looks like the field type is currently a ValueType. We could of changed the type from a reference type
-                // to a value type between serialisation and now. So when written out it might of used memos to refer to these objects and so we need to track them.
-                // TODO But we can't actually afford to do this! Because it can consume VAST amounts of memory, so for now fall back to guessing based on current type.
-                var deserInfo = new DeserializeInformation(typeof(object));
+                var deserInfo = new DeserializeInformation(fieldType.Type);
                 object? value = ReducePickle(Deserialize(state, deserInfo, genericTypeParameters, genericMethodParameters));
 
                 toSet.SetValue(uninitializedObject, value);
@@ -1745,16 +1744,8 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.Enum:
                     {
-                        Type enumType;
-                        if (info.StaticType.IsValueType)
-                        {
-                            enumType = info.StaticType;
-                        }
-                        else
-                        {
-                            var pickledEnumType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
-                            enumType = pickledEnumType.Type;
-                        }
+                        var pickledEnumType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+                        var enumType = pickledEnumType.Type;
                         var enumTypeCode = Type.GetTypeCode(enumType);
                         var result = Enum.ToObject(enumType, ReadEnumerationValue(state.Reader, enumTypeCode));
                         state.SetMemo(position, shouldMemo, result);
@@ -1861,40 +1852,17 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.ISerializable:
                     {
-                        Type objType;
-                        if (info.StaticType.IsValueType)
-                        {
-                            objType = info.StaticType;
-                        }
-                        else
-                        {
-                            var pickledObjType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
-                            objType = pickledObjType.Type;
-                        }
+                        var pickledObjType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+                        var  objType = pickledObjType.Type;
                         return state.SetMemo(position, shouldMemo, DeserializeISerializable(state, objType, genericTypeParameters, genericMethodParameters));
                     }
 
                 case PickleOperation.Object:
                     {
-                        object uninitalizedObject;
-                        Type objectType;
-                        if (info.StaticType.IsValueType)
-                        {
-                            objectType = info.StaticType;
-                            uninitalizedObject = state.SetMemo(position, shouldMemo, System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objectType));
-                        }
-                        else
-                        {
-                            var (callback, objType) = DeserializeWithMemo(state, position, (PickledTypeInfo objType) =>
-                            {
-                                var result = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objType.Type);
-                                return state.SetMemo(position, shouldMemo, result);
-                            }, TypeInfo, genericTypeParameters, genericMethodParameters);
-
-                            objectType = objType.Type;
-                            uninitalizedObject = callback.Invoke();
-                        }
-                        DeserializeObject(state, uninitalizedObject, objectType, genericTypeParameters, genericMethodParameters);
+                        var pickledObjType = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
+                        var objType = pickledObjType.Type;
+                        var uninitalizedObject = state.SetMemo(position, shouldMemo, System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objType));
+                        DeserializeObject(state, uninitalizedObject, objType, genericTypeParameters, genericMethodParameters);
                         return uninitalizedObject;
                     }
             }
