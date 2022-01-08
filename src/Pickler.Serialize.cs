@@ -1404,25 +1404,19 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeObject(PicklerSerializationState state, object obj, SerializeInformation info, FieldInfo[] fields)
+        private void SerializeObject(PicklerSerializationState state, object obj, SerializeInformation info, Tuple<ValueTuple<string, Type>[], FieldInfo[]> fields)
         {
             // Must be an object, try and dump all it's fields
             Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
 
-            state.Writer.Write7BitEncodedInt(fields.Length);
-            foreach (var field in fields)
+            var (namesAndTypes, fieldInfos) = fields;
+
+            Serialize(state, namesAndTypes, MakeInfo(namesAndTypes, typeof(ValueTuple<string, Type>[]), true));
+
+            foreach (var field in fieldInfos)
             {
-                state.Writer.Write(field.Name);
-                // While it looks like we statically know the type here (it's the field type), it's not safe to pass it
-                // through as the static type. At derserialisation time we could be running a new program where the field has
-                // changed type, that change will fail to deserialise but it needs to fail safely(ish). Imagine changing FieldType
-                // from an Int32 to Int32[], we're going to try and read the 4 Int32 bytes as the length of the array and then start
-                // churning through the rest of the data stream trying to fill it. Despite this we do want to memo based on if the field is
-                // currently a value type or not. There's no pointing adding this object to the memo map if it's a value type because it's
-                // guaranteed to not be seen again (it's not a reference).
                 var value = field.GetValue(obj);
-                var fieldInfo = MakeInfo(value, typeof(object), ShouldMemo(value, field.FieldType));
-                Serialize(state, value, fieldInfo);
+                Serialize(state, value, MakeInfo(value, field.FieldType));
             }
         }
 
@@ -1559,12 +1553,8 @@ namespace Ibasa.Pikala
                             throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from MarshalByRefObject.");
                         }
 
-                        var fields = GetSerializedFields(runtimeType);
-                        // Sort the fields by name so we serialise in deterministic order
-                        Array.Sort(fields, (x, y) => x.Name.CompareTo(y.Name));
-                        return new OperationCacheEntry(typeCode, fields);
+                        return new OperationCacheEntry(typeCode, GetSerializedFields(runtimeType));
                     }
-
             }
 
             throw new Exception($"Unhandled TypeCode '{typeCode}' for type '{runtimeType}'");
@@ -1599,11 +1589,15 @@ namespace Ibasa.Pikala
                     var inferedOperationToken = InferOperationFromStaticType(info.StaticType);
                     if (inferedOperationToken.HasValue)
                     {
-                        System.Diagnostics.Debug.Assert(inferedOperationToken.Value == operation);
+                        System.Diagnostics.Debug.Assert(inferedOperationToken.Value == operation, "Infered operation from static type didn't match intended operation");
+                        // If we've infered the operation we can't be memoising this value because we're skipping writing out the op token that could tell us to memoise
+                        System.Diagnostics.Debug.Assert(!info.ShouldMemo, "Infered an operation for a memoizable type");
                     }
                     else
                     {
-                        state.Writer.Write((byte)operation);
+                        // Set the high bit for operations that shouldn't memo
+                        var opByte = (int)operation | (info.ShouldMemo ? 0 : 0x80);
+                        state.Writer.Write((byte)opByte);
                     }
 
                     switch (operation)
