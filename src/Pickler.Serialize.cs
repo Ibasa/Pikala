@@ -1606,6 +1606,8 @@ namespace Ibasa.Pikala
                     if (inferedOperationToken.HasValue)
                     {
                         System.Diagnostics.Debug.Assert(inferedOperationToken.Value == operation, "Infered operation from static type didn't match intended operation");
+                        // If we've infered the operation we can't be memoising this value because we're skipping writing out the op token that could tell us to memoise
+                        System.Diagnostics.Debug.Assert(!info.ShouldMemo, "Infered an operation for a memoizable type");
                     }
                     else
                     {
