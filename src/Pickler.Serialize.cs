@@ -1604,7 +1604,7 @@ namespace Ibasa.Pikala
                     {
                         case PickleOperation.Enum:
                             Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
-                            // typeCode for an enum will be something like Int32, but we might of infered the type from the static type
+                            // typeCode for an enum will be something like Int32
                             WriteEnumerationValue(state.Writer, operationEntry.TypeCode, obj);
                             return;
 

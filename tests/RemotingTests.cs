@@ -736,5 +736,117 @@ namespace Ibasa.Pikala.Tests
             var customAttribute = Assert.Single(assembly.GetCustomAttributes(customAttributeType, true));
             Assert.Equal("testing", customAttribute.ToString());
         }
+
+        [Fact]
+        public void TestChangeToEnumTypeErrorsCorrectly()
+        {
+            // Test that if we serialise an object type, then try to read it back in a new 
+            // context where it's an enum we get an error.
+
+            var scriptA = string.Join('\n', new[]
+            {
+                ScriptHeader_PickleByReference,
+                "type Test = { Value : int }",
+                "let value = [| { Value = 1 }; { Value = 2 } |]",
+                "let base64 = serializeBase64 value",
+                "printf \"%s\" base64",
+            });
+
+            var pickledbase64 = RunFsi(scriptA);
+
+            var scriptB = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "type Test =",
+                "   | A = 1",
+                "   | B = 2",
+                "let value = deserializeBase64 \"" + pickledbase64 + "\" :?> Test array",
+                "printf \"%O\" value",
+            });
+
+            var exception = Assert.Throws<Exception>(() => RunFsi(scriptB));
+
+            // This is maybe not the best error, but it at least kinda makes sense
+            Assert.Contains("Can not deserialize type 'FSI_0001+Test', could not find expected field 'Value@'", exception.Message);
+        }
+
+        [Fact]
+        public void TestChangeFromEnumTypeErrorsCorrectly()
+        {
+            // Test that if we serialise an enum type, then try to read it back in a new 
+            // context where it's not an enum we get an error.
+
+            var scriptA = string.Join('\n', new[]
+            {
+                ScriptHeader_PickleByReference,
+                "type Test =",
+                "   | A = 1",
+                "   | B = 2",
+                "let value = [| Test.A; Test.B |]",
+                "let base64 = serializeBase64 value",
+                "printf \"%s\" base64",
+            });
+
+            var pickledbase64 = RunFsi(scriptA);
+
+            var scriptB = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "type Test = { Value : int }",
+                "let value = deserializeBase64 \"" + pickledbase64 + "\" :?> Test array",
+                "printf \"%O\" value",
+            });
+
+            var exception = Assert.Throws<Exception>(() => RunFsi(scriptB));
+
+            Assert.Contains("Can not deserialise FSI_0001+Test expected it to be an enumeration type", exception.Message);
+        }
+
+        [Fact]
+        public void TestChangeFromClassTypeMemosCorrectly()
+        {
+            // Test that if we serialise an object type it memoizes, if we then
+            // change to a value type the memo lookups are still valid
+
+            var scriptA = string.Join('\n', new[]
+            {
+                ScriptHeader_PickleByReference,
+                "type Test = { Value : int }",
+                "let value = { Value = 1 }",
+                "let tuple = struct (value, value)",
+                "let base64 = serializeBase64 tuple",
+                "printf \"%s\" base64",
+            });
+
+            var pickledbase64 = RunFsi(scriptA);
+
+            var scriptB = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "type Test = { Value : int }",
+                "let struct(a, b) as t = deserializeBase64 \"" + pickledbase64 + "\" :?> System.ValueTuple<Test, Test>",
+                "if obj.ReferenceEquals(a, b) then",
+                "    printf \"%O\" t",
+                "else",
+                "    printf \"false\"",
+            });
+
+            var result = RunFsi(scriptB);
+
+            Assert.Equal("({ Value = 1 }, { Value = 1 })", result);
+
+            var scriptC = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "[<Struct>]",
+                "type Test = { Value : int }",
+                "let t = deserializeBase64 \"" + pickledbase64 + "\"",
+                "printf \"%O\" t",
+            });
+
+            result = RunFsi(scriptC);
+
+            Assert.Equal("({ Value = 1 }, { Value = 1 })", result);
+        }
     }
 }

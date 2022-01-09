@@ -226,11 +226,7 @@ namespace Ibasa.Pikala
                 {
                     // This is a static value type, we probably didn't write an operation out for this
 
-                    if (staticType.IsEnum)
-                    {
-                        return PickleOperation.Enum;
-                    }
-                    else if (staticType == typeof(bool))
+                    if (staticType == typeof(bool))
                     {
                         return PickleOperation.Boolean;
                     }
