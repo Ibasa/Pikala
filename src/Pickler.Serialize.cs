@@ -1320,21 +1320,24 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeTuple(PicklerSerializationState state, System.Runtime.CompilerServices.ITuple tuple, Type runtimeType)
+        private void SerializeTuple(PicklerSerializationState state, System.Runtime.CompilerServices.ITuple tuple, Type[]? genericArguments)
         {
+            if(genericArguments == null)
+            {
+                // This must be an empty value tuple just write out a null params and return
+                state.Writer.Write((byte)PickleOperation.Null);
+                return;
+            }
+
+            System.Diagnostics.Debug.Assert(genericArguments != null, "genericArguments was null for a non-empty tuple");
+
             if (tuple.Length > byte.MaxValue)
             {
                 throw new NotImplementedException($"Pikala does not support tuples of length higher than {byte.MaxValue}, got {tuple.Length}");
             }
 
-            state.Writer.Write((byte)tuple.Length);
-
             // Write out the static types
-            var genericArguments = runtimeType.GetGenericArguments();
-            for (int i = 0; i < tuple.Length; ++i)
-            {
-                Serialize(state, genericArguments[i], MakeInfo(genericArguments[i], typeof(Type), true));
-            }
+            Serialize(state, genericArguments, MakeInfo(genericArguments, typeof(Type[]), true));
 
             // Write out the values
             for (int i = 0; i < tuple.Length; ++i)
@@ -1530,11 +1533,11 @@ namespace Ibasa.Pikala
                         {
                             if (runtimeType.FullName.StartsWith("System.Tuple"))
                             {
-                                return new OperationCacheEntry(typeCode, PickleOperation.Tuple);
+                                return new OperationCacheEntry(typeCode, false, runtimeType.GetGenericArguments());
                             }
                             else
                             {
-                                return new OperationCacheEntry(typeCode, PickleOperation.ValueTuple);
+                                return new OperationCacheEntry(typeCode, true, runtimeType.IsGenericType ? runtimeType.GetGenericArguments(): null);
                             }
                         }
 
@@ -1682,7 +1685,7 @@ namespace Ibasa.Pikala
                             return;
                         case PickleOperation.Tuple:
                         case PickleOperation.ValueTuple:
-                            SerializeTuple(state, (System.Runtime.CompilerServices.ITuple)obj, info.RuntimeType);
+                            SerializeTuple(state, (System.Runtime.CompilerServices.ITuple)obj, operationEntry.GenericArguments);
                             return;
                         case PickleOperation.ISerializable:
                             SerializeISerializable(state, (System.Runtime.Serialization.ISerializable)obj, info);

@@ -115,6 +115,7 @@ namespace Ibasa.Pikala
         public readonly PickleOperation? Operation;
         public readonly IReducer? Reducer;
         public readonly Tuple<ValueTuple<string, Type>[], FieldInfo[]>? Fields;
+        public readonly Type[]? GenericArguments;
 
         public OperationCacheEntry(TypeCode typeCode, OperationGroup group)
         {
@@ -124,6 +125,7 @@ namespace Ibasa.Pikala
             Operation = null;
             Reducer = null;
             Fields = null;
+            GenericArguments = null;
         }
 
         public OperationCacheEntry(TypeCode typeCode, PickleOperation operation)
@@ -133,6 +135,17 @@ namespace Ibasa.Pikala
             Operation = operation;
             Reducer = null;
             Fields = null;
+            GenericArguments = null;
+        }
+
+        public OperationCacheEntry(TypeCode typeCode, bool isValueTuple, Type[] genericArguments)
+        {
+            TypeCode = typeCode;
+            Group = OperationGroup.FullyKnown;
+            Operation = isValueTuple ? PickleOperation.ValueTuple : PickleOperation.Tuple;
+            Reducer = null;
+            Fields = null;
+            GenericArguments = genericArguments;
         }
 
 
@@ -143,6 +156,7 @@ namespace Ibasa.Pikala
             Operation = PickleOperation.Reducer;
             Reducer = reducer;
             Fields = null;
+            GenericArguments = null;
         }
 
         public OperationCacheEntry(TypeCode typeCode, FieldInfo[] fields)
@@ -151,6 +165,7 @@ namespace Ibasa.Pikala
             Group = OperationGroup.FullyKnown;
             Operation = PickleOperation.Object;
             Reducer = null;
+            GenericArguments = null;
 
             var fieldNamesAndTypes = new ValueTuple<string, Type>[fields.Length];
             for (int i = 0; i < fields.Length; ++i)
