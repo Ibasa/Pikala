@@ -22,6 +22,7 @@ namespace Ibasa.Pikala.Tests
         }
     }
 
+    [CollectionDefinition("LargeTests", DisableParallelization = true)]
     public class LargeTests
     {
         private void LargeArrayTest<X, Y>(Func<X> generator, Func<X, Y> checker)
