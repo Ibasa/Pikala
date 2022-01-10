@@ -1320,28 +1320,32 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeTuple(PicklerSerializationState state, System.Runtime.CompilerServices.ITuple tuple, Type[]? genericArguments)
+        private void SerializeTuple(PicklerSerializationState state, System.Runtime.CompilerServices.ITuple tuple, Type staticType, Type[]? genericArguments)
         {
-            if (genericArguments == null)
+            // No need to write out the static types if we know them
+            if (!IsTupleType(staticType))
             {
-                // This must be an empty value tuple just write out a null params and return
-                state.Writer.Write((byte)PickleOperation.Null);
-                return;
+                if (genericArguments == null)
+                {
+                    // This must be an empty value tuple just write out a null params and return
+                    state.Writer.Write((byte)PickleOperation.Null);
+                    return;
+                }
+
+                if (tuple.Length > byte.MaxValue)
+                {
+                    throw new NotImplementedException($"Pikala does not support tuples of length higher than {byte.MaxValue}, got {tuple.Length}");
+                }
+
+                // Write out the static types
+                Serialize(state, genericArguments, MakeInfo(genericArguments, typeof(Type[]), true));
             }
-
-            System.Diagnostics.Debug.Assert(genericArguments != null, "genericArguments was null for a non-empty tuple");
-
-            if (tuple.Length > byte.MaxValue)
-            {
-                throw new NotImplementedException($"Pikala does not support tuples of length higher than {byte.MaxValue}, got {tuple.Length}");
-            }
-
-            // Write out the static types
-            Serialize(state, genericArguments, MakeInfo(genericArguments, typeof(Type[]), true));
 
             // Write out the values
             for (int i = 0; i < tuple.Length; ++i)
             {
+                System.Diagnostics.Debug.Assert(genericArguments != null, "genericArguments was null for a non-empty tuple");
+
                 var item = tuple[i];
                 Serialize(state, item, MakeInfo(item, genericArguments[i]));
             }
@@ -1684,7 +1688,7 @@ namespace Ibasa.Pikala
                             return;
                         case PickleOperation.Tuple:
                         case PickleOperation.ValueTuple:
-                            SerializeTuple(state, (System.Runtime.CompilerServices.ITuple)obj, operationEntry.GenericArguments);
+                            SerializeTuple(state, (System.Runtime.CompilerServices.ITuple)obj, info.StaticType, operationEntry.GenericArguments);
                             return;
                         case PickleOperation.ISerializable:
                             SerializeISerializable(state, (System.Runtime.Serialization.ISerializable)obj, info);

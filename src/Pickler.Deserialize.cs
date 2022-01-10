@@ -881,9 +881,17 @@ namespace Ibasa.Pikala
             return array;
         }
 
-        private object DeserializeTuple(PicklerDeserializationState state, bool isValueTuple, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
+        private object DeserializeTuple(PicklerDeserializationState state, bool isValueTuple, Type staticType, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
-            var genericArguments = Deserialize(state, MakeInfo(typeof(Type[])), genericTypeParameters, genericMethodParameters) as Type[];
+            Type[]? genericArguments;
+            if (IsTupleType(staticType))
+            {
+                genericArguments = staticType.IsGenericType ? staticType.GetGenericArguments() : null;
+            }
+            else
+            {
+                genericArguments = Deserialize(state, MakeInfo(typeof(Type[])), genericTypeParameters, genericMethodParameters) as Type[];
+            }
 
             // if length == null short circuit to just return a new ValueTuple
             if (genericArguments == null)
@@ -1846,7 +1854,7 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.Tuple:
                 case PickleOperation.ValueTuple:
-                    return state.SetMemo(position, shouldMemo, DeserializeTuple(state, operation == PickleOperation.ValueTuple, genericTypeParameters, genericMethodParameters));
+                    return state.SetMemo(position, shouldMemo, DeserializeTuple(state, operation == PickleOperation.ValueTuple, info.StaticType, genericTypeParameters, genericMethodParameters));
 
                 case PickleOperation.Reducer:
                     {
