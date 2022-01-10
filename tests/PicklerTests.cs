@@ -62,7 +62,7 @@ namespace Ibasa.Pikala.Tests
                 Arb.From<char[]>(),
                 value => RoundTrip.Assert(pickler, value));
         }
-        
+
         [Property]
         public Property TestSystemEnumArray()
         {
@@ -526,7 +526,7 @@ namespace Ibasa.Pikala.Tests
         public Property TestNestedIntArray()
         {
             var pickler = new Pickler();
-        
+
             return Prop.ForAll(
                 Arb.From<int[][][]>(),
                 value => RoundTrip.Assert(pickler, value));
