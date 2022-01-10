@@ -138,7 +138,7 @@ namespace Ibasa.Pikala
             GenericArguments = null;
         }
 
-        public OperationCacheEntry(TypeCode typeCode, bool isValueTuple, Type[] genericArguments)
+        public OperationCacheEntry(TypeCode typeCode, bool isValueTuple, Type[]? genericArguments)
         {
             TypeCode = typeCode;
             Group = OperationGroup.FullyKnown;
@@ -301,7 +301,7 @@ namespace Ibasa.Pikala
                     {
                         return PickleOperation.UIntPtr;
                     }
-                    else if (staticType.Assembly == mscorlib && staticType.FullName != null && staticType.FullName.StartsWith("System.ValueTuple`"))
+                    else if (staticType.Assembly == mscorlib && staticType.Name == "ValueTuple" && staticType.Namespace == "System")
                     {
                         return PickleOperation.ValueTuple;
                     }
