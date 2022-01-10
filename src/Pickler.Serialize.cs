@@ -1322,7 +1322,7 @@ namespace Ibasa.Pikala
 
         private void SerializeTuple(PicklerSerializationState state, System.Runtime.CompilerServices.ITuple tuple, Type[]? genericArguments)
         {
-            if(genericArguments == null)
+            if (genericArguments == null)
             {
                 // This must be an empty value tuple just write out a null params and return
                 state.Writer.Write((byte)PickleOperation.Null);
