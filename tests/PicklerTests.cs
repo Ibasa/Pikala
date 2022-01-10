@@ -62,6 +62,24 @@ namespace Ibasa.Pikala.Tests
                 Arb.From<char[]>(),
                 value => RoundTrip.Assert(pickler, value));
         }
+        
+        [Property]
+        public Property TestSystemEnumArray()
+        {
+            var pickler = new Pickler();
+            return Prop.ForAll(
+            Arb.From<System.ConsoleColor[]>(),
+                value => RoundTrip.Assert(pickler, value));
+        }
+
+        [Property]
+        public Property TestCustomEnumArray()
+        {
+            var pickler = new Pickler();
+            return Prop.ForAll(
+            Arb.From<TestTypes.EnumurationType[]>(),
+                value => RoundTrip.Assert(pickler, value));
+        }
 
         [Property]
         public Property TestKeyValuePair()
@@ -501,6 +519,16 @@ namespace Ibasa.Pikala.Tests
 
             return Prop.ForAll(
                 Arb.From<int[][]>(),
+                value => RoundTrip.Assert(pickler, value));
+        }
+
+        [Property]
+        public Property TestNestedIntArray()
+        {
+            var pickler = new Pickler();
+        
+            return Prop.ForAll(
+                Arb.From<int[][][]>(),
                 value => RoundTrip.Assert(pickler, value));
         }
 
