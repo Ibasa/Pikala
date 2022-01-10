@@ -83,7 +83,7 @@ namespace Ibasa.Pikala.Tests
         public delegate int GenericDelegateType<T>(T x);
 
         [Serializable]
-        public struct StructureType
+        public struct StructureType : IStructuralEquatable
         {
             public int Foo;
             public double Bar;
@@ -91,6 +91,25 @@ namespace Ibasa.Pikala.Tests
             public override string ToString()
             {
                 return $"{Foo}, {Bar}";
+            }
+
+            public bool Equals(object other, IEqualityComparer comparer)
+            {
+                if (other is StructureType that)
+                {
+                    return comparer.Equals(Foo, that.Foo) && comparer.Equals(Bar, that.Bar);
+                }
+                return false;
+            }
+
+            public int GetHashCode(IEqualityComparer comparer)
+            {
+                return HashCode.Combine(Foo.GetHashCode(), Bar.GetHashCode());
+            }
+
+            public override int GetHashCode()
+            {
+                return HashCode.Combine(Foo.GetHashCode(), Bar.GetHashCode());
             }
         }
 
@@ -142,7 +161,7 @@ namespace Ibasa.Pikala.Tests
         }
 
         [Serializable]
-        public class ClassType
+        public class ClassType : IStructuralEquatable
         {
             public int Foo;
             private string Bar;
@@ -161,6 +180,34 @@ namespace Ibasa.Pikala.Tests
             public override string ToString()
             {
                 return $"{Foo}, {Bar}";
+            }
+
+            public override bool Equals(object obj)
+            {
+                if (obj is ClassType that)
+                {
+                    return Foo == that.Foo && Bar == that.Bar;
+                }
+                return false;
+            }
+
+            public bool Equals(object other, IEqualityComparer comparer)
+            {
+                if (other is ClassType that)
+                {
+                    return comparer.Equals(Foo, that.Foo) && comparer.Equals(Bar, that.Bar);
+                }
+                return false;
+            }
+
+            public int GetHashCode(IEqualityComparer comparer)
+            {
+                return HashCode.Combine(Foo.GetHashCode(), Bar == null ? 0 : Bar.GetHashCode());
+            }
+
+            public override int GetHashCode()
+            {
+                return HashCode.Combine(Foo.GetHashCode(), Bar == null ? 0 : Bar.GetHashCode());
             }
         }
 
