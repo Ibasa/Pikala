@@ -29,7 +29,10 @@ namespace Ibasa.Pikala.Tests
                 var enumerator = xd.GetEnumerator();
                 while (enumerator.MoveNext())
                 {
+                    if (!yd.Contains(enumerator.Key)) return false;
+
                     var yvalue = yd[enumerator.Key];
+
                     if (!Equals(enumerator.Value, yvalue)) return false;
                 }
 
@@ -184,7 +187,8 @@ namespace Ibasa.Pikala.Tests
             {
                         typeof(bool), typeof(byte), typeof(short), typeof(int), typeof(long),
                         typeof(char), typeof(sbyte), typeof(ushort), typeof(uint), typeof(ulong),
-                        typeof(string), typeof(ConsoleColor)
+                        typeof(string), typeof(ConsoleColor), typeof(TestTypes.EnumurationType),
+                        typeof(TestTypes.StructureType), typeof(TestTypes.ClassType),
             };
 
         static Type GenerateType(ref FsCheck.Random.StdGen stdGen)
