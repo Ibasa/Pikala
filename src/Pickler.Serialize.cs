@@ -1528,16 +1528,15 @@ namespace Ibasa.Pikala
                         }
 
                         // Tuples!
-
-                        if (runtimeType.Assembly == mscorlib && runtimeType.Namespace == "System" && (runtimeType.Name.StartsWith("Tuple") || runtimeType.Name.StartsWith("ValueTuple")))
+                        if (IsTupleType(runtimeType))
                         {
-                            if (runtimeType.Name.StartsWith("Tuple"))
+                            if (runtimeType.IsValueType)
                             {
-                                return new OperationCacheEntry(typeCode, false, runtimeType.GetGenericArguments());
+                                return new OperationCacheEntry(typeCode, true, runtimeType.IsGenericType ? runtimeType.GetGenericArguments() : null);
                             }
                             else
                             {
-                                return new OperationCacheEntry(typeCode, true, runtimeType.IsGenericType ? runtimeType.GetGenericArguments() : null);
+                                return new OperationCacheEntry(typeCode, false, runtimeType.GetGenericArguments());
                             }
                         }
 

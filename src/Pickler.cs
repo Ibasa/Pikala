@@ -301,7 +301,7 @@ namespace Ibasa.Pikala
                     {
                         return PickleOperation.UIntPtr;
                     }
-                    else if (staticType.Assembly == mscorlib && staticType.Name == "ValueTuple" && staticType.Namespace == "System")
+                    else if (IsTupleType(staticType) && staticType.IsValueType)
                     {
                         return PickleOperation.ValueTuple;
                     }
@@ -328,6 +328,11 @@ namespace Ibasa.Pikala
             var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             // Sort the fields by name so we serialise in deterministic order
             return fields.Where(field => !field.IsLiteral && !field.IsNotSerialized).OrderBy(field => field.Name).ToArray();
+        }
+
+        private static bool IsTupleType(Type type)
+        {
+            return type.Assembly == mscorlib && type.Namespace == "System" && (type.Name.StartsWith("ValueTuple") || type.Name.StartsWith("Tuple"));
         }
     }
 }
