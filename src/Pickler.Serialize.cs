@@ -1320,25 +1320,32 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeTuple(PicklerSerializationState state, System.Runtime.CompilerServices.ITuple tuple, Type runtimeType)
+        private void SerializeTuple(PicklerSerializationState state, System.Runtime.CompilerServices.ITuple tuple, Type staticType, Type[]? genericArguments)
         {
-            if (tuple.Length > byte.MaxValue)
+            // No need to write out the static types if we know them
+            if (!IsTupleType(staticType))
             {
-                throw new NotImplementedException($"Pikala does not support tuples of length higher than {byte.MaxValue}, got {tuple.Length}");
-            }
+                if (genericArguments == null)
+                {
+                    // This must be an empty value tuple just write out a null params and return
+                    state.Writer.Write((byte)PickleOperation.Null);
+                    return;
+                }
 
-            state.Writer.Write((byte)tuple.Length);
+                if (tuple.Length > byte.MaxValue)
+                {
+                    throw new NotImplementedException($"Pikala does not support tuples of length higher than {byte.MaxValue}, got {tuple.Length}");
+                }
 
-            // Write out the static types
-            var genericArguments = runtimeType.GetGenericArguments();
-            for (int i = 0; i < tuple.Length; ++i)
-            {
-                Serialize(state, genericArguments[i], MakeInfo(genericArguments[i], typeof(Type), true));
+                // Write out the static types
+                Serialize(state, genericArguments, MakeInfo(genericArguments, typeof(Type[]), true));
             }
 
             // Write out the values
             for (int i = 0; i < tuple.Length; ++i)
             {
+                System.Diagnostics.Debug.Assert(genericArguments != null, "genericArguments was null for a non-empty tuple");
+
                 var item = tuple[i];
                 Serialize(state, item, MakeInfo(item, genericArguments[i]));
             }
@@ -1525,16 +1532,15 @@ namespace Ibasa.Pikala
                         }
 
                         // Tuples!
-
-                        if (runtimeType.Assembly == mscorlib && runtimeType.FullName != null && (runtimeType.FullName.StartsWith("System.Tuple") || runtimeType.FullName.StartsWith("System.ValueTuple")))
+                        if (IsTupleType(runtimeType))
                         {
-                            if (runtimeType.FullName.StartsWith("System.Tuple"))
+                            if (runtimeType.IsValueType)
                             {
-                                return new OperationCacheEntry(typeCode, PickleOperation.Tuple);
+                                return new OperationCacheEntry(typeCode, true, runtimeType.IsGenericType ? runtimeType.GetGenericArguments() : null);
                             }
                             else
                             {
-                                return new OperationCacheEntry(typeCode, PickleOperation.ValueTuple);
+                                return new OperationCacheEntry(typeCode, false, runtimeType.GetGenericArguments());
                             }
                         }
 
@@ -1682,7 +1688,7 @@ namespace Ibasa.Pikala
                             return;
                         case PickleOperation.Tuple:
                         case PickleOperation.ValueTuple:
-                            SerializeTuple(state, (System.Runtime.CompilerServices.ITuple)obj, info.RuntimeType);
+                            SerializeTuple(state, (System.Runtime.CompilerServices.ITuple)obj, info.StaticType, operationEntry.GenericArguments);
                             return;
                         case PickleOperation.ISerializable:
                             SerializeISerializable(state, (System.Runtime.Serialization.ISerializable)obj, info);

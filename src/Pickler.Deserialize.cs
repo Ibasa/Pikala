@@ -881,33 +881,39 @@ namespace Ibasa.Pikala
             return array;
         }
 
-        private object DeserializeTuple(PicklerDeserializationState state, bool isValueTuple, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
+        private object DeserializeTuple(PicklerDeserializationState state, bool isValueTuple, Type staticType, Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
-            var length = state.Reader.ReadByte();
-            // if length == 0 short circuit to just return a new ValueTuple
-            if (length == 0)
+            Type[]? genericArguments;
+            if (IsTupleType(staticType))
+            {
+                genericArguments = staticType.IsGenericType ? staticType.GetGenericArguments() : null;
+            }
+            else
+            {
+                genericArguments = Deserialize(state, MakeInfo(typeof(Type[])), genericTypeParameters, genericMethodParameters) as Type[];
+            }
+
+            // if length == null short circuit to just return a new ValueTuple
+            if (genericArguments == null)
             {
                 System.Diagnostics.Debug.Assert(isValueTuple, "Tuple length was zero but it wasn't a value tuple");
                 return new ValueTuple();
             }
 
-            var genericParameters = new Type[length];
-            var genericArguments = new Type[length];
-            for (int i = 0; i < length; ++i)
+            var genericParameters = new Type[genericArguments.Length];
+            for (int i = 0; i < genericArguments.Length; ++i)
             {
-                var pickledTypeInfo = DeserializeNonNull<PickledTypeInfo>(state, TypeInfo, genericTypeParameters, genericMethodParameters);
-                genericArguments[i] = pickledTypeInfo.Type;
                 genericParameters[i] = Type.MakeGenericMethodParameter(i);
             }
 
-            var items = new object?[length];
-            for (int i = 0; i < length; ++i)
+            var items = new object?[genericArguments.Length];
+            for (int i = 0; i < genericArguments.Length; ++i)
             {
                 items[i] = ReducePickle(Deserialize(state, MakeInfo(genericArguments[i]), genericTypeParameters, genericMethodParameters));
             }
 
             var tupleType = isValueTuple ? typeof(System.ValueTuple) : typeof(System.Tuple);
-            var openCreateMethod = tupleType.GetMethod("Create", length, genericParameters);
+            var openCreateMethod = tupleType.GetMethod("Create", genericArguments.Length, genericParameters);
             System.Diagnostics.Debug.Assert(openCreateMethod != null, "GetMethod for Tuple.Create returned null");
             var closedCreateMethod = openCreateMethod.MakeGenericMethod(genericArguments);
             var tupleObject = closedCreateMethod.Invoke(null, items);
@@ -1848,7 +1854,7 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.Tuple:
                 case PickleOperation.ValueTuple:
-                    return state.SetMemo(position, shouldMemo, DeserializeTuple(state, operation == PickleOperation.ValueTuple, genericTypeParameters, genericMethodParameters));
+                    return state.SetMemo(position, shouldMemo, DeserializeTuple(state, operation == PickleOperation.ValueTuple, info.StaticType, genericTypeParameters, genericMethodParameters));
 
                 case PickleOperation.Reducer:
                     {
