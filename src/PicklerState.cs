@@ -8,19 +8,25 @@ namespace Ibasa.Pikala
     abstract class MemoCallback
     {
         public abstract object InvokeUntyped();
+
+        public abstract void SetValue(object value);
     }
 
-    sealed class MemoCallback<T> : MemoCallback where T : class
+    sealed class MemoCallback<T, R> : MemoCallback where T : class where R : class
     {
-        Func<T>? _handler;
-        T? _result;
+        long _memoPosition, _objectPosition;
+        Func<T, R>? _handler;
+        R? _result;
+        T? _value;
 
-        public MemoCallback(Func<T> handler)
+        public MemoCallback(long memoPosition, long objectPosition, Func<T, R> handler)
         {
+            _memoPosition = memoPosition;
+            _objectPosition = objectPosition;
             _handler = handler;
         }
 
-        public T Invoke()
+        public R Invoke()
         {
             if (_handler == null)
             {
@@ -29,10 +35,23 @@ namespace Ibasa.Pikala
             }
             else
             {
-                _result = _handler();
+                if (_value == null)
+                {
+                    throw new Exception($"Tried to reference object from position {_objectPosition} in the stream with callback for {_memoPosition}, but that object is not yet created.");
+                }
+                _result = _handler(_value);
+                _value = null;
                 _handler = null;
                 return _result;
             }
+        }
+
+        public override void SetValue(object value)
+        {
+            System.Diagnostics.Debug.Assert(_value == null, "Trying to set a memo callback value that's already set");
+            System.Diagnostics.Debug.Assert(_result == null, "Trying to set a memo callback value that's already finished");
+            System.Diagnostics.Debug.Assert(value != null, "Can't set a null object for a memo callback");
+            _value = (T)value;
         }
 
         public override object InvokeUntyped()
@@ -56,7 +75,9 @@ namespace Ibasa.Pikala
     sealed class PicklerDeserializationState : IDisposable
     {
         Dictionary<long, object> memo;
-        Dictionary<long, MemoCallback> memoCallbacks;
+        // We need to lookup callbacks based on the origional position, and by the object their waiting for position
+        Dictionary<long, MemoCallback> memoCallbacks_byMemoPosition;
+        Dictionary<long, MemoCallback> memoCallbacks_byObjPosition;
         List<Action> staticFields;
         public BinaryReader Reader { get; private set; }
 
@@ -65,7 +86,8 @@ namespace Ibasa.Pikala
         public PicklerDeserializationState(Stream stream)
         {
             memo = new Dictionary<long, object>();
-            memoCallbacks = new Dictionary<long, MemoCallback>();
+            memoCallbacks_byMemoPosition = new Dictionary<long, MemoCallback>();
+            memoCallbacks_byObjPosition = new Dictionary<long, MemoCallback>();
             staticFields = new List<Action>();
             Reader = new BinaryReader(new PickleStream(stream));
             _constructedTypes = new Dictionary<System.Reflection.Assembly, Dictionary<string, PickledTypeInfoDef>>();
@@ -136,7 +158,21 @@ namespace Ibasa.Pikala
         [return: NotNull]
         public T SetMemo<T>(long position, bool shouldMemo, [DisallowNull] T value)
         {
-            if (!shouldMemo) return value;
+            if (!shouldMemo)
+            {
+                System.Diagnostics.Debug.Assert(!memoCallbacks_byObjPosition.ContainsKey(position), "Not memoing this object but it has a callback for it");
+                return value;
+            }
+
+            if (memoCallbacks_byObjPosition.TryGetValue(position, out var callback))
+            {
+                callback.SetValue(value);
+                memoCallbacks_byObjPosition.Remove(position);
+            }
+            if (memoCallbacks_byMemoPosition.TryGetValue(position, out callback))
+            {
+                memoCallbacks_byMemoPosition.Remove(position);
+            }
 
             memo.Add(position, value);
             return value;
@@ -144,18 +180,24 @@ namespace Ibasa.Pikala
 
         public object DoMemo()
         {
-            // Because of memo callbacks we sometimes look up positions that are themselves memos
-            var memoPosition = Reader.BaseStream.Position - 1;
             var position = Reader.ReadInt64();
             if (memo.TryGetValue(position, out var value))
             {
-                memo.Add(memoPosition, value);
+                // We might have a callback waiting to deserialize the object at this position but it was just a memo to a previous object,
+                // make sure we still set and clear the callback
+                var objectPosition = Reader.BaseStream.Position - 9;
+                if (memoCallbacks_byObjPosition.TryGetValue(objectPosition, out var callback))
+                {
+                    callback.SetValue(value);
+                    memoCallbacks_byObjPosition.Remove(objectPosition);
+                }
+
                 return value;
             }
-            else if (memoCallbacks.TryGetValue(position, out var callback))
+            else if (memoCallbacks_byMemoPosition.TryGetValue(position, out var callback))
             {
                 var result = callback.InvokeUntyped();
-                memo.Add(memoPosition, result);
+                System.Diagnostics.Debug.Assert(!memoCallbacks_byMemoPosition.ContainsKey(position), "Invoked a memo callback but was still present in callback map after");
                 return result;
             }
             else
@@ -164,25 +206,15 @@ namespace Ibasa.Pikala
             }
         }
 
-        public MemoCallback<R> RegisterMemoCallback<T, R>(long offset, Func<T, R> callback) where T : class where R : class
+        public MemoCallback<T, R> RegisterMemoCallback<T, R>(long offset, Func<T, R> callback) where T : class where R : class
         {
             var objectOffset = Reader.BaseStream.Position;
-            Func<R> handler = () =>
-            {
-                if (memo.TryGetValue(objectOffset, out var obj))
-                {
-                    var result = callback((T)obj);
-                    memoCallbacks.Remove(offset);
-                    return result;
-                }
-                else
-                {
-                    throw new Exception($"Tried to reference object from position {offset} in the stream with callback for {objectOffset}, but that object is not yet created.");
-                }
-            };
 
-            var memocallback = new MemoCallback<R>(handler);
-            memoCallbacks.Add(offset, memocallback);
+            System.Diagnostics.Debug.Assert(offset != objectOffset, "Can't create a callback for the same object currently deserializing");
+
+            var memocallback = new MemoCallback<T, R>(offset, objectOffset, callback);
+            memoCallbacks_byMemoPosition.Add(offset, memocallback);
+            memoCallbacks_byObjPosition.Add(objectOffset, memocallback);
             return memocallback;
         }
 

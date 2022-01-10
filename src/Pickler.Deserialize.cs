@@ -1409,7 +1409,7 @@ namespace Ibasa.Pikala
             return state.RunWithTrailers(() =>
             {
                 var name = state.Reader.ReadString();
-                var (callback, _) = DeserializeWithMemo(state, position, (AssemblyBuilder assembly) =>
+                var callback = DeserializeWithMemo(state, position, (AssemblyBuilder assembly) =>
                 {
                     var module = assembly.DefineDynamicModule(name);
                     if (module == null)
@@ -1566,7 +1566,7 @@ namespace Ibasa.Pikala
                     }
                 }
 
-                var (callback, _) = DeserializeWithMemo(state, position, (object parent) =>
+                var callback = DeserializeWithMemo(state, position, (object parent) =>
                 {
                     PickledTypeInfoDef result;
                     if (parent is ModuleBuilder module)
@@ -1596,11 +1596,11 @@ namespace Ibasa.Pikala
             });
         }
 
-        private (MemoCallback<R>, T) DeserializeWithMemo<T, R>(PicklerDeserializationState state, long position, Func<T, R> callback, DeserializeInformation info, Type[]? genericTypeParameters, Type[]? genericMethodParameters) where T : class where R : class
+        private MemoCallback<T, R> DeserializeWithMemo<T, R>(PicklerDeserializationState state, long position, Func<T, R> callback, DeserializeInformation info, Type[]? genericTypeParameters, Type[]? genericMethodParameters) where T : class where R : class
         {
             var memo = state.RegisterMemoCallback(position, callback);
             var result = DeserializeNonNull<T>(state, info, genericTypeParameters, genericMethodParameters);
-            return (memo, result);
+            return memo;
         }
 
         private T DeserializeNonNull<T>(PicklerDeserializationState state, DeserializeInformation info, Type[]? genericTypeParameters, Type[]? genericMethodParameters) where T : class
