@@ -1429,141 +1429,152 @@ namespace Ibasa.Pikala
 
         private OperationCacheEntry GetOperation(Type runtimeType)
         {
-            // Rest of the operations will need the type of obj
-            var typeCode = Type.GetTypeCode(runtimeType);
-
-            if (runtimeType.IsEnum)
+            OperationCacheEntry GetOperation(Type runtimeType)
             {
-                return new OperationCacheEntry(typeCode, PickleOperation.Enum);
+                // Rest of the operations will need the type of obj
+                var typeCode = Type.GetTypeCode(runtimeType);
+
+                if (runtimeType.IsEnum)
+                {
+                    return new OperationCacheEntry(typeCode, PickleOperation.Enum);
+                }
+
+                switch (typeCode)
+                {
+                    case TypeCode.Boolean: return new OperationCacheEntry(typeCode, PickleOperation.Boolean);
+                    case TypeCode.Char: return new OperationCacheEntry(typeCode, PickleOperation.Char);
+                    case TypeCode.SByte: return new OperationCacheEntry(typeCode, PickleOperation.SByte);
+                    case TypeCode.Int16: return new OperationCacheEntry(typeCode, PickleOperation.Int16);
+                    case TypeCode.Int32: return new OperationCacheEntry(typeCode, PickleOperation.Int32);
+                    case TypeCode.Int64: return new OperationCacheEntry(typeCode, PickleOperation.Int64);
+                    case TypeCode.Byte: return new OperationCacheEntry(typeCode, PickleOperation.Byte);
+                    case TypeCode.UInt16: return new OperationCacheEntry(typeCode, PickleOperation.UInt16);
+                    case TypeCode.UInt32: return new OperationCacheEntry(typeCode, PickleOperation.UInt32);
+                    case TypeCode.UInt64: return new OperationCacheEntry(typeCode, PickleOperation.UInt64);
+                    case TypeCode.Single: return new OperationCacheEntry(typeCode, PickleOperation.Single);
+                    case TypeCode.Double: return new OperationCacheEntry(typeCode, PickleOperation.Double);
+                    case TypeCode.Decimal: return new OperationCacheEntry(typeCode, PickleOperation.Decimal);
+                    case TypeCode.DBNull: return new OperationCacheEntry(typeCode, PickleOperation.DBNull);
+                    case TypeCode.String: return new OperationCacheEntry(typeCode, PickleOperation.String);
+                    // Let DateTime just be handled by ISerializable
+                    case TypeCode.DateTime:
+                    case TypeCode.Object:
+                        {
+                            // Most pointers we'll reject but we special case IntPtr and UIntPtr as they're often
+                            // used for native sized numbers
+                            if (runtimeType.IsPointer || runtimeType == typeof(Pointer))
+                            {
+                                throw new Exception($"Pointer types are not serializable: '{runtimeType}'");
+                            }
+
+                            if (runtimeType.IsArray)
+                            {
+                                if (runtimeType.IsSZArray)
+                                {
+                                    return new OperationCacheEntry(typeCode, PickleOperation.SZArray);
+                                }
+                                else
+                                {
+                                    return new OperationCacheEntry(typeCode, PickleOperation.Array);
+                                }
+                            }
+
+                            // This check needs to come before IsValueType, because these
+                            // are also value types.
+                            if (runtimeType == typeof(IntPtr))
+                            {
+                                return new OperationCacheEntry(typeCode, PickleOperation.IntPtr);
+                            }
+                            if (runtimeType == typeof(UIntPtr))
+                            {
+                                return new OperationCacheEntry(typeCode, PickleOperation.UIntPtr);
+                            }
+
+                            // Reflection
+                            if (runtimeType.IsAssignableTo(typeof(Assembly)))
+                            {
+                                return new OperationCacheEntry(typeCode, OperationGroup.Assembly);
+                            }
+                            if (runtimeType.IsAssignableTo(typeof(Module)))
+                            {
+                                return new OperationCacheEntry(typeCode, OperationGroup.Module);
+                            }
+                            if (runtimeType.IsAssignableTo(typeof(MemberInfo)))
+                            {
+                                if (runtimeType.IsAssignableTo(typeof(Type)))
+                                {
+                                    return new OperationCacheEntry(typeCode, OperationGroup.Type);
+                                }
+                                else if (runtimeType.IsAssignableTo(typeof(FieldInfo)))
+                                {
+                                    return new OperationCacheEntry(typeCode, PickleOperation.FieldRef);
+                                }
+                                else if (runtimeType.IsAssignableTo(typeof(PropertyInfo)))
+                                {
+                                    return new OperationCacheEntry(typeCode, PickleOperation.PropertyRef);
+                                }
+                                else if (runtimeType.IsAssignableTo(typeof(EventInfo)))
+                                {
+                                    return new OperationCacheEntry(typeCode, PickleOperation.EventRef);
+                                }
+                                else if (runtimeType.IsAssignableTo(typeof(MethodInfo)))
+                                {
+                                    return new OperationCacheEntry(typeCode, PickleOperation.MethodRef);
+                                }
+                                else if (runtimeType.IsAssignableTo(typeof(ConstructorInfo)))
+                                {
+                                    return new OperationCacheEntry(typeCode, PickleOperation.ConstructorRef);
+                                }
+                            }
+                            // End of reflection handlers
+
+                            if (runtimeType.IsAssignableTo(typeof(MulticastDelegate)))
+                            {
+                                return new OperationCacheEntry(typeCode, PickleOperation.Delegate);
+                            }
+
+                            // Tuples!
+                            if (IsTupleType(runtimeType))
+                            {
+                                if (runtimeType.IsValueType)
+                                {
+                                    return new OperationCacheEntry(typeCode, true, runtimeType.IsGenericType ? runtimeType.GetGenericArguments() : null);
+                                }
+                                else
+                                {
+                                    return new OperationCacheEntry(typeCode, false, runtimeType.GetGenericArguments());
+                                }
+                            }
+
+                            if (_reducers.TryGetValue(runtimeType, out var reducer) || (runtimeType.IsGenericType && _reducers.TryGetValue(runtimeType.GetGenericTypeDefinition(), out reducer)))
+                            {
+                                return new OperationCacheEntry(typeCode, reducer);
+                            }
+
+                            if (runtimeType.IsAssignableTo(typeof(System.Runtime.Serialization.ISerializable)))
+                            {
+                                return new OperationCacheEntry(typeCode, PickleOperation.ISerializable);
+                            }
+
+                            if (runtimeType.IsAssignableTo(typeof(MarshalByRefObject)))
+                            {
+                                throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from MarshalByRefObject.");
+                            }
+
+                            return new OperationCacheEntry(typeCode, GetSerializedFields(runtimeType));
+                        }
+                }
+
+                throw new Exception($"Unhandled TypeCode '{typeCode}' for type '{runtimeType}'");
             }
 
-            switch (typeCode)
+            if (!_operationCache.TryGetValue(runtimeType, out var operationEntry))
             {
-                case TypeCode.Boolean: return new OperationCacheEntry(typeCode, PickleOperation.Boolean);
-                case TypeCode.Char: return new OperationCacheEntry(typeCode, PickleOperation.Char);
-                case TypeCode.SByte: return new OperationCacheEntry(typeCode, PickleOperation.SByte);
-                case TypeCode.Int16: return new OperationCacheEntry(typeCode, PickleOperation.Int16);
-                case TypeCode.Int32: return new OperationCacheEntry(typeCode, PickleOperation.Int32);
-                case TypeCode.Int64: return new OperationCacheEntry(typeCode, PickleOperation.Int64);
-                case TypeCode.Byte: return new OperationCacheEntry(typeCode, PickleOperation.Byte);
-                case TypeCode.UInt16: return new OperationCacheEntry(typeCode, PickleOperation.UInt16);
-                case TypeCode.UInt32: return new OperationCacheEntry(typeCode, PickleOperation.UInt32);
-                case TypeCode.UInt64: return new OperationCacheEntry(typeCode, PickleOperation.UInt64);
-                case TypeCode.Single: return new OperationCacheEntry(typeCode, PickleOperation.Single);
-                case TypeCode.Double: return new OperationCacheEntry(typeCode, PickleOperation.Double);
-                case TypeCode.Decimal: return new OperationCacheEntry(typeCode, PickleOperation.Decimal);
-                case TypeCode.DBNull: return new OperationCacheEntry(typeCode, PickleOperation.DBNull);
-                case TypeCode.String: return new OperationCacheEntry(typeCode, PickleOperation.String);
-                // Let DateTime just be handled by ISerializable
-                case TypeCode.DateTime:
-                case TypeCode.Object:
-                    {
-                        // Most pointers we'll reject but we special case IntPtr and UIntPtr as they're often
-                        // used for native sized numbers
-                        if (runtimeType.IsPointer || runtimeType == typeof(Pointer))
-                        {
-                            throw new Exception($"Pointer types are not serializable: '{runtimeType}'");
-                        }
-
-                        if (runtimeType.IsArray)
-                        {
-                            if (runtimeType.IsSZArray)
-                            {
-                                return new OperationCacheEntry(typeCode, PickleOperation.SZArray);
-                            }
-                            else
-                            {
-                                return new OperationCacheEntry(typeCode, PickleOperation.Array);
-                            }
-                        }
-
-                        // This check needs to come before IsValueType, because these
-                        // are also value types.
-                        if (runtimeType == typeof(IntPtr))
-                        {
-                            return new OperationCacheEntry(typeCode, PickleOperation.IntPtr);
-                        }
-                        if (runtimeType == typeof(UIntPtr))
-                        {
-                            return new OperationCacheEntry(typeCode, PickleOperation.UIntPtr);
-                        }
-
-                        // Reflection
-                        if (runtimeType.IsAssignableTo(typeof(Assembly)))
-                        {
-                            return new OperationCacheEntry(typeCode, OperationGroup.Assembly);
-                        }
-                        if (runtimeType.IsAssignableTo(typeof(Module)))
-                        {
-                            return new OperationCacheEntry(typeCode, OperationGroup.Module);
-                        }
-                        if (runtimeType.IsAssignableTo(typeof(MemberInfo)))
-                        {
-                            if (runtimeType.IsAssignableTo(typeof(Type)))
-                            {
-                                return new OperationCacheEntry(typeCode, OperationGroup.Type);
-                            }
-                            else if (runtimeType.IsAssignableTo(typeof(FieldInfo)))
-                            {
-                                return new OperationCacheEntry(typeCode, PickleOperation.FieldRef);
-                            }
-                            else if (runtimeType.IsAssignableTo(typeof(PropertyInfo)))
-                            {
-                                return new OperationCacheEntry(typeCode, PickleOperation.PropertyRef);
-                            }
-                            else if (runtimeType.IsAssignableTo(typeof(EventInfo)))
-                            {
-                                return new OperationCacheEntry(typeCode, PickleOperation.EventRef);
-                            }
-                            else if (runtimeType.IsAssignableTo(typeof(MethodInfo)))
-                            {
-                                return new OperationCacheEntry(typeCode, PickleOperation.MethodRef);
-                            }
-                            else if (runtimeType.IsAssignableTo(typeof(ConstructorInfo)))
-                            {
-                                return new OperationCacheEntry(typeCode, PickleOperation.ConstructorRef);
-                            }
-                        }
-                        // End of reflection handlers
-
-                        if (runtimeType.IsAssignableTo(typeof(MulticastDelegate)))
-                        {
-                            return new OperationCacheEntry(typeCode, PickleOperation.Delegate);
-                        }
-
-                        // Tuples!
-                        if (IsTupleType(runtimeType))
-                        {
-                            if (runtimeType.IsValueType)
-                            {
-                                return new OperationCacheEntry(typeCode, true, runtimeType.IsGenericType ? runtimeType.GetGenericArguments() : null);
-                            }
-                            else
-                            {
-                                return new OperationCacheEntry(typeCode, false, runtimeType.GetGenericArguments());
-                            }
-                        }
-
-                        if (_reducers.TryGetValue(runtimeType, out var reducer) || (runtimeType.IsGenericType && _reducers.TryGetValue(runtimeType.GetGenericTypeDefinition(), out reducer)))
-                        {
-                            return new OperationCacheEntry(typeCode, reducer);
-                        }
-
-                        if (runtimeType.IsAssignableTo(typeof(System.Runtime.Serialization.ISerializable)))
-                        {
-                            return new OperationCacheEntry(typeCode, PickleOperation.ISerializable);
-                        }
-
-                        if (runtimeType.IsAssignableTo(typeof(MarshalByRefObject)))
-                        {
-                            throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from MarshalByRefObject.");
-                        }
-
-                        return new OperationCacheEntry(typeCode, GetSerializedFields(runtimeType));
-                    }
+                operationEntry = GetOperation(runtimeType);
+                _operationCache.Add(runtimeType, operationEntry);
             }
 
-            throw new Exception($"Unhandled TypeCode '{typeCode}' for type '{runtimeType}'");
+            return operationEntry;
         }
 
         private void Serialize(PicklerSerializationState state, object? obj, SerializeInformation info, Type[]? genericTypeParameters = null, Type[]? genericMethodParameters = null)
@@ -1578,13 +1589,8 @@ namespace Ibasa.Pikala
                 return;
             }
 
-            OperationCacheEntry? operationEntry;
-            if (!_operationCache.TryGetValue(info.RuntimeType, out operationEntry))
-            {
-                operationEntry = GetOperation(info.RuntimeType);
-                _operationCache.Add(info.RuntimeType, operationEntry);
-            }
 
+            var operationEntry = GetOperation(info.RuntimeType);
             switch (operationEntry.Group)
             {
                 case OperationGroup.FullyKnown:

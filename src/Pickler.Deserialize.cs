@@ -881,7 +881,9 @@ namespace Ibasa.Pikala
             Type[]? genericArguments;
             if (IsTupleType(staticType))
             {
-                genericArguments = staticType.IsGenericType ? staticType.GetGenericArguments() : null;
+                // We're reusing the operation cache here but as it returns the same thing as GetGenericArguments for a tuple type but is cached
+                var operationEntry = GetOperation(staticType);
+                genericArguments = operationEntry.GenericArguments;
             }
             else
             {
