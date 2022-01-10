@@ -332,7 +332,8 @@ namespace Ibasa.Pikala
 
         private static bool IsTupleType(Type type)
         {
-            return type.Assembly == mscorlib && type.Namespace == "System" && (type.Name.StartsWith("ValueTuple") || type.Name.StartsWith("Tuple"));
+            return type.Assembly == mscorlib && type.Namespace == "System" && (
+                type.Name.StartsWith("ValueTuple", StringComparison.Ordinal) || type.Name.StartsWith("Tuple", StringComparison.Ordinal));
         }
     }
 }
