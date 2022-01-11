@@ -180,12 +180,13 @@ namespace Ibasa.Pikala
 
         public object DoMemo()
         {
+            // We might have a callback waiting to deserialize the object at this position but it was just a memo to a previous object,
+            // make sure we still set and clear the callback
+            var objectPosition = Reader.BaseStream.Position;
+
             var position = Reader.Read15BitEncodedLong();
             if (memo.TryGetValue(position, out var value))
             {
-                // We might have a callback waiting to deserialize the object at this position but it was just a memo to a previous object,
-                // make sure we still set and clear the callback
-                var objectPosition = Reader.BaseStream.Position - 9;
                 if (memoCallbacks_byObjPosition.TryGetValue(objectPosition, out var callback))
                 {
                     callback.SetValue(value);
