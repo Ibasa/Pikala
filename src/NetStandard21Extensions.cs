@@ -33,6 +33,42 @@ namespace Ibasa.Pikala
             return (int)result;
         }
 
+        public static void Write15BitEncodedLong(this BinaryWriter self, long value)
+        {
+            ulong v = (ulong)value;
+            while (v > 0x7FFFu)
+            {
+                self.Write((ushort)(v | ~0x7FFFu));
+                v >>= 15;
+            }
+            self.Write((ushort)v);
+        }
+
+        public static long Read15BitEncodedLong(this BinaryReader self)
+        {
+            ulong result = 0;
+            ushort bytesReadJustNow;
+            const int MaxBytesWithoutOverflow = 8;
+            for (int shift = 0; shift < MaxBytesWithoutOverflow * 15; shift += 15)
+            {
+                bytesReadJustNow = self.ReadUInt16();
+                result |= (bytesReadJustNow & 0x7FFFu) << shift;
+
+                if (bytesReadJustNow <= 0x7FFFu)
+                {
+                    return (long)result;
+                }
+            }
+            bytesReadJustNow = self.ReadUInt16();
+            if (bytesReadJustNow > 0b_1111u)
+            {
+                throw new FormatException("Too many bytes in what should have been a 7-bit encoded integer.");
+            }
+
+            result |= (ulong)bytesReadJustNow << (MaxBytesWithoutOverflow * 15);
+            return (long)result;
+        }
+
         public static void Write7BitEncodedInt(this BinaryWriter self, int value)
         {
             uint v = (uint)value;
