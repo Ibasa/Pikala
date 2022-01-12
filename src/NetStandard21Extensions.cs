@@ -44,6 +44,42 @@ namespace Ibasa.Pikala
             self.Write((byte)v);
         }
 
+        public static long Read15BitEncodedLong(this BinaryReader self)
+        {
+            ulong result = 0;
+            ushort shortReadJustNow;
+            const int MaxShortsWithoutOverflow = 4;
+            for (int shift = 0; shift < MaxShortsWithoutOverflow * 15; shift += 15)
+            {
+                shortReadJustNow = self.ReadUInt16();
+                result |= (shortReadJustNow & 0x7FFFul) << shift;
+
+                if (shortReadJustNow <= 0x7FFFul)
+                {
+                    return (long)result;
+                }
+            }
+            shortReadJustNow = self.ReadUInt16();
+            if (shortReadJustNow > 0b_1111ul)
+            {
+                throw new FormatException("Too many bytes in what should have been a 15-bit encoded integer.");
+            }
+
+            result |= (ulong)shortReadJustNow << (MaxShortsWithoutOverflow * 15);
+            return (long)result;
+        }
+
+        public static void Write15BitEncodedLong(this BinaryWriter self, long value)
+        {
+            ulong v = (ulong)value;
+            while (v > 0x7FFFu)
+            {
+                self.Write((ushort)(v | ~0x7FFFu));
+                v >>= 15;
+            }
+            self.Write((ushort)v);
+        }
+
         public static bool IsAssignableTo(this Type self, Type type)
         {
             return type.IsAssignableFrom(self);

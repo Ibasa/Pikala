@@ -169,10 +169,7 @@ namespace Ibasa.Pikala
                 callback.SetValue(value);
                 memoCallbacks_byObjPosition.Remove(position);
             }
-            if (memoCallbacks_byMemoPosition.TryGetValue(position, out callback))
-            {
-                memoCallbacks_byMemoPosition.Remove(position);
-            }
+            memoCallbacks_byMemoPosition.Remove(position);
 
             memo.Add(position, value);
             return value;
@@ -180,12 +177,13 @@ namespace Ibasa.Pikala
 
         public object DoMemo()
         {
-            var position = Reader.ReadInt64();
+            // We might have a callback waiting to deserialize the object at this position but it was just a memo to a previous object,
+            // make sure we still set and clear the callback
+            var objectPosition = Reader.BaseStream.Position - 1;
+
+            var position = Reader.Read15BitEncodedLong();
             if (memo.TryGetValue(position, out var value))
             {
-                // We might have a callback waiting to deserialize the object at this position but it was just a memo to a previous object,
-                // make sure we still set and clear the callback
-                var objectPosition = Reader.BaseStream.Position - 9;
                 if (memoCallbacks_byObjPosition.TryGetValue(objectPosition, out var callback))
                 {
                     callback.SetValue(value);
@@ -305,7 +303,7 @@ namespace Ibasa.Pikala
             if (memo.TryGetValue(value, out var offset))
             {
                 Writer.Write((byte)PickleOperation.Memo);
-                Writer.Write(offset);
+                Writer.Write15BitEncodedLong(offset);
                 return true;
             }
 
