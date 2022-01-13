@@ -1610,12 +1610,30 @@ namespace Ibasa.Pikala
                     {
                         case PickleOperation.Enum:
                             System.Diagnostics.Debug.Assert(info.RuntimeType.IsEnum, "Trying to enum serialise a type that is not an enum");
-                            System.Diagnostics.Debug.Assert(
-                                info.StaticType == info.RuntimeType || info.StaticType == typeof(object),
-                                "Static type for an enum value must be the enum or object",
-                                "Was {0}", info.StaticType);
 
-                            if (!IsStaticallyFinal(null, info.StaticType) || !info.StaticType.IsEnum)
+                            // StaticType will be object/ValueType or Nullable or the enum type (Anything else is a bug)
+                            // If this is the enum type (or nullable<enumType>) we can skip writing out the type token
+                            // iff the enum type is statically final
+                            bool needTypeToken;
+                            if (info.StaticType == typeof(object) || info.StaticType == typeof(ValueType))
+                            {
+                                needTypeToken = true;
+                            } 
+                            else if (info.StaticType == info.RuntimeType)
+                            {
+                                needTypeToken = !IsStaticallyFinal(null, info.StaticType);
+                            }
+                            else
+                            {
+                                System.Diagnostics.Debug.Assert(info.StaticType.Name == "Nullable`1", "Expected static type for enum to be Nullable<T>", "But was {0}", info.StaticType);
+                                var genericArguments = info.StaticType.GetGenericArguments();
+                                System.Diagnostics.Debug.Assert(genericArguments.Length == 1, "Expected Nullable<T> to have one generic argument");
+                                var genericArgument = genericArguments[0];
+                                System.Diagnostics.Debug.Assert(genericArgument == info.RuntimeType, "Expected T of Nullable<T> to match enum type");
+                                needTypeToken = !IsStaticallyFinal(null, info.RuntimeType);
+                            }
+
+                            if (needTypeToken)
                             {
                                 Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
                             }

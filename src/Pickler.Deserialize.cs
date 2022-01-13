@@ -1743,8 +1743,28 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.Enum:
                     {
+                        // StaticType will be object/ValueType or Nullable or the enum type (Anything else is a bug)
+                        // If this is the enum type (or nullable<enumType>) we can skip writing out the type token
+                        // iff the enum type is statically final
+                        bool needTypeToken;
+                        if (staticType == typeof(object) || staticType == typeof(ValueType))
+                        {
+                            needTypeToken = true;
+                        }
+                        else if (staticType.Name == "Nullable`1")
+                        {
+                            var genericArguments = staticType.GetGenericArguments();
+                            System.Diagnostics.Debug.Assert(genericArguments.Length == 1, "Expected Nullable<T> to have one generic argument");
+                            var genericArgument = genericArguments[0];
+                            needTypeToken = !IsStaticallyFinal(null, genericArgument);
+                        }
+                        else
+                        {
+                            needTypeToken = !IsStaticallyFinal(null, staticType);
+                        }
+
                         var enumType = staticType;
-                        if (!IsStaticallyFinal(state.IsConstructedAssembly, enumType))
+                        if (needTypeToken)
                         {
                             var pickledEnumType = DeserializeNonNull<PickledTypeInfo>(state, typeof(Type), typeContext);
                             enumType = pickledEnumType.Type;

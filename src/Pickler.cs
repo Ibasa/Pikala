@@ -356,7 +356,7 @@ namespace Ibasa.Pikala
         /// </remarks>
         private bool IsStaticallyFinal(Func<Assembly, bool>? isConstructed, Type staticType)
         {
-            return 
+            return
                 (staticType.IsValueType || staticType.IsSealed) &&
                 (staticType.Assembly == mscorlib || (isConstructed == null ? _assemblyPickleMode(staticType.Assembly) == AssemblyPickleMode.PickleByValue : isConstructed(staticType.Assembly)));
         }
