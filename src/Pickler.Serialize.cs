@@ -1618,7 +1618,7 @@ namespace Ibasa.Pikala
                             if (info.StaticType == typeof(object) || info.StaticType == typeof(ValueType))
                             {
                                 needTypeToken = true;
-                            } 
+                            }
                             else if (info.StaticType == info.RuntimeType)
                             {
                                 needTypeToken = !IsStaticallyFinal(null, info.StaticType);
