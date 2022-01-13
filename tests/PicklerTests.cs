@@ -99,6 +99,24 @@ namespace Ibasa.Pikala.Tests
                 value => RoundTrip.Assert(pickler, value));
         }
 
+        [Property]
+        public Property TestNullableInt()
+        {
+            var pickler = new Pickler();
+            return Prop.ForAll(
+                Arb.From<int?>(),
+                value => RoundTrip.Assert(pickler, value));
+        }
+
+        [Property]
+        public Property TestNullableEnum()
+        {
+            var pickler = new Pickler();
+            return Prop.ForAll(
+                Arb.From<TypeCode?>(),
+                value => RoundTrip.Assert(pickler, value));
+        }
+
         [Serializable]
         unsafe struct PointerStruct
         {
@@ -180,6 +198,9 @@ namespace Ibasa.Pikala.Tests
             new[] { typeof(Pickler) },
             new[] { typeof(TestTypes.ClassTypeWithIndexers) },
             new[] { typeof(TestTypes.ClassTypeWithEvents) },
+            new[] { typeof(double?) },
+            new[] { typeof(System.TypeCode?) },
+            new[] { typeof(TestTypes.EnumurationType?) },
         };
 
         [Theory]
