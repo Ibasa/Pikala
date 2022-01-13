@@ -336,7 +336,8 @@ namespace Ibasa.Pikala
         }
 
         /// <summary>
-        /// Return true if the type is either a value type, or a sealed reference type from mscorlib.
+        /// Return true if the type is either a value type, or a sealed reference type that we know won't change between serialisation and deserialisation time.
+        /// This includes types from mscorlib and types that we've encoded into the pickle stream.
         /// </summary>
         /// <remarks>
         /// This is used when deciding if we need type tokens or not based on static context, if the static type
@@ -349,9 +350,11 @@ namespace Ibasa.Pikala
         /// time we come to deserialise the user may of changed them to a reference type leading the deserialiser to think there
         /// should be a type token.
         /// </remarks>
-        private bool IsStaticallyFinal(Type staticType)
+        private bool IsStaticallyFinal(Func<Assembly, bool>? isConstructed, Type staticType)
         {
-            return staticType.Assembly == mscorlib && (staticType.IsValueType || staticType.IsSealed);
+            return 
+                (staticType.IsValueType || staticType.IsSealed) &&
+                (staticType.Assembly == mscorlib || (isConstructed == null ? _assemblyPickleMode(staticType.Assembly) == AssemblyPickleMode.PickleByValue : isConstructed(staticType.Assembly)));
         }
     }
 }
