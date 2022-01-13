@@ -232,8 +232,7 @@ namespace Ibasa.Pikala
             RegisterReducer(new DictionaryReducer());
         }
 
-
-        private PickleOperation? InferOperationFromStaticType(Type staticType)
+        private PickleOperation? InferOperationFromStaticType(Func<Assembly, bool>? isConstructed, Type staticType)
         {
             PickleOperation? Infer(Type staticType)
             {
@@ -305,6 +304,10 @@ namespace Ibasa.Pikala
                     {
                         return PickleOperation.ValueTuple;
                     }
+                    else if (IsStaticallyFinal(isConstructed, staticType) && staticType.IsEnum)
+                    {
+                        return PickleOperation.Enum;
+                    }
                 }
 
                 return null;
@@ -334,6 +337,28 @@ namespace Ibasa.Pikala
         {
             return type.Assembly == mscorlib && type.Namespace == "System" && (
                 type.Name.StartsWith("ValueTuple", StringComparison.Ordinal) || type.Name.StartsWith("Tuple", StringComparison.Ordinal));
+        }
+
+        /// <summary>
+        /// Return true if the type is either a value type, or a sealed reference type that we know won't change between serialisation and deserialisation time.
+        /// This includes types from mscorlib and types that we've encoded into the pickle stream.
+        /// </summary>
+        /// <remarks>
+        /// This is used when deciding if we need type tokens or not based on static context, if the static type
+        /// is a value type or a sealed type then we know that the runtime type must be equal to that (because there
+        /// are no subtypes). Contrast this with when the static type is a non-sealed reference type, the runtime type
+        /// that we serialise (and then later need to deserialse) could be any subtype of it.
+        ///
+        /// This only applies to types within mscorlib because we don't expect them to change, but they're common enough
+        /// that this gives a good saving of type tokens. Other types might be value type when we serialise them, but by the
+        /// time we come to deserialise the user may of changed them to a reference type leading the deserialiser to think there
+        /// should be a type token.
+        /// </remarks>
+        private bool IsStaticallyFinal(Func<Assembly, bool>? isConstructed, Type staticType)
+        {
+            return
+                (staticType.IsValueType || staticType.IsSealed) &&
+                (staticType.Assembly == mscorlib || (isConstructed == null ? _assemblyPickleMode(staticType.Assembly) == AssemblyPickleMode.PickleByValue : isConstructed(staticType.Assembly)));
         }
     }
 }

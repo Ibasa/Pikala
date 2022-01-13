@@ -1618,7 +1618,7 @@ namespace Ibasa.Pikala
         {
             var position = state.Reader.BaseStream.Position;
 
-            var maybeOperation = InferOperationFromStaticType(staticType);
+            var maybeOperation = InferOperationFromStaticType(state.IsConstructedAssembly, staticType);
             PickleOperation operation;
             bool shouldMemo;
             if (maybeOperation.HasValue)
@@ -1743,13 +1743,40 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.Enum:
                     {
-                        var pickledEnumType = DeserializeNonNull<PickledTypeInfo>(state, typeof(Type), typeContext);
-                        var enumType = pickledEnumType.Type;
-                        if (!enumType.IsEnum)
+                        // StaticType will be object/ValueType or Nullable or the enum type (Anything else is a bug)
+                        // If this is the enum type (or nullable<enumType>) we can skip writing out the type token
+                        // iff the enum type is statically final
+                        bool needTypeToken;
+                        if (staticType == typeof(object) || staticType == typeof(ValueType))
                         {
-                            // This was an enum when it was serialised out, but no longer
-                            throw new Exception($"Can not deserialise {enumType} expected it to be an enumeration type");
+                            needTypeToken = true;
                         }
+                        else if (staticType.Name == "Nullable`1")
+                        {
+                            var genericArguments = staticType.GetGenericArguments();
+                            System.Diagnostics.Debug.Assert(genericArguments.Length == 1, "Expected Nullable<T> to have one generic argument");
+                            var genericArgument = genericArguments[0];
+                            needTypeToken = !IsStaticallyFinal(null, genericArgument);
+                        }
+                        else
+                        {
+                            needTypeToken = !IsStaticallyFinal(null, staticType);
+                        }
+
+                        var enumType = staticType;
+                        if (needTypeToken)
+                        {
+                            var pickledEnumType = DeserializeNonNull<PickledTypeInfo>(state, typeof(Type), typeContext);
+                            enumType = pickledEnumType.Type;
+                            if (!enumType.IsEnum)
+                            {
+                                // This was an enum when it was serialised out, but no longer
+                                throw new Exception($"Can not deserialise {enumType} expected it to be an enumeration type");
+                            }
+                        }
+
+                        System.Diagnostics.Debug.Assert(enumType.IsEnum, "Expected type to be an enumeration type");
+
                         var enumTypeCode = Type.GetTypeCode(enumType);
                         var result = Enum.ToObject(enumType, ReadEnumerationValue(state.Reader, enumTypeCode));
                         state.SetMemo(position, shouldMemo, result);

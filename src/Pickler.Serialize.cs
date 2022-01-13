@@ -1592,7 +1592,7 @@ namespace Ibasa.Pikala
                     var operation = operationEntry.Operation.Value;
                     // This is exactly the same method we use when deserialising, if we can infer the operation from the static type we
                     // don't write out operation tokens (and some other info like type refs)
-                    var inferedOperationToken = InferOperationFromStaticType(info.StaticType);
+                    var inferedOperationToken = InferOperationFromStaticType(null, info.StaticType);
                     if (inferedOperationToken.HasValue)
                     {
                         System.Diagnostics.Debug.Assert(inferedOperationToken.Value == operation, "Infered operation from static type didn't match intended operation");
@@ -1609,7 +1609,34 @@ namespace Ibasa.Pikala
                     switch (operation)
                     {
                         case PickleOperation.Enum:
-                            Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
+                            System.Diagnostics.Debug.Assert(info.RuntimeType.IsEnum, "Trying to enum serialise a type that is not an enum");
+
+                            // StaticType will be object/ValueType or Nullable or the enum type (Anything else is a bug)
+                            // If this is the enum type (or nullable<enumType>) we can skip writing out the type token
+                            // iff the enum type is statically final
+                            bool needTypeToken;
+                            if (info.StaticType == typeof(object) || info.StaticType == typeof(ValueType))
+                            {
+                                needTypeToken = true;
+                            }
+                            else if (info.StaticType == info.RuntimeType)
+                            {
+                                needTypeToken = !IsStaticallyFinal(null, info.StaticType);
+                            }
+                            else
+                            {
+                                System.Diagnostics.Debug.Assert(info.StaticType.Name == "Nullable`1", "Expected static type for enum to be Nullable<T>", "But was {0}", info.StaticType);
+                                var genericArguments = info.StaticType.GetGenericArguments();
+                                System.Diagnostics.Debug.Assert(genericArguments.Length == 1, "Expected Nullable<T> to have one generic argument");
+                                var genericArgument = genericArguments[0];
+                                System.Diagnostics.Debug.Assert(genericArgument == info.RuntimeType, "Expected T of Nullable<T> to match enum type");
+                                needTypeToken = !IsStaticallyFinal(null, info.RuntimeType);
+                            }
+
+                            if (needTypeToken)
+                            {
+                                Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
+                            }
                             // typeCode for an enum will be something like Int32
                             WriteEnumerationValue(state.Writer, operationEntry.TypeCode, obj);
                             return;

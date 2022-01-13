@@ -94,6 +94,11 @@ namespace Ibasa.Pikala
             AppDomain.CurrentDomain.TypeResolve += CurrentDomain_TypeResolve;
         }
 
+        public bool IsConstructedAssembly(System.Reflection.Assembly assembly)
+        {
+            return _constructedTypes.ContainsKey(assembly);
+        }
+
         public void AddTypeDef(PickledTypeInfoDef type)
         {
             var assembly = type.TypeBuilder.Assembly;
