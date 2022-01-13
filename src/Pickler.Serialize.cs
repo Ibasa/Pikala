@@ -1592,7 +1592,7 @@ namespace Ibasa.Pikala
                     var operation = operationEntry.Operation.Value;
                     // This is exactly the same method we use when deserialising, if we can infer the operation from the static type we
                     // don't write out operation tokens (and some other info like type refs)
-                    var inferedOperationToken = InferOperationFromStaticType(info.StaticType);
+                    var inferedOperationToken = InferOperationFromStaticType(null, info.StaticType);
                     if (inferedOperationToken.HasValue)
                     {
                         System.Diagnostics.Debug.Assert(inferedOperationToken.Value == operation, "Infered operation from static type didn't match intended operation");
@@ -1609,7 +1609,16 @@ namespace Ibasa.Pikala
                     switch (operation)
                     {
                         case PickleOperation.Enum:
-                            Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
+                            System.Diagnostics.Debug.Assert(info.RuntimeType.IsEnum, "Trying to enum serialise a type that is not an enum");
+                            System.Diagnostics.Debug.Assert(
+                                info.StaticType == info.RuntimeType || info.StaticType == typeof(object),
+                                "Static type for an enum value must be the enum or object",
+                                "Was {0}", info.StaticType);
+
+                            if (!IsStaticallyFinal(null, info.StaticType) || !info.StaticType.IsEnum)
+                            {
+                                Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
+                            }
                             // typeCode for an enum will be something like Int32
                             WriteEnumerationValue(state.Writer, operationEntry.TypeCode, obj);
                             return;

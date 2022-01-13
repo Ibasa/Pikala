@@ -232,7 +232,7 @@ namespace Ibasa.Pikala
             RegisterReducer(new DictionaryReducer());
         }
 
-        private PickleOperation? InferOperationFromStaticType(Type staticType)
+        private PickleOperation? InferOperationFromStaticType(Func<Assembly, bool>? isConstructed, Type staticType)
         {
             PickleOperation? Infer(Type staticType)
             {
@@ -303,6 +303,10 @@ namespace Ibasa.Pikala
                     else if (IsTupleType(staticType) && staticType.IsValueType)
                     {
                         return PickleOperation.ValueTuple;
+                    }
+                    else if (IsStaticallyFinal(isConstructed, staticType) && staticType.IsEnum)
+                    {
+                        return PickleOperation.Enum;
                     }
                 }
 

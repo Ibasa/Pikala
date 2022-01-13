@@ -185,10 +185,10 @@ namespace Ibasa.Pikala.Tests
 
         static Type[] BasicTypes = new Type[]
             {
-                        typeof(bool), typeof(byte), typeof(short), typeof(int), typeof(long),
-                        typeof(char), typeof(sbyte), typeof(ushort), typeof(uint), typeof(ulong),
-                        typeof(string), typeof(ConsoleColor), typeof(TestTypes.EnumurationType),
-                        typeof(TestTypes.StructureType), typeof(TestTypes.ClassType),
+                typeof(bool), typeof(byte), typeof(short), typeof(int), typeof(long),
+                typeof(char), typeof(sbyte), typeof(ushort), typeof(uint), typeof(ulong),
+                typeof(string), typeof(ConsoleColor), typeof(TestTypes.EnumurationType),
+                typeof(TestTypes.StructureType), typeof(TestTypes.ClassType),
             };
 
         static Type GenerateType(ref FsCheck.Random.StdGen stdGen)

@@ -1618,7 +1618,7 @@ namespace Ibasa.Pikala
         {
             var position = state.Reader.BaseStream.Position;
 
-            var maybeOperation = InferOperationFromStaticType(staticType);
+            var maybeOperation = InferOperationFromStaticType(state.IsConstructedAssembly, staticType);
             PickleOperation operation;
             bool shouldMemo;
             if (maybeOperation.HasValue)
@@ -1743,13 +1743,20 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.Enum:
                     {
-                        var pickledEnumType = DeserializeNonNull<PickledTypeInfo>(state, typeof(Type), typeContext);
-                        var enumType = pickledEnumType.Type;
-                        if (!enumType.IsEnum)
+                        var enumType = staticType;
+                        if (!IsStaticallyFinal(state.IsConstructedAssembly, enumType))
                         {
-                            // This was an enum when it was serialised out, but no longer
-                            throw new Exception($"Can not deserialise {enumType} expected it to be an enumeration type");
+                            var pickledEnumType = DeserializeNonNull<PickledTypeInfo>(state, typeof(Type), typeContext);
+                            enumType = pickledEnumType.Type;
+                            if (!enumType.IsEnum)
+                            {
+                                // This was an enum when it was serialised out, but no longer
+                                throw new Exception($"Can not deserialise {enumType} expected it to be an enumeration type");
+                            }
                         }
+
+                        System.Diagnostics.Debug.Assert(enumType.IsEnum, "Expected type to be an enumeration type");
+
                         var enumTypeCode = Type.GetTypeCode(enumType);
                         var result = Enum.ToObject(enumType, ReadEnumerationValue(state.Reader, enumTypeCode));
                         state.SetMemo(position, shouldMemo, result);
