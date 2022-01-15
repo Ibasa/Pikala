@@ -64,6 +64,15 @@ namespace Ibasa.Pikala.Tests
         }
 
         [Property]
+        public Property TestNullableArray()
+        {
+            var pickler = new Pickler();
+            return Prop.ForAll(
+                Arb.From<double?[]>(),
+                value => RoundTrip.Assert(pickler, value));
+        }
+
+        [Property]
         public Property TestSystemEnumArray()
         {
             var pickler = new Pickler();

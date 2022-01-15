@@ -178,6 +178,16 @@ namespace Ibasa.Pikala.Tests
             return (tupleType, stdGen);
         }
 
+        static (Type, FsCheck.Random.StdGen) GenerateNullable(FsCheck.Random.StdGen stdGen)
+        {
+            var item = GenerateType(ref stdGen);
+            if (item.IsValueType)
+            {
+                item = typeof(Nullable<>).MakeGenericType(item);
+            }
+            return (item, stdGen);
+        }
+
         static GenerateType FromConstant(Type type)
         {
             return stdGen => (type, stdGen);
@@ -201,6 +211,7 @@ namespace Ibasa.Pikala.Tests
                 GenerateList,
                 GenerateTuple,
                 GenerateValueTuple,
+                GenerateNullable,
             }).ToArray();
 
 
