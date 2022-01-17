@@ -19,7 +19,7 @@ namespace Ibasa.Pikala.Tests
     [CollectionDefinition("LargeTests", DisableParallelization = true)]
     public class LargeTests
     {
-        private void LargeArrayTest<X, Y>(Func<X> generator, Func<X, Y> checker)
+        private void LargeArrayTest<X, Y>(Func<X> generator, Func<X, Y> checker, long expectedSize)
         {
             // Large array tests output so much data they won't fit into a .NET byte array, we have to serialize to a FileStream.
             var file = Path.GetTempFileName();
@@ -32,6 +32,9 @@ namespace Ibasa.Pikala.Tests
                     using var fileStream = File.OpenWrite(file);
                     var pickler = new Pickler();
                     pickler.Serialize(fileStream, value);
+
+                    // Check the size is what we expected
+                    Assert.Equal(expectedSize, fileStream.Length);
 
                     // These are huge arrays so we just check a subset of properties
                     return checker(value);
@@ -70,7 +73,8 @@ namespace Ibasa.Pikala.Tests
             {
                 // These are huge arrays so we just check that the lengths, first, and last elements are correct.
                 return (value.Length, value[0], value[value.Length - 1]);
-            });
+            },
+            2147483678);
         }
 
         [FactLargeTest]
@@ -87,14 +91,36 @@ namespace Ibasa.Pikala.Tests
             {
                 // These are huge arrays so we just check that the lengths, first, and last elements are correct.
                 return (value.Length, value[0], value[value.Length - 1]);
-            });
+            },
+            3221225502);
+        }
+
+        [FactLargeTest]
+        public void Test1GBValueTupleArray()
+        {
+            var gb2 = 1L * 1024L * 1024L * 1024L;
+            var length = gb2 / (8 + 4);
+
+            LargeArrayTest(() =>
+            {
+                var value = (ValueTuple<int, double>[])Array.CreateInstance(typeof(ValueTuple<int, double>), length);
+                value[0] = ValueTuple.Create(2, 3.14);
+                value[value.Length - 1] = new ValueTuple<int, double>(-14, double.NegativeInfinity);
+                return value;
+            },
+            value =>
+            {
+                // These are huge arrays so we just check that the lengths, first, and last elements are correct.
+                return (value.Length, value[0], value[value.Length - 1]);
+            },
+            1073741891);
         }
 
         [FactLargeTest]
         public void Test2GBComplexArray()
         {
             var gb2 = 2L * 1024L * 1024L * 1024L;
-            var sizeofT = System.Runtime.InteropServices.Marshal.SizeOf<StructureType>();
+            var sizeofT = System.Runtime.CompilerServices.Unsafe.SizeOf<StructureType>();
             var length = gb2 / sizeofT;
 
             LargeArrayTest(() =>
@@ -108,14 +134,15 @@ namespace Ibasa.Pikala.Tests
             {
                 // These are huge arrays so we just check that the lengths, first, and last elements are correct.
                 return (value.Length, value[0], value[value.Length - 1]);
-            });
+            },
+            2147483883);
         }
 
         [FactLargeTest]
         public void Test3GBComplexArray()
         {
             var gb2 = 3L * 1024L * 1024L * 1024L;
-            var sizeofT = System.Runtime.InteropServices.Marshal.SizeOf<StructureType>();
+            var sizeofT = System.Runtime.CompilerServices.Unsafe.SizeOf<StructureType>();
             var length = gb2 / sizeofT;
 
             LargeArrayTest(() =>
@@ -129,7 +156,8 @@ namespace Ibasa.Pikala.Tests
             {
                 // These are huge arrays so we just check that the lengths, first, and last elements are correct.
                 return (value.Length, value[0], value[value.Length - 1]);
-            });
+            },
+            3221225707);
         }
     }
 }
