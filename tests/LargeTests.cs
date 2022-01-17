@@ -96,9 +96,9 @@ namespace Ibasa.Pikala.Tests
         }
 
         [FactLargeTest]
-        public void Test2GBTupleArray()
+        public void Test1GBValueTupleArray()
         {
-            var gb2 = 2L * 1024L * 1024L * 1024L;
+            var gb2 = 1L * 1024L * 1024L * 1024L;
             var length = gb2 / (8 + 4);
 
             LargeArrayTest(() =>
@@ -113,7 +113,7 @@ namespace Ibasa.Pikala.Tests
                 // These are huge arrays so we just check that the lengths, first, and last elements are correct.
                 return (value.Length, value[0], value[value.Length - 1]);
             },
-            2147483711);
+            1073741891);
         }
 
         [FactLargeTest]
