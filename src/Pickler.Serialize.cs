@@ -1418,7 +1418,11 @@ namespace Ibasa.Pikala
 
             var (namesAndTypes, fieldInfos) = fields;
 
-            Serialize(state, namesAndTypes, MakeInfo(namesAndTypes, typeof(ValueTuple<string, Type>[]), true));
+            // If we've seen this type before we don't need to write out it's fields again
+            if (!state.SeenType(info.RuntimeType))
+            {
+                Serialize(state, namesAndTypes, MakeInfo(namesAndTypes, typeof(ValueTuple<string, Type>[]), true));
+            }
 
             foreach (var field in fieldInfos)
             {

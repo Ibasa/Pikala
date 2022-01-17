@@ -989,11 +989,16 @@ namespace Ibasa.Pikala
         {
             var currentFields = GetSerializedFields(type);
 
-            var writtenFields = AssertNonNull(Deserialize(state, typeof(ValueTuple<string, Type>[]), typeContext) as ValueTuple<string, Type>[]);
-
-            if (currentFields.Length != writtenFields.Length)
+            if (!state.HasSeenType(type, out var writtenFields))
             {
-                throw new Exception($"Can not deserialize type '{type}', serialised {writtenFields.Length} fields but type expects {currentFields.Length}");
+                writtenFields = AssertNonNull(Deserialize(state, typeof(ValueTuple<string, Type>[]), typeContext) as ValueTuple<string, Type>[]);
+
+                if (currentFields.Length != writtenFields.Length)
+                {
+                    throw new Exception($"Can not deserialize type '{type}', serialised {writtenFields.Length} fields but type expects {currentFields.Length}");
+                }
+
+                state.AddType(type, writtenFields);
             }
 
             for (int i = 0; i < writtenFields.Length; ++i)
