@@ -107,7 +107,8 @@ namespace Ibasa.Pikala
         FullyKnown,
         Assembly,
         Module,
-        Type
+        Type,
+        NonSerializable,
     }
 
     sealed class OperationCacheEntry
@@ -118,10 +119,22 @@ namespace Ibasa.Pikala
         public readonly IReducer? Reducer;
         public readonly Tuple<ValueTuple<string, Type>[], FieldInfo[]>? Fields;
         public readonly Type[]? GenericArguments;
+        public readonly string? ErrorMessage;
+
+        public OperationCacheEntry(string errorMessage)
+        {
+            TypeCode = TypeCode.Object;
+            Group = OperationGroup.NonSerializable;
+            Operation = null;
+            Reducer = null;
+            Fields = null;
+            GenericArguments = null;
+            ErrorMessage = errorMessage;
+        }
 
         public OperationCacheEntry(TypeCode typeCode, OperationGroup group)
         {
-            System.Diagnostics.Debug.Assert(group != OperationGroup.FullyKnown);
+            System.Diagnostics.Debug.Assert(group != OperationGroup.FullyKnown, "Passed FullyKnown into OperationCacheEntry without operation");
             TypeCode = typeCode;
             Group = group;
             Operation = null;

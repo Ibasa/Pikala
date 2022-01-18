@@ -152,18 +152,6 @@ namespace Ibasa.Pikala
             AppDomain.CurrentDomain.TypeResolve -= CurrentDomain_TypeResolve;
         }
 
-
-        private Dictionary<Type, (string, Type)[]> _seenTypes = new Dictionary<Type, (string, Type)[]>();
-        public bool HasSeenType(Type type, out (string, Type)[] fields)
-        {
-            return _seenTypes.TryGetValue(type, out fields);
-        }
-
-        public void AddType(Type type, (string, Type)[] fields)
-        {
-            _seenTypes.Add(type, fields);
-        }
-
         public void DoStaticFields()
         {
             foreach (var staticFieldReader in staticFields)
@@ -313,18 +301,6 @@ namespace Ibasa.Pikala
         {
             memo = new Dictionary<object, long>(ReferenceEqualityComparer.Default);
             Writer = new BinaryWriter(new PickleStream(stream));
-        }
-
-        private HashSet<Type> _seenTypes = new HashSet<Type>();
-        /// <summary>
-        /// Used to check if we need to write out type fields or not. If we've seen the type before
-        /// we'll of written out it's fields before don't bother doing it again.
-        /// </summary>
-        public bool SeenType(Type type)
-        {
-            var seen = _seenTypes.Contains(type);
-            _seenTypes.Add(type);
-            return seen;
         }
 
         public bool DoMemo(object value)

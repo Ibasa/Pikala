@@ -1,10 +1,20 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
-using System.Text;
+using System.Linq;
 
 namespace Ibasa.Pikala
 {
+    [Flags]
+    public enum PickledTypeFlags : byte
+    {
+        IsAbstract = 1,
+        IsSealed = 2,
+        IsValueType = 4,
+        IsEnum = 8,
+    }
+
     abstract class PickledTypeInfo : PickledMemberInfo
     {
         public static PickledTypeInfo FromType(Type type)
@@ -34,11 +44,31 @@ namespace Ibasa.Pikala
 
         public override MemberInfo MemberInfo { get { return Type; } }
 
-        public abstract Type Type { get; }
+        public abstract (Type, bool) Resolve();
+
+        private Type? _type;
+        public Type Type
+        {
+            get
+            {
+                if (_type == null)
+                {
+                    var (tp, complete) = Resolve();
+                    if (!complete)
+                    {
+                        return tp;
+                    }
+                    _type = tp;
+                }
+                return _type;
+            }
+        }
 
         public abstract PickledConstructorInfo GetConstructor(Signature signature);
 
         public abstract PickledMethodInfo GetMethod(Signature signature);
+
+        public abstract IEnumerable<PickledFieldInfo> GetFields();
 
         public abstract PickledFieldInfo GetField(string name);
 
@@ -52,18 +82,31 @@ namespace Ibasa.Pikala
         {
             ilGenerator.Emit(opCode, Type);
         }
+
+        public abstract PickledTypeInfo Reify(PickledTypeInfo[] genericArguments);
+
+        // Null if this wasn't serailised using object format, or if the fields have changed.
+        public (PickledTypeInfo, PickledFieldInfo)[]? SerialisedFields;
+        // Non null if there was an error building Fields (we should use a DU really)
+        public string? Error;
+        public PickleOperation? Operation;
     }
 
     sealed class PickledTypeInfoRef : PickledTypeInfo
     {
-        public override Type Type { get; }
-
         public PickledTypeInfoRef(Type type)
         {
             System.Diagnostics.Debug.Assert(!type.IsConstructedGenericType, "Tried to create a TypeRef for a constructed generic type, this should of been a GenericType");
             System.Diagnostics.Debug.Assert(!type.IsGenericParameter, "Tried to create a TypeRef for a generic parameter, this should of been a PickledGenericParameterRef");
 
             Type = type;
+        }
+
+        private new readonly Type Type;
+
+        public override (Type, bool) Resolve()
+        {
+            return (Type, true);
         }
 
         public override PickledConstructorInfo GetConstructor(Signature signature)
@@ -92,6 +135,14 @@ namespace Ibasa.Pikala
             }
 
             throw new Exception($"Could not load method '{signature}' from type '{Type.Name}'");
+        }
+
+        public override IEnumerable<PickledFieldInfo> GetFields()
+        {
+            foreach (var field in Type.GetFields(BindingsAll))
+            {
+                yield return new PickledFieldInfoRef(field);
+            }
         }
 
         public override PickledFieldInfo GetField(string name)
@@ -132,6 +183,11 @@ namespace Ibasa.Pikala
         {
             return new PickledGenericParameterRef(Type.GetGenericArguments()[position]);
         }
+
+        public override PickledTypeInfo Reify(PickledTypeInfo[] genericArguments)
+        {
+            return this;
+        }
     }
 
     sealed class PickledGenericParameterRef : PickledTypeInfo
@@ -139,6 +195,13 @@ namespace Ibasa.Pikala
         public PickledGenericParameterRef(Type parameter)
         {
             Type = parameter;
+        }
+
+        private new readonly Type Type;
+
+        public override (Type, bool) Resolve()
+        {
+            return (Type, true);
         }
 
         public override PickledTypeInfo GetGenericArgument(int position)
@@ -171,7 +234,15 @@ namespace Ibasa.Pikala
             throw new NotImplementedException();
         }
 
-        public override Type Type { get; }
+        public override IEnumerable<PickledFieldInfo> GetFields()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override PickledTypeInfo Reify(PickledTypeInfo[] genericArguments)
+        {
+            return genericArguments[Type.GenericParameterPosition];
+        }
     }
 
     sealed class PickledGenericParameterDef : PickledTypeInfo
@@ -215,17 +286,25 @@ namespace Ibasa.Pikala
             throw new NotImplementedException();
         }
 
-        public override Type Type
+        public override IEnumerable<PickledFieldInfo> GetFields()
         {
-            get
-            {
-                if (DeclaringType.IsCreated)
-                {
-                    return DeclaringType.Type.GenericTypeArguments[Position];
-                }
+            throw new NotImplementedException();
+        }
 
-                return DeclaringType.GenericParameters![Position];
+        public override PickledTypeInfo Reify(PickledTypeInfo[] genericArguments)
+        {
+            return genericArguments[Position];
+        }
+
+        public override (Type, bool) Resolve()
+        {
+            if (DeclaringType.IsCreated)
+            {
+                var args = DeclaringType.Type.GetGenericArguments();
+                return (args[Position], true);
             }
+
+            return (DeclaringType.GenericParameters![Position], false);
         }
     }
 
@@ -253,13 +332,13 @@ namespace Ibasa.Pikala
         public bool IsCreated { get { return _type != null; } }
 
         public TypeDef TypeDef { get; private set; }
-        public override Type Type
+
+        public override (Type, bool) Resolve()
         {
-            get
-            {
-                return _type ?? TypeBuilder;
-            }
+            if (_type == null) return (TypeBuilder, false);
+            return (_type, true);
         }
+
         public TypeBuilder TypeBuilder { get; }
         public GenericTypeParameterBuilder[]? GenericParameters { get; set; }
         public PickledFieldInfoDef[]? Fields { get; set; }
@@ -354,7 +433,27 @@ namespace Ibasa.Pikala
 
         public override PickledTypeInfo GetGenericArgument(int position)
         {
+            System.Diagnostics.Debug.Assert(GenericParameters != null, "GenericParameters is null");
+            System.Diagnostics.Debug.Assert(position >= 0, "Can't get generic argument for negative position");
+            System.Diagnostics.Debug.Assert(position < GenericParameters.Length, "Generic argument position out of bounds");
+
             return new PickledGenericParameterDef(this, position);
+        }
+
+        public override IEnumerable<PickledFieldInfo> GetFields()
+        {
+            if (Fields != null)
+            {
+                foreach (var field in Fields)
+                {
+                    yield return field;
+                }
+            }
+        }
+
+        public override PickledTypeInfo Reify(PickledTypeInfo[] genericArguments)
+        {
+            return this;
         }
     }
 
@@ -443,51 +542,79 @@ namespace Ibasa.Pikala
         }
     }
 
+    sealed class PickledGenericField : PickledFieldInfo
+    {
+        public override string Name { get; }
+
+        public override FieldInfo FieldInfo
+        {
+            get
+            {
+                var (type, complete) = Type.Resolve();
+
+                if (complete)
+                {
+                    var result = type.GetField(Name, BindingsAll);
+                    if (result == null)
+                    {
+                        throw new Exception($"Could not load field '{Name}' from type '{type.Name}'");
+                    }
+                    return result;
+                }
+                else
+                {
+
+                    var openField = Type.GenericType.GetField(Name);
+                    return TypeBuilder.GetField(type, openField.FieldInfo);
+                }
+            }
+        }
+
+        public override bool IsInstance => !FieldInfo.Attributes.HasFlag(FieldAttributes.Static);
+
+        public override bool IsLiteral => FieldInfo.IsLiteral;
+
+        public override bool IsNotSerialized => FieldInfo.IsNotSerialized;
+
+        readonly PickledGenericType Type;
+
+        public PickledGenericField(PickledGenericType type, string name)
+        {
+            Type = type;
+            Name = name;
+        }
+    }
+
     sealed class PickledGenericType : PickledTypeInfo
     {
         public PickledGenericType(PickledTypeInfo genericType, PickledTypeInfo[] genericArguments)
         {
             GenericType = genericType;
             GenericArguments = genericArguments;
+
+            if (genericType.SerialisedFields != null)
+            {
+                SerialisedFields = genericType.SerialisedFields.Select(fi =>
+                {
+                    var field = (PickledFieldInfo)new PickledGenericField(this, fi.Item2.Name);
+                    var type = fi.Item1.Reify(genericArguments);
+                    return (type, field);
+                }).ToArray();
+            }
         }
 
         public PickledTypeInfo GenericType { get; }
+        public PickledTypeInfo[] GenericArguments { get; }
 
-        (Type, bool) ResolveType()
+        public override (Type, bool) Resolve()
         {
             var genericArguments = new Type[GenericArguments.Length];
             bool isComplete = true;
             for (int i = 0; i < genericArguments.Length; ++i)
             {
-                var argument = GenericArguments[i];
-                if (argument is PickledTypeInfoRef)
-                {
-                    genericArguments[i] = argument.Type;
-                }
-                else if (argument is PickledTypeInfoDef)
-                {
-                    var constructingType = (PickledTypeInfoDef)argument;
-                    isComplete &= constructingType.IsCreated;
-                    genericArguments[i] = constructingType.Type;
-                }
-                else if (argument is PickledGenericType)
-                {
-                    var constructingType = (PickledGenericType)argument;
-                    var (type, complete) = constructingType.ResolveType();
-                    isComplete &= complete;
-                    genericArguments[i] = type;
-                }
-                else if (argument is PickledGenericParameterRef)
-                {
-                    var constructingType = (PickledGenericParameterRef)argument;
-                    genericArguments[i] = constructingType.Type;
-                }
-                else if (argument is PickledGenericParameterDef)
-                {
-                    var constructingType = (PickledGenericParameterDef)argument;
-                    isComplete &= constructingType.DeclaringType.IsCreated;
-                    genericArguments[i] = constructingType.Type;
-                }
+                var (argument, isCreated) = GenericArguments[i].Resolve();
+                isComplete &= isCreated;
+                genericArguments[i] = argument;
             }
 
             if (GenericType is PickledTypeInfoRef)
@@ -502,13 +629,9 @@ namespace Ibasa.Pikala
             }
         }
 
-        public override Type Type => ResolveType().Item1;
-
-        public PickledTypeInfo[] GenericArguments { get; set; }
-
         public override PickledConstructorInfo GetConstructor(Signature signature)
         {
-            var (type, isComplete) = ResolveType();
+            var (type, isComplete) = Resolve();
 
             if (isComplete)
             {
@@ -532,7 +655,7 @@ namespace Ibasa.Pikala
 
         public override PickledMethodInfo GetMethod(Signature signature)
         {
-            var (type, isComplete) = ResolveType();
+            var (type, isComplete) = Resolve();
 
             if (isComplete)
             {
@@ -554,29 +677,22 @@ namespace Ibasa.Pikala
             }
         }
 
+        public override IEnumerable<PickledFieldInfo> GetFields()
+        {
+            foreach (var field in GenericType.GetFields())
+            {
+                yield return new PickledGenericField(this, field.Name);
+            }
+        }
+
         public override PickledFieldInfo GetField(string name)
         {
-            var (type, isComplete) = ResolveType();
-
-            if (isComplete)
-            {
-                var result = type.GetField(name, BindingsAll);
-                if (result == null)
-                {
-                    throw new Exception($"Could not load field '{name}' from type '{type.Name}'");
-                }
-                return new PickledFieldInfoRef(result);
-            }
-            else
-            {
-                var fieldInfo = GenericType.GetField(name);
-                return new PickledFieldInfoRef(TypeBuilder.GetField(type, fieldInfo.FieldInfo));
-            }
+            return new PickledGenericField(this, name);
         }
 
         public override PickledEventInfo GetEvent(string name)
         {
-            var (type, isComplete) = ResolveType();
+            var (type, isComplete) = Resolve();
 
             if (isComplete)
             {
@@ -596,7 +712,7 @@ namespace Ibasa.Pikala
 
         public override PickledPropertyInfo GetProperty(Signature signature)
         {
-            var (type, isComplete) = ResolveType();
+            var (type, isComplete) = Resolve();
 
             if (isComplete)
             {
@@ -620,7 +736,12 @@ namespace Ibasa.Pikala
 
         public override PickledTypeInfo GetGenericArgument(int position)
         {
-            throw new NotImplementedException();
+            return GenericArguments[position];
+        }
+
+        public override PickledTypeInfo Reify(PickledTypeInfo[] genericArguments)
+        {
+            return this;
         }
     }
 
@@ -881,6 +1002,14 @@ namespace Ibasa.Pikala
 
     abstract class PickledFieldInfo : PickledMemberInfo
     {
+        public abstract string Name { get; }
+
+        public abstract bool IsInstance { get; }
+
+        public abstract bool IsLiteral { get; }
+
+        public abstract bool IsNotSerialized { get; }
+
         public override MemberInfo MemberInfo { get { return FieldInfo; } }
 
         public abstract FieldInfo FieldInfo { get; }
@@ -893,7 +1022,15 @@ namespace Ibasa.Pikala
 
     sealed class PickledFieldInfoRef : PickledFieldInfo
     {
+        public override string Name { get { return FieldInfo.Name; } }
+
         public override FieldInfo FieldInfo { get; }
+
+        public override bool IsInstance => !FieldInfo.Attributes.HasFlag(FieldAttributes.Static);
+
+        public override bool IsLiteral => FieldInfo.IsLiteral;
+
+        public override bool IsNotSerialized => FieldInfo.IsNotSerialized;
 
         public PickledFieldInfoRef(FieldInfo fieldInfo)
         {
@@ -910,7 +1047,16 @@ namespace Ibasa.Pikala
         }
 
         public PickledTypeInfoDef DeclaringType { get; }
+
         public FieldBuilder FieldBuilder { get; }
+
+        public override string Name { get { return FieldBuilder.Name; } }
+
+        public override bool IsInstance => !FieldInfo.Attributes.HasFlag(FieldAttributes.Static);
+
+        public override bool IsLiteral => FieldBuilder.IsLiteral;
+
+        public override bool IsNotSerialized => FieldBuilder.IsNotSerialized;
 
         public override FieldInfo FieldInfo
         {

@@ -458,6 +458,7 @@ namespace Ibasa.Pikala
 
             var fieldCount = state.Reader.Read7BitEncodedInt();
             constructingType.Fields = new PickledFieldInfoDef[fieldCount];
+            var serialisationFields = new List<(PickledTypeInfo, PickledFieldInfo)>();
             for (int i = 0; i < fieldCount; ++i)
             {
                 var fieldName = state.Reader.ReadString();
@@ -465,7 +466,14 @@ namespace Ibasa.Pikala
                 var fieldType = AssertNonNull(DeserializeType(state, typeContext));
                 var fieldBuilder = typeBuilder.DefineField(fieldName, fieldType.Type, fieldAttributes);
                 constructingType.Fields[i] = new PickledFieldInfoDef(constructingType, fieldBuilder);
+
+                if (!fieldAttributes.HasFlag(FieldAttributes.Literal) && !fieldAttributes.HasFlag(FieldAttributes.Static))
+                {
+                    serialisationFields.Add((fieldType, constructingType.Fields[i]));
+                }
             }
+
+            constructingType.SerialisedFields = serialisationFields.OrderBy(item => item.Item2.Name).ToArray();
 
             var constructorCount = state.Reader.Read7BitEncodedInt();
             constructingType.Constructors = new PickledConstructorInfoDef[constructorCount];
@@ -675,6 +683,8 @@ namespace Ibasa.Pikala
         {
             if (constructingType.TypeDef == TypeDef.Enum)
             {
+                constructingType.Operation = PickleOperation.Enum;
+
                 var typeCode = (TypeCode)state.Reader.ReadByte();
                 var underlyingType = TypeFromTypeCode(typeCode);
                 var typeBuilder = constructingType.TypeBuilder;
@@ -698,6 +708,8 @@ namespace Ibasa.Pikala
             }
             else if (constructingType.TypeDef == TypeDef.Delegate)
             {
+                constructingType.Operation = PickleOperation.Delegate;
+
                 var typeBuilder = constructingType.TypeBuilder;
 
                 var constructorParameters = new[] { typeof(object), typeof(IntPtr) };
@@ -985,45 +997,28 @@ namespace Ibasa.Pikala
             return result;
         }
 
-        private void DeserializeObject(PicklerDeserializationState state, object uninitializedObject, Type type, DeserializationTypeContext typeContext)
+        private object DeserializeObject(PicklerDeserializationState state, long position, bool shouldMemo, PickledTypeInfo objectType, DeserializationTypeContext typeContext)
         {
-            var currentFields = GetSerializedFields(type);
-
-            if (!state.HasSeenType(type, out var writtenFields))
+            if (objectType.Error != null)
             {
-                writtenFields = AssertNonNull(Deserialize(state, typeof(ValueTuple<string, Type>[]), typeContext) as ValueTuple<string, Type>[]);
-
-                if (currentFields.Length != writtenFields.Length)
-                {
-                    throw new Exception($"Can not deserialize type '{type}', serialised {writtenFields.Length} fields but type expects {currentFields.Length}");
-                }
-
-                state.AddType(type, writtenFields);
+                throw new Exception(objectType.Error);
             }
 
-            for (int i = 0; i < writtenFields.Length; ++i)
+            var objType = objectType.Type;
+            var uninitalizedObject = state.SetMemo(position, shouldMemo, System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objType));
+
+            System.Diagnostics.Debug.Assert(objectType.SerialisedFields != null, "Error was null, but so was Fields");
+
+            for (int i = 0; i < objectType.SerialisedFields.Length; ++i)
             {
-                var (fieldName, fieldType) = writtenFields[i];
+                var (fieldType, toSet) = objectType.SerialisedFields[i];
 
-                FieldInfo? toSet = null;
-                foreach (var field in currentFields)
-                {
-                    if (field.Name == fieldName)
-                    {
-                        toSet = field;
-                        break;
-                    }
-                }
+                object? value = Deserialize(state, fieldType.Type, typeContext);
 
-                if (toSet == null)
-                {
-                    throw new Exception($"Can not deserialize type '{type}', could not find expected field '{fieldName}'");
-                }
-
-                object? value = Deserialize(state, fieldType, typeContext);
-
-                toSet.SetValue(uninitializedObject, value);
+                toSet.FieldInfo.SetValue(uninitalizedObject, value);
             }
+
+            return uninitalizedObject;
         }
 
         private PickledFieldInfo DeserializeFieldRef(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
@@ -1116,6 +1111,12 @@ namespace Ibasa.Pikala
         private object DeserializeDelegate(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
         {
             var objType = AssertNonNull(DeserializeType(state, typeContext));
+            if (objType.Error != null)
+            {
+                // This was a delegate when it was serialised out, but no longer
+                throw new Exception(objType.Error);
+            }
+
             var invocationList = new Delegate[state.Reader.Read7BitEncodedInt()];
             for (int i = 0; i < invocationList.Length; ++i)
             {
@@ -1528,7 +1529,98 @@ namespace Ibasa.Pikala
                 result = new PickledTypeInfoRef(type);
             }
 
-            return state.SetMemo(position, true, result);
+            state.SetMemo(position, true, result);
+
+            if (result.Type.Assembly == mscorlib)
+            {
+                if (result.Type.IsEnum)
+                {
+                    result.Operation = PickleOperation.Enum;
+                }
+                else if (result.Type.IsAssignableTo(typeof(MulticastDelegate)))
+                {
+                    result.Operation = PickleOperation.Delegate;
+                }
+                else
+                {
+                    var serialisedFields = GetSerializedFields(result.Type);
+                    result.SerialisedFields =
+                        serialisedFields.Select<FieldInfo, (PickledTypeInfo, PickledFieldInfo)>(
+                            fieldInfo => (PickledTypeInfo.FromType(fieldInfo.FieldType), new PickledFieldInfoRef(fieldInfo))).ToArray();
+                }
+            }
+            else
+            {
+                var flags = (PickledTypeFlags)state.Reader.ReadByte();
+
+                if (!flags.HasFlag(PickledTypeFlags.IsAbstract))
+                {
+                    result.Operation = (PickleOperation)state.Reader.ReadByte();
+                    if (result.Operation == PickleOperation.Null)
+                    {
+                        // Hack to remove Null written by NonSerailisable type
+                        result.Operation = null;
+                    }
+
+                    if (result.Operation == PickleOperation.Object)
+                    {
+                        var currentFields =
+                            // Sort the fields by name so we serialise in deterministic order
+                            result.GetFields()
+                            .Where(field => field.IsInstance && !field.IsLiteral && !field.IsNotSerialized)
+                            .OrderBy(field => field.Name)
+                            .ToArray();
+
+                        var writtenLength = state.Reader.Read7BitEncodedInt();
+                        if (currentFields.Length != writtenLength)
+                        {
+                            result.Error = $"Can not deserialize type '{result.Type}', serialised {writtenLength} fields but type expects {currentFields.Length}";
+                        }
+
+                        // We still need to read the fields we have written otherwise nothing else can deserialise. And hell we might not even try and read one of these types, it might just 
+                        // be used as a local or something.
+                        result.SerialisedFields = new (PickledTypeInfo, PickledFieldInfo)[writtenLength];
+                        for (int i = 0; i < writtenLength; ++i)
+                        {
+                            var fieldName = state.Reader.ReadString();
+                            var fieldType = AssertNonNull(DeserializeType(state, typeContext));
+
+                            PickledFieldInfo? toSet = null;
+                            foreach (var field in currentFields)
+                            {
+                                if (field.Name == fieldName)
+                                {
+                                    toSet = field;
+                                    break;
+                                }
+                            }
+
+                            if (toSet == null)
+                            {
+                                result.Error = $"Can not deserialize type '{result.Type}', could not find expected field '{fieldName}'";
+                            }
+
+                            result.SerialisedFields[i] = (fieldType, toSet);
+                        }
+                    }
+                    else if (result.Operation == PickleOperation.Enum)
+                    {
+                        if (!result.Type.IsEnum)
+                        {
+                            result.Error = $"Can not deserialise {result.Type} expected it to be an enumeration type";
+                        }
+                    }
+                    else if (result.Operation == PickleOperation.Delegate)
+                    {
+                        if (!result.Type.IsAssignableTo(typeof(MulticastDelegate)))
+                        {
+                            result.Error = $"Can not deserialise {result.Type} expected it to be a delegate type";
+                        }
+                    }
+                }
+            }
+
+            return result;
         }
 
         private PickledTypeInfoDef DeserializeTypeDef(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
@@ -2072,12 +2164,12 @@ namespace Ibasa.Pikala
                         if (needTypeToken)
                         {
                             var pickledEnumType = AssertNonNull(DeserializeType(state, typeContext));
-                            enumType = pickledEnumType.Type;
-                            if (!enumType.IsEnum)
+                            if (pickledEnumType.Error != null)
                             {
                                 // This was an enum when it was serialised out, but no longer
                                 throw new Exception($"Can not deserialise {enumType} expected it to be an enumeration type");
                             }
+                            enumType = pickledEnumType.Type;
                         }
 
                         System.Diagnostics.Debug.Assert(enumType.IsEnum, "Expected type to be an enumeration type");
@@ -2197,10 +2289,7 @@ namespace Ibasa.Pikala
                 case PickleOperation.Object:
                     {
                         var pickledObjType = AssertNonNull(DeserializeType(state, typeContext));
-                        var objType = pickledObjType.Type;
-                        var uninitalizedObject = state.SetMemo(position, shouldMemo, System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objType));
-                        DeserializeObject(state, uninitalizedObject, objType, typeContext);
-                        return uninitalizedObject;
+                        return DeserializeObject(state, position, shouldMemo, pickledObjType, typeContext);
                     }
             }
 

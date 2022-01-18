@@ -563,9 +563,9 @@ namespace Ibasa.Pikala
                 state.Writer.Write((int)field.Attributes);
 
                 // We expect all module fields to be RVA fields
-                System.Diagnostics.Debug.Assert(field.Attributes.HasFlag(FieldAttributes.HasFieldRVA));
+                System.Diagnostics.Debug.Assert(field.Attributes.HasFlag(FieldAttributes.HasFieldRVA), "Module field was not an RVA field");
                 // with a StructLayoutAttribute
-                System.Diagnostics.Debug.Assert(field.FieldType.StructLayoutAttribute != null);
+                System.Diagnostics.Debug.Assert(field.FieldType.StructLayoutAttribute != null, "RVA field did not have struct layout attribute");
 
                 var size = field.FieldType.StructLayoutAttribute.Size;
                 var value = field.GetValue(null);
@@ -1225,6 +1225,53 @@ namespace Ibasa.Pikala
                     }
                     Serialize(state, type.Module, MakeInfo(type.Module, typeof(Module)));
                 }
+
+                // If this type is from mscorlib we don't need to write any info out for it because we assume it won't change
+                if (type.Assembly != mscorlib)
+                {
+                    var flags =
+                        (type.IsValueType ? PickledTypeFlags.IsValueType : 0) |
+                        (type.IsSealed ? PickledTypeFlags.IsSealed : 0) |
+                        (type.IsEnum ? PickledTypeFlags.IsEnum : 0) |
+                        (type.IsAbstract ? PickledTypeFlags.IsAbstract : 0);
+
+                    state.Writer.Write((byte)flags);
+
+                    if (!type.IsAbstract)
+                    {
+                        // Work out what sort of operation this type needs
+                        var operation = GetOperation(type);
+                        // This better have an operation or be non serialiseable 
+                        if (operation.Group == OperationGroup.NonSerializable)
+                        {
+                            // This is Null but eh we're probably going to have to loop back to this
+                            // later at somepoint this is good enough for now. The main thing is it isn't Object.
+                            state.Writer.Write((byte)0);
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.Assert(operation.Operation != null, "Operation was null", "For type {0}", type);
+                            System.Diagnostics.Debug.Assert(
+                                operation.Operation.Value == PickleOperation.Enum ||
+                                operation.Operation.Value == PickleOperation.Delegate ||
+                                operation.Operation.Value == PickleOperation.Reducer ||
+                                operation.Operation.Value == PickleOperation.ISerializable ||
+                                operation.Operation.Value == PickleOperation.Object, "Expected object operation", "Got {0}", operation.Operation.Value);
+                            state.Writer.Write((byte)operation.Operation.Value);
+                        }
+                        // If the operation has a field set write that out
+                        if (operation.Fields != null)
+                        {
+                            var fields = operation.Fields.Item1;
+                            state.Writer.Write7BitEncodedInt(fields.Length);
+                            foreach (var (fieldName, fieldType) in fields)
+                            {
+                                state.Writer.Write(fieldName);
+                                Serialize(state, fieldType, MakeInfo(fieldType, typeof(Type)));
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -1428,12 +1475,6 @@ namespace Ibasa.Pikala
 
             var (namesAndTypes, fieldInfos) = fields;
 
-            // If we've seen this type before we don't need to write out it's fields again
-            if (!state.SeenType(info.RuntimeType))
-            {
-                Serialize(state, namesAndTypes, MakeInfo(namesAndTypes, typeof(ValueTuple<string, Type>[]), true));
-            }
-
             foreach (var field in fieldInfos)
             {
                 var value = field.GetValue(obj);
@@ -1478,7 +1519,7 @@ namespace Ibasa.Pikala
                             // used for native sized numbers
                             if (runtimeType.IsPointer || runtimeType == typeof(Pointer))
                             {
-                                throw new Exception($"Pointer types are not serializable: '{runtimeType}'");
+                                return new OperationCacheEntry($"Pointer types are not serializable: '{runtimeType}'");
                             }
 
                             if (runtimeType.IsArray)
@@ -1514,7 +1555,7 @@ namespace Ibasa.Pikala
                                 }
                                 else
                                 {
-                                    throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from Assembly.");
+                                    return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from Assembly.");
                                 }
                             }
                             if (runtimeType.IsAssignableTo(typeof(Module)))
@@ -1525,7 +1566,7 @@ namespace Ibasa.Pikala
                                 }
                                 else
                                 {
-                                    throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from Module.");
+                                    return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from Module.");
                                 }
                             }
                             if (runtimeType.IsAssignableTo(typeof(MemberInfo)))
@@ -1538,7 +1579,7 @@ namespace Ibasa.Pikala
                                     }
                                     else
                                     {
-                                        throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from Type.");
+                                        return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from Type.");
                                     }
                                 }
                                 else if (runtimeType.IsAssignableTo(typeof(FieldInfo)))
@@ -1549,7 +1590,7 @@ namespace Ibasa.Pikala
                                     }
                                     else
                                     {
-                                        throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from FieldInfo.");
+                                        return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from FieldInfo.");
                                     }
                                 }
                                 else if (runtimeType.IsAssignableTo(typeof(PropertyInfo)))
@@ -1560,7 +1601,7 @@ namespace Ibasa.Pikala
                                     }
                                     else
                                     {
-                                        throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from PropertyInfo.");
+                                        return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from PropertyInfo.");
                                     }
                                 }
                                 else if (runtimeType.IsAssignableTo(typeof(EventInfo)))
@@ -1571,7 +1612,7 @@ namespace Ibasa.Pikala
                                     }
                                     else
                                     {
-                                        throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from EventInfo.");
+                                        return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from EventInfo.");
                                     }
                                 }
                                 else if (runtimeType.IsAssignableTo(typeof(MethodInfo)))
@@ -1582,7 +1623,7 @@ namespace Ibasa.Pikala
                                     }
                                     else
                                     {
-                                        throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from MethodInfo.");
+                                        return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from MethodInfo.");
                                     }
                                 }
                                 else if (runtimeType.IsAssignableTo(typeof(ConstructorInfo)))
@@ -1593,12 +1634,12 @@ namespace Ibasa.Pikala
                                     }
                                     else
                                     {
-                                        throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from ConstructorInfo.");
+                                        return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from ConstructorInfo.");
                                     }
                                 }
                                 else
                                 {
-                                    throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from MemberInfo.");
+                                    return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from MemberInfo.");
                                 }
                             }
                             // End of reflection handlers
@@ -1633,7 +1674,7 @@ namespace Ibasa.Pikala
 
                             if (runtimeType.IsAssignableTo(typeof(MarshalByRefObject)))
                             {
-                                throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from MarshalByRefObject.");
+                                return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from MarshalByRefObject.");
                             }
 
                             return new OperationCacheEntry(typeCode, GetSerializedFields(runtimeType));
@@ -1813,6 +1854,9 @@ namespace Ibasa.Pikala
                         default:
                             throw new Exception($"Unexpected operation {operationEntry.Operation} for a fully known operation");
                     }
+
+                case OperationGroup.NonSerializable:
+                    throw new Exception(operationEntry.ErrorMessage);
 
                 case OperationGroup.Assembly:
                     SerializeAssembly(state, (Assembly)obj);
