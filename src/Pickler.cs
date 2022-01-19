@@ -179,6 +179,16 @@ namespace Ibasa.Pikala
     public sealed partial class Pickler
     {
         private static readonly Assembly mscorlib = typeof(int).Assembly;
+        private static readonly Type runtimeTypeType = mscorlib.GetType("System.RuntimeType", true)!;
+        private static readonly Type runtimeModuleType = mscorlib.GetType("System.Reflection.RuntimeModule", true)!;
+        private static readonly Type runtimeAssemblyType = mscorlib.GetType("System.Reflection.RuntimeAssembly", true)!;
+        private static readonly Type runtimeFieldInfoType = mscorlib.GetType("System.Reflection.RuntimeFieldInfo", true)!;
+        private static readonly Type runtimePropertyInfoType = mscorlib.GetType("System.Reflection.RuntimePropertyInfo", true)!;
+        private static readonly Type runtimeMethodInfoType = mscorlib.GetType("System.Reflection.RuntimeMethodInfo", true)!;
+        private static readonly Type runtimeConstructorInfoType = mscorlib.GetType("System.Reflection.RuntimeConstructorInfo", true)!;
+        private static readonly Type runtimeEventInfoType = mscorlib.GetType("System.Reflection.RuntimeEventInfo", true)!;
+        private static readonly Type runtimeModuleBuilderType = typeof(System.Reflection.Emit.ModuleBuilder);
+        private static readonly Type runtimeAssemblyBuilderType = typeof(System.Reflection.Emit.AssemblyBuilder);
 
         private static OpCode[] _oneByteOpCodes;
         private static OpCode[] _twoByteOpCodes;

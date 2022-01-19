@@ -52,7 +52,7 @@ namespace Ibasa.Pikala.Tests
                 var _ = RoundTrip.Do<Type>(pickler, type);
             });
 
-            Assert.Contains("Could not load type 'test' from module '<In Memory Module>'", exc.Message);
+            Assert.Contains("Type 'System.Reflection.Emit.TypeBuilder' is not automaticly serializable as it inherits from Type.", exc.Message);
         }
 
         [Fact]

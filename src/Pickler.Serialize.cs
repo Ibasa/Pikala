@@ -1497,37 +1497,98 @@ namespace Ibasa.Pikala
                             // Reflection
                             if (runtimeType.IsAssignableTo(typeof(Assembly)))
                             {
-                                return new OperationCacheEntry(typeCode, OperationGroup.Assembly);
+                                // We only support serialising the actual runtime assembly type (either a real runtime assembly, or an assemblybuilder)
+                                if (runtimeType.IsAssignableTo(runtimeAssemblyType) || runtimeType == runtimeAssemblyBuilderType)
+                                {
+                                    return new OperationCacheEntry(typeCode, OperationGroup.Assembly);
+                                }
+                                else
+                                {
+                                    throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from Assembly.");
+                                }
                             }
                             if (runtimeType.IsAssignableTo(typeof(Module)))
                             {
-                                return new OperationCacheEntry(typeCode, OperationGroup.Module);
+                                if (runtimeType.IsAssignableTo(runtimeModuleType) || runtimeType == runtimeModuleBuilderType)
+                                {
+                                    return new OperationCacheEntry(typeCode, OperationGroup.Module);
+                                }
+                                else
+                                {
+                                    throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from Module.");
+                                }
                             }
                             if (runtimeType.IsAssignableTo(typeof(MemberInfo)))
                             {
                                 if (runtimeType.IsAssignableTo(typeof(Type)))
                                 {
-                                    return new OperationCacheEntry(typeCode, OperationGroup.Type);
+                                    if (runtimeType.IsAssignableTo(runtimeTypeType))
+                                    {
+                                        return new OperationCacheEntry(typeCode, OperationGroup.Type);
+                                    }
+                                    else
+                                    {
+                                        throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from Type.");
+                                    }
                                 }
                                 else if (runtimeType.IsAssignableTo(typeof(FieldInfo)))
                                 {
-                                    return new OperationCacheEntry(typeCode, PickleOperation.FieldRef);
+                                    if (runtimeType.IsAssignableTo(runtimeFieldInfoType))
+                                    {
+                                        return new OperationCacheEntry(typeCode, PickleOperation.FieldRef);
+                                    }
+                                    else
+                                    {
+                                        throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from FieldInfo.");
+                                    }
                                 }
                                 else if (runtimeType.IsAssignableTo(typeof(PropertyInfo)))
                                 {
-                                    return new OperationCacheEntry(typeCode, PickleOperation.PropertyRef);
+                                    if (runtimeType.IsAssignableTo(runtimePropertyInfoType))
+                                    {
+                                        return new OperationCacheEntry(typeCode, PickleOperation.PropertyRef);
+                                    }
+                                    else
+                                    {
+                                        throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from PropertyInfo.");
+                                    }
                                 }
                                 else if (runtimeType.IsAssignableTo(typeof(EventInfo)))
                                 {
-                                    return new OperationCacheEntry(typeCode, PickleOperation.EventRef);
+                                    if (runtimeType.IsAssignableTo(runtimeEventInfoType))
+                                    {
+                                        return new OperationCacheEntry(typeCode, PickleOperation.EventRef);
+                                    }
+                                    else
+                                    {
+                                        throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from EventInfo.");
+                                    }
                                 }
                                 else if (runtimeType.IsAssignableTo(typeof(MethodInfo)))
                                 {
-                                    return new OperationCacheEntry(typeCode, PickleOperation.MethodRef);
+                                    if (runtimeType.IsAssignableTo(runtimeMethodInfoType))
+                                    {
+                                        return new OperationCacheEntry(typeCode, PickleOperation.MethodRef);
+                                    }
+                                    else
+                                    {
+                                        throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from MethodInfo.");
+                                    }
                                 }
                                 else if (runtimeType.IsAssignableTo(typeof(ConstructorInfo)))
                                 {
-                                    return new OperationCacheEntry(typeCode, PickleOperation.ConstructorRef);
+                                    if (runtimeType.IsAssignableTo(runtimeConstructorInfoType))
+                                    {
+                                        return new OperationCacheEntry(typeCode, PickleOperation.ConstructorRef);
+                                    }
+                                    else
+                                    {
+                                        throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from ConstructorInfo.");
+                                    }
+                                }
+                                else
+                                {
+                                    throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from MemberInfo.");
                                 }
                             }
                             // End of reflection handlers
