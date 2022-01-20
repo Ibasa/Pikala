@@ -7,6 +7,31 @@ namespace Ibasa.Pikala
 {
     abstract class PickledTypeInfo : PickledMemberInfo
     {
+        public static PickledTypeInfo FromType(Type type)
+        {
+            if (type.IsConstructedGenericType)
+            {
+                var genericArguments = type.GetGenericArguments();
+                var pickledArguments = new PickledTypeInfo[genericArguments.Length];
+                for (int i = 0; i < genericArguments.Length; ++i)
+                {
+                    pickledArguments[i] = FromType(genericArguments[i]);
+                }
+
+                return new PickledGenericType(
+                    FromType(type.GetGenericTypeDefinition()),
+                    pickledArguments);
+            }
+            else if (type.IsGenericParameter)
+            {
+                return new PickledGenericParameterRef(type);
+            }
+            else
+            {
+                return new PickledTypeInfoRef(type);
+            }
+        }
+
         public override MemberInfo MemberInfo { get { return Type; } }
 
         public abstract Type Type { get; }
@@ -33,6 +58,9 @@ namespace Ibasa.Pikala
 
         public PickledTypeInfoRef(Type type)
         {
+            System.Diagnostics.Debug.Assert(!type.IsConstructedGenericType, "Tried to create a TypeRef for a constructed generic type, this should of been a GenericType");
+            System.Diagnostics.Debug.Assert(!type.IsGenericParameter, "Tried to create a TypeRef for a generic parameter, this should of been a PickledGenericParameterRef");
+
             Type = type;
         }
 
@@ -480,8 +508,16 @@ namespace Ibasa.Pikala
 
             if (isComplete)
             {
-                var infoRef = new PickledTypeInfoRef(type);
-                return infoRef.GetConstructor(signature);
+                var constructors = type.GetConstructors(BindingsAll);
+                foreach (var constructor in constructors)
+                {
+                    if (Signature.GetSignature(constructor).Equals(signature))
+                    {
+                        return new PickledConstructorInfoRef(constructor);
+                    }
+                }
+
+                throw new Exception($"Could not load constructor '{signature}' from type '{type.Name}'");
             }
             else
             {
@@ -496,8 +532,16 @@ namespace Ibasa.Pikala
 
             if (isComplete)
             {
-                var infoRef = new PickledTypeInfoRef(type);
-                return infoRef.GetMethod(signature);
+                var methods = type.GetMethods(BindingsAll);
+                foreach (var method in methods)
+                {
+                    if (Signature.GetSignature(method).Equals(signature))
+                    {
+                        return new PickledMethodInfoRef(method);
+                    }
+                }
+
+                throw new Exception($"Could not load method '{signature}' from type '{type.Name}'");
             }
             else
             {
@@ -512,8 +556,12 @@ namespace Ibasa.Pikala
 
             if (isComplete)
             {
-                var infoRef = new PickledTypeInfoRef(type);
-                return infoRef.GetField(name);
+                var result = type.GetField(name, BindingsAll);
+                if (result == null)
+                {
+                    throw new Exception($"Could not load field '{name}' from type '{type.Name}'");
+                }
+                return new PickledFieldInfoRef(result);
             }
             else
             {
@@ -528,8 +576,12 @@ namespace Ibasa.Pikala
 
             if (isComplete)
             {
-                var infoRef = new PickledTypeInfoRef(type);
-                return infoRef.GetEvent(name);
+                var result = type.GetEvent(name, BindingsAll);
+                if (result == null)
+                {
+                    throw new Exception($"Could not load event '{name}' from type '{type.Name}'");
+                }
+                return new PickledEventInfoRef(result);
             }
             else
             {
@@ -544,8 +596,16 @@ namespace Ibasa.Pikala
 
             if (isComplete)
             {
-                var infoRef = new PickledTypeInfoRef(type);
-                return infoRef.GetProperty(signature);
+                var properties = type.GetProperties(BindingsAll);
+                foreach (var property in properties)
+                {
+                    if (Signature.GetSignature(property).Equals(signature))
+                    {
+                        return new PickledPropertyInfoRef(property);
+                    }
+                }
+
+                throw new Exception($"Could not load property '{signature}' from type '{type.Name}'");
             }
             else
             {

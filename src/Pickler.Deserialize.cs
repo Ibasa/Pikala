@@ -1700,7 +1700,7 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an MVar operation without a current method context");
                         }
-                        return state.SetMemo(position, shouldMemo, new PickledTypeInfoRef(typeContext.GenericMethodParameters[genericParameterPosition]));
+                        return state.SetMemo(position, shouldMemo, PickledTypeInfo.FromType(typeContext.GenericMethodParameters[genericParameterPosition]));
                     }
 
                 case PickleOperation.TVar:
@@ -1710,7 +1710,7 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an TVar operation without a current type context");
                         }
-                        return state.SetMemo(position, shouldMemo, new PickledTypeInfoRef(typeContext.GenericTypeParameters[genericParameterPosition]));
+                        return state.SetMemo(position, shouldMemo, PickledTypeInfo.FromType(typeContext.GenericTypeParameters[genericParameterPosition]));
                     }
 
                 case PickleOperation.TypeRef:
@@ -1877,7 +1877,7 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an MVar operation without a current method context");
                         }
-                        return state.SetMemo(position, shouldMemo, new PickledTypeInfoRef(typeContext.GenericMethodParameters[genericParameterPosition]));
+                        return state.SetMemo(position, shouldMemo, PickledTypeInfo.FromType(typeContext.GenericMethodParameters[genericParameterPosition]));
                     }
 
                 case PickleOperation.TVar:
@@ -1887,7 +1887,7 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an TVar operation without a current type context");
                         }
-                        return state.SetMemo(position, shouldMemo, new PickledTypeInfoRef(typeContext.GenericTypeParameters[genericParameterPosition]));
+                        return state.SetMemo(position, shouldMemo, PickledTypeInfo.FromType(typeContext.GenericTypeParameters[genericParameterPosition]));
                     }
 
                 case PickleOperation.TypeRef:
@@ -2128,7 +2128,7 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an MVar operation without a current method context");
                         }
-                        return state.SetMemo(position, true, new PickledTypeInfoRef(typeContext.GenericMethodParameters[genericParameterPosition])).Type;
+                        return state.SetMemo(position, true, PickledTypeInfo.FromType(typeContext.GenericMethodParameters[genericParameterPosition])).Type;
                     }
 
                 case PickleOperation.TVar:
@@ -2138,7 +2138,7 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an TVar operation without a current type context");
                         }
-                        return state.SetMemo(position, true, new PickledTypeInfoRef(typeContext.GenericTypeParameters[genericParameterPosition])).Type;
+                        return state.SetMemo(position, true, PickledTypeInfo.FromType(typeContext.GenericTypeParameters[genericParameterPosition])).Type;
                     }
 
                 case PickleOperation.TypeRef:
