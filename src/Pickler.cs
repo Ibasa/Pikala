@@ -81,6 +81,7 @@ namespace Ibasa.Pikala
         Delegate = 1,
         Struct = 2,
         Class = 3,
+        Nested = 4,
     }
 
     /// <summary>

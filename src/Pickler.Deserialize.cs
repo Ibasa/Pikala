@@ -1491,22 +1491,13 @@ namespace Ibasa.Pikala
 
         private PickledTypeInfoRef DeserializeTypeRef(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
         {
-            var parent = Deserialize(state, typeof(object), typeContext);
+            var isNested = state.Reader.ReadBoolean();
             var typeName = state.Reader.ReadString();
 
-            PickledTypeInfoRef? result;
-            if (parent is Module module)
+            PickledTypeInfoRef result;
+            if (isNested)
             {
-                var type = module.GetType(typeName);
-                if (type == null)
-                {
-                    throw new Exception($"Could not load type '{typeName}' from module '{module.FullyQualifiedName}'");
-                }
-
-                result = new PickledTypeInfoRef(type);
-            }
-            else if (parent is Type declaringType)
-            {
+                var declaringType = AssertNonNull(DeserializeType(state, typeContext)).Type;
                 var type = declaringType.GetNestedType(typeName, BindingFlags.Public | BindingFlags.NonPublic);
                 if (type == null)
                 {
@@ -1515,29 +1506,18 @@ namespace Ibasa.Pikala
 
                 result = new PickledTypeInfoRef(type);
             }
-            else if (parent is MethodInfo declaringMethod)
-            {
-                var generics = declaringMethod.GetGenericArguments();
-
-                result = null;
-                foreach (var generic in generics)
-                {
-                    if (generic.Name == typeName)
-                    {
-                        result = new PickledTypeInfoRef(generic);
-                        break;
-                    }
-                }
-
-                if (result == null)
-                {
-                    throw new Exception($"Could not load generic parameter '{typeName}' from type '{declaringMethod}'");
-                }
-            }
             else
             {
-                throw new Exception($"Unexpected parent '{parent}' for type '{typeName}'");
+                var module = AssertNonNull(DeserializeModule(state, typeContext));
+                var type = module.GetType(typeName);
+                if (type == null)
+                {
+                    throw new Exception($"Could not load type '{typeName}' from module '{module.FullyQualifiedName}'");
+                }
+
+                result = new PickledTypeInfoRef(type);
             }
+
             return state.SetMemo(position, true, result);
         }
 
@@ -1547,7 +1527,9 @@ namespace Ibasa.Pikala
             {
                 var typeName = state.Reader.ReadString();
                 var typeAttributes = (TypeAttributes)state.Reader.ReadInt32();
-                var typeDef = (TypeDef)state.Reader.ReadByte();
+                var typeFlags = state.Reader.ReadByte();
+                var isNested = (typeFlags & (int)TypeDef.Nested) != 0;
+                var typeDef = (TypeDef)(typeFlags & 0x3);
                 string[]? genericParameters = null;
                 if (typeDef != TypeDef.Enum)
                 {
@@ -1563,31 +1545,39 @@ namespace Ibasa.Pikala
                     }
                 }
 
-                var callback = DeserializeWithMemo(state, position, (object parent) =>
+                PickledTypeInfoDef constructingType;
+                if (isNested)
                 {
-                    PickledTypeInfoDef result;
-                    if (parent is ModuleBuilder module)
+                    var callback = DeserializeWithMemo(state, position, (PickledTypeInfoDef declaringType) =>
                     {
-                        result = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, module.DefineType);
-                    }
-                    else if (parent is PickledTypeInfoDef declaringType)
-                    {
-                        result = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, declaringType.TypeBuilder.DefineNestedType);
-                    }
-                    else
-                    {
-                        throw new Exception($"Unexpected parent '{parent} : {parent.GetType().FullName}' for type '{typeName}'");
-                    }
+                        var result = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, declaringType.TypeBuilder.DefineNestedType);
 
-                    if (genericParameters != null)
-                    {
-                        result.GenericParameters = result.TypeBuilder.DefineGenericParameters(genericParameters);
-                    }
+                        if (genericParameters != null)
+                        {
+                            result.GenericParameters = result.TypeBuilder.DefineGenericParameters(genericParameters);
+                        }
 
-                    state.AddTypeDef(result);
-                    return state.SetMemo(position, true, result);
-                }, typeof(object), typeContext);
-                var constructingType = callback.Invoke();
+                        state.AddTypeDef(result);
+                        return state.SetMemo(position, true, result);
+                    }, typeof(Type), typeContext);
+                    constructingType = callback.Invoke();
+                }
+                else
+                {
+                    var callback = DeserializeWithMemo(state, position, (ModuleBuilder module) =>
+                    {
+                        var result = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, module.DefineType);
+
+                        if (genericParameters != null)
+                        {
+                            result.GenericParameters = result.TypeBuilder.DefineGenericParameters(genericParameters);
+                        }
+
+                        state.AddTypeDef(result);
+                        return state.SetMemo(position, true, result);
+                    }, typeof(Module), typeContext);
+                    constructingType = callback.Invoke();
+                }
                 DeserializeTypeDef(state, constructingType);
                 return constructingType;
             });
@@ -1596,7 +1586,7 @@ namespace Ibasa.Pikala
         private MemoCallback<T, R> DeserializeWithMemo<T, R>(PicklerDeserializationState state, long position, Func<T, R> callback, Type staticType, DeserializationTypeContext typeContext) where T : class where R : class
         {
             var memo = state.RegisterMemoCallback(position, callback);
-            var result = AssertNonNull<T>(Deserialize(state, staticType, typeContext) as T);
+            var _ = Deserialize(state, staticType, typeContext);
             return memo;
         }
 
