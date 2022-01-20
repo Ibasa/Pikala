@@ -1115,22 +1115,27 @@ namespace Ibasa.Pikala
 
                     state.Writer.Write((int)type.Attributes);
 
+                    var typeFlags = type.DeclaringType != null ? TypeDef.Nested : (TypeDef)0;
+
                     if (type.IsEnum)
                     {
-                        state.Writer.Write((byte)TypeDef.Enum);
+                        typeFlags |= TypeDef.Enum;
                     }
                     else if (type.IsAssignableTo(typeof(Delegate)))
                     {
-                        state.Writer.Write((byte)TypeDef.Delegate);
+                        typeFlags |= TypeDef.Delegate;
                     }
                     else if (type.IsValueType)
                     {
-                        state.Writer.Write((byte)TypeDef.Struct);
+                        typeFlags |= TypeDef.Struct;
                     }
                     else
                     {
-                        state.Writer.Write((byte)TypeDef.Class);
+                        typeFlags |= TypeDef.Class;
                     }
+
+                    state.Writer.Write((byte)typeFlags);
+
                     Type[]? genericParameters = null;
                     if (!type.IsEnum)
                     {
@@ -1197,15 +1202,16 @@ namespace Ibasa.Pikala
             {
                 // Just write out a refernce to the type
                 state.Writer.Write((byte)PickleOperation.TypeRef);
+                // Is nested so we know if we need to read a module or type reference
+                state.Writer.Write(type.DeclaringType != null);
 
                 if (type.DeclaringType != null)
                 {
-                    Serialize(state, type.DeclaringType, MakeInfo(type.DeclaringType, typeof(Type), true));
                     state.Writer.Write(type.Name);
+                    Serialize(state, type.DeclaringType, MakeInfo(type.DeclaringType, typeof(Type), true));
                 }
                 else
                 {
-                    Serialize(state, type.Module, MakeInfo(type.Module, typeof(Module)));
                     if (string.IsNullOrEmpty(type.Namespace))
                     {
                         state.Writer.Write(type.Name);
@@ -1214,6 +1220,7 @@ namespace Ibasa.Pikala
                     {
                         state.Writer.Write(type.Namespace + "." + type.Name);
                     }
+                    Serialize(state, type.Module, MakeInfo(type.Module, typeof(Module)));
                 }
             }
         }
