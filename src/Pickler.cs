@@ -62,15 +62,16 @@ namespace Ibasa.Pikala
         TypeDef = 36,
         ArrayType = 37,
         GenericInstantiation = 38,
-        GenericParameter = 39,
-        TVar = 40,
-        MVar = 41,
+        GenericTypeParameter = 39,
+        GenericMethodParameter = 40,
+        TVar = 41,
+        MVar = 42,
 
         // Structs and classes
-        Delegate = 42,
-        Reducer = 43,
-        ISerializable = 44,
-        Object = 45,
+        Delegate = 43,
+        Reducer = 44,
+        ISerializable = 45,
+        Object = 46,
 
         // This is written as a byte so we're limited to 255 operations
     }

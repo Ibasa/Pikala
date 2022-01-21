@@ -1482,11 +1482,21 @@ namespace Ibasa.Pikala
             return state.SetMemo(position, true, new PickledGenericType(genericType, genericArguments));
         }
 
-        private PickledTypeInfo DeserializeGenericParameter(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
+        private PickledTypeInfo DeserializeGenericParameter(PicklerDeserializationState state, long position, bool isTypeParam, DeserializationTypeContext typeContext)
         {
-            var genericTypeOrMethod = AssertNonNull(DeserializeMemberInfo(state, typeContext));
-            var genericParameter = state.Reader.Read7BitEncodedInt();
-            return state.SetMemo(position, true, genericTypeOrMethod.GetGenericArgument(genericParameter));
+            var genericParameterPosition = state.Reader.Read7BitEncodedInt();
+            PickledTypeInfo genericParameter;
+            if (isTypeParam)
+            {
+                var type = AssertNonNull(DeserializeType(state, typeContext));
+                genericParameter = type.GetGenericArgument(genericParameterPosition);
+            }
+            else
+            {
+                var method = AssertNonNull(DeserializeMethodInfo(state, typeContext));
+                genericParameter = method.GetGenericArgument(genericParameterPosition);
+            }
+            return state.SetMemo(position, true, genericParameter);
         }
 
         private PickledTypeInfoRef DeserializeTypeRef(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
@@ -1690,8 +1700,9 @@ namespace Ibasa.Pikala
                 case PickleOperation.GenericInstantiation:
                     return DeserializeGenericInstantiation(state, position, typeContext);
 
-                case PickleOperation.GenericParameter:
-                    return DeserializeGenericParameter(state, position, typeContext);
+                case PickleOperation.GenericTypeParameter:
+                case PickleOperation.GenericMethodParameter:
+                    return DeserializeGenericParameter(state, position, operation == PickleOperation.GenericTypeParameter, typeContext);
 
                 case PickleOperation.MVar:
                     {
@@ -1867,8 +1878,9 @@ namespace Ibasa.Pikala
                 case PickleOperation.GenericInstantiation:
                     return DeserializeGenericInstantiation(state, position, typeContext);
 
-                case PickleOperation.GenericParameter:
-                    return DeserializeGenericParameter(state, position, typeContext);
+                case PickleOperation.GenericTypeParameter:
+                case PickleOperation.GenericMethodParameter:
+                    return DeserializeGenericParameter(state, position, operation == PickleOperation.GenericTypeParameter, typeContext);
 
                 case PickleOperation.MVar:
                     {
@@ -2118,8 +2130,9 @@ namespace Ibasa.Pikala
                 case PickleOperation.GenericInstantiation:
                     return DeserializeGenericInstantiation(state, position, typeContext).Type;
 
-                case PickleOperation.GenericParameter:
-                    return DeserializeGenericParameter(state, position, typeContext).Type;
+                case PickleOperation.GenericTypeParameter:
+                case PickleOperation.GenericMethodParameter:
+                    return DeserializeGenericParameter(state, position, operation == PickleOperation.GenericTypeParameter, typeContext).Type;
 
                 case PickleOperation.MVar:
                     {

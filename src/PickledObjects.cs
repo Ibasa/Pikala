@@ -46,6 +46,8 @@ namespace Ibasa.Pikala
 
         public abstract PickledEventInfo GetEvent(string name);
 
+        public abstract PickledTypeInfo GetGenericArgument(int position);
+
         public override void Emit(ILGenerator ilGenerator, OpCode opCode)
         {
             ilGenerator.Emit(opCode, Type);
@@ -367,6 +369,8 @@ namespace Ibasa.Pikala
             return MethodInfo.Invoke(target, args);
         }
 
+        public abstract PickledTypeInfo GetGenericArgument(int position);
+
         public override void Emit(ILGenerator ilGenerator, OpCode opCode)
         {
             ilGenerator.Emit(opCode, MethodInfo);
@@ -672,7 +676,6 @@ namespace Ibasa.Pikala
 
         public abstract MemberInfo MemberInfo { get; }
 
-        public abstract PickledTypeInfo GetGenericArgument(int position);
         public abstract void Emit(ILGenerator ilGenerator, OpCode opCode);
     }
 
@@ -699,10 +702,6 @@ namespace Ibasa.Pikala
         public override void Emit(ILGenerator ilGenerator, OpCode opCode)
         {
             ilGenerator.Emit(opCode, ConstructorInfo);
-        }
-        public override PickledTypeInfo GetGenericArgument(int position)
-        {
-            throw new NotSupportedException("Constructors do not have generic arguments");
         }
     }
 
@@ -772,11 +771,6 @@ namespace Ibasa.Pikala
         {
             throw new Exception("Can't emit property info to IL stream");
         }
-
-        public override PickledTypeInfo GetGenericArgument(int position)
-        {
-            throw new Exception("Properties do not have generic arguments");
-        }
     }
 
     sealed class PickledPropertyInfoRef : PickledPropertyInfo
@@ -841,11 +835,6 @@ namespace Ibasa.Pikala
         {
             throw new Exception("Can't emit event info to IL stream");
         }
-
-        public override PickledTypeInfo GetGenericArgument(int position)
-        {
-            throw new Exception("Events do not have generic arguments");
-        }
     }
 
     sealed class PickledEventInfoRef : PickledEventInfo
@@ -899,11 +888,6 @@ namespace Ibasa.Pikala
         public override void Emit(ILGenerator ilGenerator, OpCode opCode)
         {
             ilGenerator.Emit(opCode, FieldInfo);
-        }
-
-        public override PickledTypeInfo GetGenericArgument(int position)
-        {
-            throw new NotImplementedException();
         }
     }
 

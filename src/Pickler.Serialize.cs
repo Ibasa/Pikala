@@ -1062,31 +1062,34 @@ namespace Ibasa.Pikala
                 {
                     if (genericMethodParameters == null)
                     {
-                        state.Writer.Write((byte)PickleOperation.GenericParameter);
-                        Serialize(state, type.DeclaringMethod, MakeInfo(type.DeclaringMethod, typeof(MemberInfo), true));
+                        state.Writer.Write((byte)PickleOperation.GenericMethodParameter);
+                        state.Writer.Write7BitEncodedInt(type.GenericParameterPosition);
+                        Serialize(state, type.DeclaringMethod, MakeInfo(type.DeclaringMethod, typeof(MethodInfo), true));
                     }
                     else
                     {
                         state.Writer.Write((byte)PickleOperation.MVar);
+                        state.Writer.Write7BitEncodedInt(type.GenericParameterPosition);
                     }
                 }
                 else if (type.DeclaringType != null)
                 {
                     if (genericTypeParameters == null)
                     {
-                        state.Writer.Write((byte)PickleOperation.GenericParameter);
-                        Serialize(state, type.DeclaringType, MakeInfo(type.DeclaringType, typeof(MemberInfo), true));
+                        state.Writer.Write((byte)PickleOperation.GenericTypeParameter);
+                        state.Writer.Write7BitEncodedInt(type.GenericParameterPosition);
+                        Serialize(state, type.DeclaringType, MakeInfo(type.DeclaringType, typeof(Type), true));
                     }
                     else
                     {
                         state.Writer.Write((byte)PickleOperation.TVar);
+                        state.Writer.Write7BitEncodedInt(type.GenericParameterPosition);
                     }
                 }
                 else
                 {
                     throw new Exception($"'{type}' is a generic parameter but is not bound to a type or method");
                 }
-                state.Writer.Write7BitEncodedInt(type.GenericParameterPosition);
             }
 
             // Is this assembly one we should save by value?
