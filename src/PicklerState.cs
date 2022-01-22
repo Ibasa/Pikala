@@ -120,6 +120,22 @@ namespace Ibasa.Pikala
             }
         }
 
+        private Dictionary<Type, SerialisedObjectTypeInfo> typeInfoMap = new Dictionary<Type, SerialisedObjectTypeInfo>();
+
+        public SerialisedObjectTypeInfo? HasSeenType(Type type)
+        {
+            if (typeInfoMap.TryGetValue(type, out var serialisedObjectTypeInfo))
+            {
+                return serialisedObjectTypeInfo;
+            }
+            return null;
+        }
+
+        public void AddSeenType(Type type, SerialisedObjectTypeInfo info)
+        {
+            typeInfoMap.Add(type, info);
+        }
+
         private System.Reflection.Assembly? CurrentDomain_TypeResolve(object? sender, ResolveEventArgs args)
         {
             if (args.RequestingAssembly != null && args.Name != null)
@@ -320,6 +336,15 @@ namespace Ibasa.Pikala
         Stack<Action> trailers = new Stack<Action>();
         List<Action> statics = new List<Action>();
         int trailerDepth = 0;
+
+        HashSet<Type> seenTypes = new HashSet<Type>();
+
+        public bool HasSeenType(Type type)
+        {
+            if (seenTypes.Contains(type)) return true;
+            seenTypes.Add(type);
+            return false;
+        }
 
         public void CheckTrailers()
         {

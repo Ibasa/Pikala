@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
-using System.Linq;
 
 namespace Ibasa.Pikala
 {
@@ -13,6 +12,16 @@ namespace Ibasa.Pikala
         IsSealed = 2,
         IsValueType = 4,
         IsEnum = 8,
+    }
+
+    sealed class SerialisedObjectTypeInfo
+    {
+        public PickledTypeFlags Flags;
+        // Null if this wasn't serailised using object format, or if the fields have changed.
+        public (Type, FieldInfo)[]? SerialisedFields;
+        // Non null if there was an error building Fields (we should use a DU really)
+        public string? Error;
+        public PickleOperation? Operation;
     }
 
     abstract class PickledTypeInfo : PickledMemberInfo
@@ -84,12 +93,6 @@ namespace Ibasa.Pikala
         }
 
         public abstract PickledTypeInfo Reify(PickledTypeInfo[] genericArguments);
-
-        // Null if this wasn't serailised using object format, or if the fields have changed.
-        public (PickledTypeInfo, PickledFieldInfo)[]? SerialisedFields;
-        // Non null if there was an error building Fields (we should use a DU really)
-        public string? Error;
-        public PickleOperation? Operation;
     }
 
     sealed class PickledTypeInfoRef : PickledTypeInfo
@@ -591,16 +594,6 @@ namespace Ibasa.Pikala
         {
             GenericType = genericType;
             GenericArguments = genericArguments;
-
-            if (genericType.SerialisedFields != null)
-            {
-                SerialisedFields = genericType.SerialisedFields.Select(fi =>
-                {
-                    var field = (PickledFieldInfo)new PickledGenericField(this, fi.Item2.Name);
-                    var type = fi.Item1.Reify(genericArguments);
-                    return (type, field);
-                }).ToArray();
-            }
         }
 
         public PickledTypeInfo GenericType { get; }

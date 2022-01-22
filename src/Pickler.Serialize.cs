@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Linq;
 
 namespace Ibasa.Pikala
 {
@@ -1236,53 +1237,6 @@ namespace Ibasa.Pikala
                     }
                     Serialize(state, type.Module, MakeInfo(type.Module, typeof(Module)));
                 }
-
-                // If this type is from mscorlib we don't need to write any info out for it because we assume it won't change
-                if (type.Assembly != mscorlib)
-                {
-                    var flags =
-                        (type.IsValueType ? PickledTypeFlags.IsValueType : 0) |
-                        (type.IsSealed ? PickledTypeFlags.IsSealed : 0) |
-                        (type.IsEnum ? PickledTypeFlags.IsEnum : 0) |
-                        (type.IsAbstract ? PickledTypeFlags.IsAbstract : 0);
-
-                    state.Writer.Write((byte)flags);
-
-                    if (!type.IsAbstract)
-                    {
-                        // Work out what sort of operation this type needs
-                        var operation = GetOperation(type);
-                        // This better have an operation or be non serialiseable 
-                        if (operation.Group == OperationGroup.NonSerializable)
-                        {
-                            // This is Null but eh we're probably going to have to loop back to this
-                            // later at somepoint this is good enough for now. The main thing is it isn't Object.
-                            state.Writer.Write((byte)0);
-                        }
-                        else
-                        {
-                            System.Diagnostics.Debug.Assert(operation.Operation != null, "Operation was null", "For type {0}", type);
-                            System.Diagnostics.Debug.Assert(
-                                operation.Operation.Value == PickleOperation.Enum ||
-                                operation.Operation.Value == PickleOperation.Delegate ||
-                                operation.Operation.Value == PickleOperation.Reducer ||
-                                operation.Operation.Value == PickleOperation.ISerializable ||
-                                operation.Operation.Value == PickleOperation.Object, "Expected object operation", "Got {0}", operation.Operation.Value);
-                            state.Writer.Write((byte)operation.Operation.Value);
-                        }
-                        // If the operation has a field set write that out
-                        if (operation.Fields != null)
-                        {
-                            var fields = operation.Fields.Item1;
-                            state.Writer.Write7BitEncodedInt(fields.Length);
-                            foreach (var (fieldName, fieldType) in fields)
-                            {
-                                state.Writer.Write(fieldName);
-                                Serialize(state, fieldType, MakeInfo(fieldType, typeof(Type)));
-                            }
-                        }
-                    }
-                }
             }
         }
 
@@ -1380,6 +1334,7 @@ namespace Ibasa.Pikala
             // Delegates are just a target and a method
             var invocationList = multicastDelegate.GetInvocationList();
             Serialize(state, runtimeType, MakeInfo(runtimeType, typeof(Type), true));
+            DoSeenType(state, runtimeType);
             state.Writer.Write7BitEncodedInt(invocationList.Length);
             foreach (var invocation in invocationList)
             {
@@ -1471,6 +1426,7 @@ namespace Ibasa.Pikala
             iserializable.GetObjectData(serializationInfo, context);
 
             Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
+            DoSeenType(state, info.RuntimeType);
             state.Writer.Write7BitEncodedInt(serializationInfo.MemberCount);
             foreach (var member in serializationInfo)
             {
@@ -1483,6 +1439,7 @@ namespace Ibasa.Pikala
         {
             // Must be an object, try and dump all it's fields
             Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
+            DoSeenType(state, info.RuntimeType);
 
             var (namesAndTypes, fieldInfos) = fields;
 
@@ -1704,8 +1661,71 @@ namespace Ibasa.Pikala
             return operationEntry;
         }
 
+        private SerialisedObjectTypeInfo GetSerialisedObjectTypeInfo(Type type)
+        {
+            var info = new SerialisedObjectTypeInfo();
+
+            info.Flags = 
+                (type.IsValueType ? PickledTypeFlags.IsValueType : 0) |
+                (type.IsSealed ? PickledTypeFlags.IsSealed : 0) |
+                (type.IsEnum ? PickledTypeFlags.IsEnum : 0) |
+                (type.IsAbstract ? PickledTypeFlags.IsAbstract : 0);
+
+            if (!type.IsAbstract)
+            {
+                // Work out what sort of operation this type needs
+                var operation = GetOperation(type);
+                // If the operation has a field set write that out
+                if (operation.Fields != null)
+                {
+                    var (_, fields) = operation.Fields;
+                    info.SerialisedFields = new (Type, FieldInfo)[fields.Length];
+                    for(int i = 0; i < fields.Length; ++i)
+                    {
+                        info.SerialisedFields[i] = (fields[i].FieldType, fields[i]);
+                    }
+                }
+                // This is Null but eh we're probably going to have to loop back to this
+                // later at somepoint this is good enough for now. The main thing is it isn't Object.
+                info.Operation = operation.Operation ?? PickleOperation.Null;
+            }
+
+            return info;
+        }
+
+        private void WriteSerialisedObjectTypeInfo(PicklerSerializationState state, SerialisedObjectTypeInfo info)
+        {
+            state.Writer.Write((byte)info.Flags);
+            // Bit of a hack for now, but operation might be null because this is an abstract object (for static type)
+            state.Writer.Write((byte)(info.Operation ?? PickleOperation.Null));
+            if (info.SerialisedFields != null)
+            {
+                var fields = info.SerialisedFields;
+                state.Writer.Write7BitEncodedInt(fields.Length);
+                foreach (var (fieldType, fieldInfo) in fields)
+                {
+                    state.Writer.Write(fieldInfo.Name);
+                    Serialize(state, fieldType, MakeInfo(fieldType, typeof(Type)));
+                }
+            }
+        }
+
+        private void DoSeenType(PicklerSerializationState state, Type type)
+        {
+            if (!state.HasSeenType(type))
+            {
+                // If this type is from mscorlib or pickled by value we don't need to write any info out for it because we assume it won't change
+                if (type.Assembly != mscorlib && !PickleByValue(type.Assembly))
+                {
+                    WriteSerialisedObjectTypeInfo(state, GetSerialisedObjectTypeInfo(type));
+                }
+            }
+        }
+
         private void Serialize(PicklerSerializationState state, object? obj, SerializeInformation info, Type[]? genericTypeParameters = null, Type[]? genericMethodParameters = null)
         {
+            DoSeenType(state, info.StaticType);
+
             if (Object.ReferenceEquals(obj, null))
             {
                 state.Writer.Write((byte)PickleOperation.Null);
@@ -1715,7 +1735,6 @@ namespace Ibasa.Pikala
             {
                 return;
             }
-
 
             var operationEntry = GetOperation(info.RuntimeType);
             switch (operationEntry.Group)
@@ -1769,6 +1788,7 @@ namespace Ibasa.Pikala
                             if (needTypeToken)
                             {
                                 Serialize(state, info.RuntimeType, MakeInfo(info.RuntimeType, typeof(Type), true));
+                                DoSeenType(state, info.RuntimeType);
                             }
                             // typeCode for an enum will be something like Int32
                             WriteEnumerationValue(state.Writer, operationEntry.TypeCode, obj);
