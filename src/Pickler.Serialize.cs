@@ -970,7 +970,7 @@ namespace Ibasa.Pikala
             // Is this mscorlib? If so we write out a single token for it
             if (assembly == mscorlib)
             {
-                state.Writer.Write((byte)PickleOperation.Mscorlib);
+                state.Writer.Write((byte)PickleOperation.MscorlibAssembly);
             }
             // Is this assembly one we should save by value?
             else if (PickleByValue(assembly))
@@ -1008,9 +1008,14 @@ namespace Ibasa.Pikala
             }
             else
             {
+                if (module == mscorlib.ManifestModule)
+                {
+                    state.Writer.Write((byte)PickleOperation.MscorlibModule);
+                    return;
+                }
                 // We can just write a ref here, lets check if this is the ONLY module on the assembly (i.e. the ManifestModule)
                 // because we can then write out a token instead of a name
-                if (module == module.Assembly.ManifestModule)
+                else if (module == module.Assembly.ManifestModule)
                 {
                     state.Writer.Write((byte)PickleOperation.ManifestModuleRef);
                 }
@@ -1203,6 +1208,12 @@ namespace Ibasa.Pikala
             }
             else
             {
+                if (wellKnownTypes.TryGetValue(type, out var op))
+                {
+                    state.Writer.Write((byte)op);
+                    return;
+                }
+
                 // Just write out a refernce to the type
                 state.Writer.Write((byte)PickleOperation.TypeRef);
                 // Is nested so we know if we need to read a module or type reference

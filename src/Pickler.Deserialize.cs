@@ -1722,7 +1722,7 @@ namespace Ibasa.Pikala
                 case PickleOperation.Memo:
                     return (Assembly)state.DoMemo();
 
-                case PickleOperation.Mscorlib:
+                case PickleOperation.MscorlibAssembly:
                     // We don't memo mscorlib, it's cheaper to just have the single byte token
                     return mscorlib;
 
@@ -1747,6 +1747,10 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.Memo:
                     return (Module)state.DoMemo();
+
+                case PickleOperation.MscorlibModule:
+                    // We don't memo mscorlib, it's cheaper to just have the single byte token
+                    return mscorlib.ManifestModule;
 
                 case PickleOperation.ManifestModuleRef:
                     return DeserializeManifestModuleRef(state, position, typeContext);
@@ -1821,6 +1825,13 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.TypeDef:
                     return DeserializeTypeDef(state, position, typeContext);
+
+                default:
+                    foreach (var kv in wellKnownTypes)
+                    {
+                        if (kv.Value == operation) return state.SetMemo(position, shouldMemo, new PickledTypeInfoRef(kv.Key));
+                    }
+                    break;
             }
 
             throw new Exception($"Unexpected operation '{operation}' for Type");
@@ -1999,6 +2010,13 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.TypeDef:
                     return DeserializeTypeDef(state, position, typeContext);
+
+                default:
+                    foreach (var kv in wellKnownTypes)
+                    {
+                        if (kv.Value == operation) return state.SetMemo(position, shouldMemo, new PickledTypeInfoRef(kv.Key));
+                    }
+                    break;
             }
 
             throw new Exception($"Unexpected operation '{operation}' for MemberInfo");
@@ -2184,9 +2202,13 @@ namespace Ibasa.Pikala
                 case PickleOperation.Array:
                     return DeserializeArray(state, operation == PickleOperation.SZArray, position, typeContext);
 
-                case PickleOperation.Mscorlib:
+                case PickleOperation.MscorlibAssembly:
                     // We don't memo mscorlib, it's cheaper to just have the single byte token
                     return mscorlib;
+
+                case PickleOperation.MscorlibModule:
+                    // We don't memo mscorlib, it's cheaper to just have the single byte token
+                    return mscorlib.ManifestModule;
 
                 case PickleOperation.AssemblyRef:
                     return DeserializeAsesmblyRef(state, position);
@@ -2291,6 +2313,13 @@ namespace Ibasa.Pikala
                         var pickledObjType = AssertNonNull(DeserializeType(state, typeContext));
                         return DeserializeObject(state, position, shouldMemo, pickledObjType, typeContext);
                     }
+
+                default:
+                    foreach (var kv in wellKnownTypes)
+                    {
+                        if (kv.Value == operation) return state.SetMemo(position, shouldMemo, new PickledTypeInfoRef(kv.Key)).Type;
+                    }
+                    break;
             }
 
             throw new Exception($"Unhandled PickleOperation '{operation}'");

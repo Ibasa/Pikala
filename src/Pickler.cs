@@ -47,7 +47,7 @@ namespace Ibasa.Pikala
         Memo = 23,
 
         // Reflection
-        Mscorlib = 24,
+        MscorlibAssembly = 24,
         AssemblyRef = 25,
         ManifestModuleRef = 26,
         ModuleRef = 27,
@@ -72,6 +72,35 @@ namespace Ibasa.Pikala
         Reducer = 44,
         ISerializable = 45,
         Object = 46,
+
+        // Basic Types
+        MscorlibModule,
+        TypeVoid,
+        TypeBoolean,
+        TypeByte,
+        TypeSByte,
+        TypeInt16,
+        TypeUInt16,
+        TypeInt32,
+        TypeUInt32,
+        TypeInt64,
+        TypeUInt64,
+        TypeIntPtr,
+        TypeUIntPtr,
+        TypeChar,
+        TypeDouble,
+        TypeSingle,
+        TypeDecimal,
+        TypeString,
+        TypeAssembly,
+        TypeModule,
+        TypeTypeInfo,
+        TypeFieldInfo,
+        TypeMethodInfo,
+        TypePropertyInfo,
+        TypeConsturctorInfo,
+        TypeEventInfo,
+        TypeMemberInfo,
 
         // This is written as a byte so we're limited to 255 operations
     }
@@ -207,6 +236,7 @@ namespace Ibasa.Pikala
 
         private static OpCode[] _oneByteOpCodes;
         private static OpCode[] _twoByteOpCodes;
+        private static Dictionary<Type, PickleOperation> wellKnownTypes;
 
         static Pickler()
         {
@@ -230,6 +260,36 @@ namespace Ibasa.Pikala
                     _twoByteOpCodes[opCode.Value & 0xFF] = opCode;
                 }
             }
+
+            wellKnownTypes = new Dictionary<Type, PickleOperation>()
+            {
+                { typeof(void), PickleOperation.TypeVoid },
+                { typeof(bool), PickleOperation.TypeBoolean },
+                { typeof(char), PickleOperation.TypeChar },
+                { typeof(sbyte), PickleOperation.TypeSByte },
+                { typeof(short), PickleOperation.TypeInt16 },
+                { typeof(int), PickleOperation.TypeInt32 },
+                { typeof(long), PickleOperation.TypeInt64 },
+                { typeof(byte), PickleOperation.TypeByte },
+                { typeof(ushort), PickleOperation.TypeUInt16 },
+                { typeof(uint), PickleOperation.TypeUInt32 },
+                { typeof(ulong), PickleOperation.TypeUInt64 },
+                { typeof(float), PickleOperation.TypeSingle },
+                { typeof(double), PickleOperation.TypeDouble },
+                { typeof(decimal), PickleOperation.TypeDecimal },
+                { typeof(string), PickleOperation.TypeString },
+                { typeof(UIntPtr), PickleOperation.TypeUIntPtr },
+                { typeof(IntPtr), PickleOperation.TypeIntPtr },
+                { typeof(Type), PickleOperation.TypeTypeInfo },
+                { typeof(FieldInfo), PickleOperation.TypeFieldInfo },
+                { typeof(MethodInfo), PickleOperation.TypeMethodInfo },
+                { typeof(ConstructorInfo), PickleOperation.TypeConsturctorInfo },
+                { typeof(EventInfo), PickleOperation.TypeEventInfo },
+                { typeof(PropertyInfo), PickleOperation.TypePropertyInfo },
+                { typeof(MemberInfo), PickleOperation.TypeMemberInfo },
+                { typeof(Module), PickleOperation.TypeModule },
+                { typeof(Assembly), PickleOperation.TypeAssembly },
+            };
         }
 
         private Func<Assembly, AssemblyPickleMode> _assemblyPickleMode;
