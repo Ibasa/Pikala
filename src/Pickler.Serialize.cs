@@ -25,7 +25,6 @@ namespace Ibasa.Pikala
             }
         }
         public Type StaticType { get; }
-        public bool ShouldMemo { get; }
 
         /// <summary>
         /// This is an optional type that defines a parent contextual type.
@@ -34,12 +33,11 @@ namespace Ibasa.Pikala
         /// </summary>
         public Type? ContextType { get; }
 
-        public SerializeInformation(object? value, Type staticType, bool shouldMemo, Type? contextType)
+        public SerializeInformation(object? value, Type staticType, Type? contextType)
         {
             _value = value;
             _type = null;
             StaticType = staticType;
-            ShouldMemo = shouldMemo;
             ContextType = contextType;
         }
     }
@@ -69,16 +67,11 @@ namespace Ibasa.Pikala
             return true;
         }
 
-        private SerializeInformation MakeInfo(object? obj, Type staticType, bool? shouldMemo = null, Type? contextType = null)
+        private SerializeInformation MakeInfo(object? obj, Type staticType, Type? contextType = null)
         {
-            if (obj == null) { return new SerializeInformation(obj, staticType, false, contextType); }
+            if (obj == null) { return new SerializeInformation(obj, staticType, contextType); }
 
-            if (!shouldMemo.HasValue)
-            {
-                shouldMemo = ShouldMemo(obj, staticType);
-            }
-
-            return new SerializeInformation(obj, staticType, shouldMemo.Value, contextType);
+            return new SerializeInformation(obj, staticType, contextType);
         }
 
         private bool PickleByValue(Assembly assembly)
@@ -479,7 +472,7 @@ namespace Ibasa.Pikala
                         {
                             var fieldToken = ilReader.ReadInt32();
                             var fieldInfo = methodModule.ResolveField(fieldToken, genericTypeParameters, genericMethodParameters);
-                            Serialize(state, fieldInfo, MakeInfo(fieldInfo, typeof(FieldInfo), true), genericTypeParameters, genericMethodParameters);
+                            Serialize(state, fieldInfo, MakeInfo(fieldInfo, typeof(FieldInfo)), genericTypeParameters, genericMethodParameters);
                             break;
                         }
 
@@ -487,7 +480,7 @@ namespace Ibasa.Pikala
                         {
                             var methodToken = ilReader.ReadInt32();
                             var methodInfo = methodModule.ResolveMethod(methodToken, genericTypeParameters, genericMethodParameters);
-                            Serialize(state, methodInfo, MakeInfo(methodInfo, typeof(MethodInfo), true), genericTypeParameters, genericMethodParameters);
+                            Serialize(state, methodInfo, MakeInfo(methodInfo, typeof(MethodInfo)), genericTypeParameters, genericMethodParameters);
                             break;
                         }
 
@@ -495,7 +488,7 @@ namespace Ibasa.Pikala
                         {
                             var memberToken = ilReader.ReadInt32();
                             var memberInfo = methodModule.ResolveMember(memberToken, genericTypeParameters, genericMethodParameters);
-                            Serialize(state, memberInfo, MakeInfo(memberInfo, typeof(MemberInfo), true), genericTypeParameters, genericMethodParameters);
+                            Serialize(state, memberInfo, MakeInfo(memberInfo, typeof(MemberInfo)), genericTypeParameters, genericMethodParameters);
                             break;
                         }
 
@@ -816,8 +809,7 @@ namespace Ibasa.Pikala
                     {
                         state.Writer.Write(field.Name);
                         var value = field.GetValue(null);
-                        var fieldInfo = MakeInfo(value, typeof(object), ShouldMemo(value, field.FieldType));
-                        Serialize(state, value, fieldInfo, genericParameters);
+                        Serialize(state, value, MakeInfo(value, field.FieldType), genericParameters);
                     }
                 }
             });
@@ -916,8 +908,7 @@ namespace Ibasa.Pikala
                 {
                     result[i] = collection[i].Value;
                 }
-                // No point memoising this array, we just created it!
-                Serialize(state, result, new SerializeInformation(result, typeof(object?[]), false, null));
+                Serialize(state, result, new SerializeInformation(result, typeof(object?[]), null));
             }
             else
             {
@@ -932,7 +923,7 @@ namespace Ibasa.Pikala
             {
                 SerializeType(state, attribute.AttributeType, null, null);
 
-                Serialize(state, attribute.Constructor, MakeInfo(attribute.Constructor, typeof(ConstructorInfo), true, attribute.AttributeType));
+                Serialize(state, attribute.Constructor, MakeInfo(attribute.Constructor, typeof(ConstructorInfo), attribute.AttributeType));
                 state.Writer.Write7BitEncodedInt(attribute.ConstructorArguments.Count);
                 foreach (var argument in attribute.ConstructorArguments)
                 {
@@ -948,10 +939,9 @@ namespace Ibasa.Pikala
                     if (!argument.IsField)
                     {
                         var property = (PropertyInfo)argument.MemberInfo;
-                        Serialize(state, property, MakeInfo(property, typeof(PropertyInfo), true, attribute.AttributeType));
+                        Serialize(state, property, MakeInfo(property, typeof(PropertyInfo), attribute.AttributeType));
                         var value = argument.TypedValue.Value;
-                        var info = MakeInfo(argument.TypedValue.Value, typeof(object), ShouldMemo(value, property.PropertyType));
-                        WriteCustomAttributeValue(state, value, info);
+                        WriteCustomAttributeValue(state, value, MakeInfo(value, property.PropertyType));
                     }
                 }
 
@@ -961,10 +951,9 @@ namespace Ibasa.Pikala
                     if (argument.IsField)
                     {
                         var field = (FieldInfo)argument.MemberInfo;
-                        Serialize(state, field, MakeInfo(field, typeof(FieldInfo), true, attribute.AttributeType));
+                        Serialize(state, field, MakeInfo(field, typeof(FieldInfo), attribute.AttributeType));
                         var value = argument.TypedValue.Value;
-                        var info = MakeInfo(argument.TypedValue.Value, typeof(object), ShouldMemo(value, field.FieldType));
-                        WriteCustomAttributeValue(state, value, info);
+                        WriteCustomAttributeValue(state, value, MakeInfo(value, field.FieldType));
                     }
                 }
             }
@@ -1086,7 +1075,7 @@ namespace Ibasa.Pikala
                     {
                         state.Writer.Write((byte)PickleOperation.GenericMethodParameter);
                         state.Writer.Write7BitEncodedInt(type.GenericParameterPosition);
-                        Serialize(state, type.DeclaringMethod, MakeInfo(type.DeclaringMethod, typeof(MethodInfo), true));
+                        Serialize(state, type.DeclaringMethod, MakeInfo(type.DeclaringMethod, typeof(MethodInfo)));
                     }
                     else
                     {
@@ -1354,8 +1343,8 @@ namespace Ibasa.Pikala
             state.Writer.Write7BitEncodedInt(invocationList.Length);
             foreach (var invocation in invocationList)
             {
-                Serialize(state, invocation.Target, MakeInfo(invocation.Target, typeof(object), true));
-                Serialize(state, invocation.Method, MakeInfo(invocation.Method, typeof(MethodInfo), true));
+                Serialize(state, invocation.Target, MakeInfo(invocation.Target, typeof(object)));
+                Serialize(state, invocation.Method, MakeInfo(invocation.Method, typeof(MethodInfo)));
             }
         }
 
@@ -1377,7 +1366,7 @@ namespace Ibasa.Pikala
                 }
 
                 // Write out the static types
-                Serialize(state, genericArguments, MakeInfo(genericArguments, typeof(Type[]), true));
+                Serialize(state, genericArguments, MakeInfo(genericArguments, typeof(Type[])));
             }
 
             // Write out the values
@@ -1395,7 +1384,7 @@ namespace Ibasa.Pikala
             // We've got a reducer for the type (or its generic variant)
             var (method, target, args) = reducer.Reduce(runtimeType, obj);
 
-            Serialize(state, method, MakeInfo(method, typeof(MethodBase), true));
+            Serialize(state, method, MakeInfo(method, typeof(MethodBase)));
 
             // Assert properties of the reduction
             if (method is ConstructorInfo constructorInfo)
@@ -1419,7 +1408,7 @@ namespace Ibasa.Pikala
                     throw new Exception($"Invalid reduction for type '{runtimeType}'. MethodBase was a MethodInfo that returns '{methodInfo.ReturnType}'.");
                 }
 
-                Serialize(state, target, MakeInfo(target, typeof(object), true));
+                Serialize(state, target, MakeInfo(target, typeof(object)));
             }
             else
             {
@@ -1429,7 +1418,7 @@ namespace Ibasa.Pikala
             state.Writer.Write7BitEncodedInt(args.Length);
             foreach (var arg in args)
             {
-                Serialize(state, arg, MakeInfo(arg, typeof(object), true));
+                Serialize(state, arg, MakeInfo(arg, typeof(object)));
             }
         }
 
@@ -1447,7 +1436,7 @@ namespace Ibasa.Pikala
             foreach (var member in serializationInfo)
             {
                 state.Writer.Write(member.Name);
-                Serialize(state, member.Value, MakeInfo(member.Value, typeof(object), true));
+                Serialize(state, member.Value, MakeInfo(member.Value, typeof(object)));
             }
         }
 
@@ -1747,7 +1736,7 @@ namespace Ibasa.Pikala
                 state.Writer.Write((byte)PickleOperation.Null);
                 return;
             }
-            else if (info.ShouldMemo && state.DoMemo(obj))
+            else if (ShouldMemo(obj, info.StaticType) && state.DoMemo(obj))
             {
                 return;
             }
@@ -1765,13 +1754,11 @@ namespace Ibasa.Pikala
                     {
                         System.Diagnostics.Debug.Assert(inferedOperationToken.Value == operation, "Infered operation from static type didn't match intended operation");
                         // If we've infered the operation we can't be memoising this value because we're skipping writing out the op token that could tell us to memoise
-                        System.Diagnostics.Debug.Assert(!info.ShouldMemo, "Infered an operation for a memoizable type");
+                        System.Diagnostics.Debug.Assert(!ShouldMemo(obj, info.StaticType), "Infered an operation for a memoizable type");
                     }
                     else
                     {
-                        // Set the high bit for operations that shouldn't memo
-                        var opByte = (int)operation | (info.ShouldMemo ? 0 : 0x80);
-                        state.Writer.Write((byte)opByte);
+                        state.Writer.Write((byte)operation);
                     }
 
                     switch (operation)

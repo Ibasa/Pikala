@@ -649,7 +649,7 @@ namespace Ibasa.Pikala
                         throw new Exception($"Could not find static field '{fieldName}' on type '{type.Name}'");
                     }
 
-                    var fieldValue = Deserialize(state, typeof(object), typeContext);
+                    var fieldValue = Deserialize(state, fieldInfo.FieldType, typeContext);
                     fieldInfo.SetValue(null, fieldValue);
                 }
             });
@@ -1167,7 +1167,7 @@ namespace Ibasa.Pikala
                 {
                     var propertyInfo = AssertNonNull(DeserializePropertyInfo(state, typeContext));
                     namedProperties[j] = propertyInfo.PropertyInfo;
-                    propertyValues[j] = Deserialize(state, typeof(object), default);
+                    propertyValues[j] = Deserialize(state, namedProperties[j].PropertyType, default);
                 }
 
                 var namedFields = new FieldInfo[state.Reader.Read7BitEncodedInt()];
@@ -1176,7 +1176,7 @@ namespace Ibasa.Pikala
                 {
                     var pickledField = AssertNonNull(DeserializeFieldInfo(state, typeContext));
                     namedFields[j] = pickledField.FieldInfo;
-                    fieldValues[j] = Deserialize(state, typeof(object), default);
+                    fieldValues[j] = Deserialize(state, namedFields[j].FieldType, default);
                 }
 
                 var customBuilder = new CustomAttributeBuilder(constructor.ConstructorInfo, arguments, namedProperties, propertyValues, namedFields, fieldValues);
@@ -2012,22 +2012,20 @@ namespace Ibasa.Pikala
         {
             var staticInfo = GetOrReadSerialisedObjectTypeInfo(state, staticType);
 
+            var shouldMemo = !staticInfo.Flags.HasFlag(PickledTypeFlags.IsValueType);
+
             var position = state.Reader.BaseStream.Position;
 
             var maybeOperation = InferOperationFromStaticType(state.IsConstructedAssembly, staticType);
             PickleOperation operation;
-            bool shouldMemo;
             if (maybeOperation.HasValue)
             {
                 operation = maybeOperation.Value;
-                shouldMemo = false;
             }
             else
             {
                 // Could not infer operation from static type, read the operation token
-                var opByte = state.Reader.ReadByte();
-                operation = (PickleOperation)(opByte & 0x7F);
-                shouldMemo = (opByte & 0x80) == 0;
+                operation = (PickleOperation)state.Reader.ReadByte();
             }
 
             switch (operation)
