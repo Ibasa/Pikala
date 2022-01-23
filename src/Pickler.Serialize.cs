@@ -553,7 +553,7 @@ namespace Ibasa.Pikala
         {
             state.Writer.Write((byte)PickleOperation.ModuleDef);
             state.Writer.Write(module.Name);
-            Serialize(state, module.Assembly, MakeInfo(module.Assembly, typeof(Assembly)));
+            SerializeAssembly(state, module.Assembly);
 
             var fields = module.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             state.Writer.Write7BitEncodedInt(fields.Length);
@@ -959,8 +959,18 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeAssembly(PicklerSerializationState state, Assembly assembly)
+        private void SerializeAssembly(PicklerSerializationState state, Assembly assembly, bool skipMemo = false)
         {
+            if (Object.ReferenceEquals(assembly, null))
+            {
+                state.Writer.Write((byte)PickleOperation.Null);
+                return;
+            }
+            else if (!skipMemo && ShouldMemo(assembly, typeof(Assembly)) && state.DoMemo(assembly))
+            {
+                return;
+            }
+
             // This is an assembly, we need to emit an assembly name so it can be reloaded
 
             // Is this mscorlib? If so we write out a single token for it
@@ -990,8 +1000,18 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeModule(PicklerSerializationState state, Module module)
+        private void SerializeModule(PicklerSerializationState state, Module module, bool skipMemo = false)
         {
+            if (Object.ReferenceEquals(module, null))
+            {
+                state.Writer.Write((byte)PickleOperation.Null);
+                return;
+            }
+            else if (!skipMemo && ShouldMemo(module, typeof(Module)) && state.DoMemo(module))
+            {
+                return;
+            }
+
             // This is a module, we need to emit a reference to the assembly it's found in and it's name
 
             // Is this assembly one we should save by value?
@@ -1020,7 +1040,7 @@ namespace Ibasa.Pikala
                     state.Writer.Write((byte)PickleOperation.ModuleRef);
                     state.Writer.Write(module.Name);
                 }
-                Serialize(state, module.Assembly, MakeInfo(module.Assembly, typeof(Assembly)));
+                SerializeAssembly(state, module.Assembly);
             }
         }
 
@@ -1031,7 +1051,7 @@ namespace Ibasa.Pikala
                 state.Writer.Write((byte)PickleOperation.Null);
                 return;
             }
-            else if (!skipMemo && state.DoMemo(type))
+            else if (!skipMemo && ShouldMemo(type, typeof(Type)) && state.DoMemo(type))
             {
                 return;
             }
@@ -1168,7 +1188,7 @@ namespace Ibasa.Pikala
                     }
                     else
                     {
-                        Serialize(state, type.Module, MakeInfo(type.Module, typeof(Module)));
+                        SerializeModule(state, type.Module);
                     }
 
                     if (type.IsEnum)
@@ -1240,7 +1260,7 @@ namespace Ibasa.Pikala
                     {
                         state.Writer.Write(type.Namespace + "." + type.Name);
                     }
-                    Serialize(state, type.Module, MakeInfo(type.Module, typeof(Module)));
+                    SerializeModule(state, type.Module);
                 }
             }
         }
@@ -1893,10 +1913,10 @@ namespace Ibasa.Pikala
                     throw new Exception(operationEntry.ErrorMessage);
 
                 case OperationGroup.Assembly:
-                    SerializeAssembly(state, (Assembly)obj);
+                    SerializeAssembly(state, (Assembly)obj, true);
                     return;
                 case OperationGroup.Module:
-                    SerializeModule(state, (Module)obj);
+                    SerializeModule(state, (Module)obj, true);
                     return;
                 case OperationGroup.Type:
                     SerializeType(state, (Type)obj, genericTypeParameters, genericMethodParameters, true);
