@@ -1606,18 +1606,16 @@ namespace Ibasa.Pikala
             return result;
         }
 
-        private (long, PickleOperation, bool) DoDeserialize(PicklerDeserializationState state)
+        private (long, PickleOperation) DoDeserialize(PicklerDeserializationState state)
         {
             var position = state.Reader.BaseStream.Position;
-            var opByte = state.Reader.ReadByte();
-            var operation = (PickleOperation)(opByte & 0x7F);
-            var shouldMemo = (opByte & 0x80) == 0;
-            return (position, operation, shouldMemo);
+            var operation = (PickleOperation)state.Reader.ReadByte();
+            return (position, operation);
         }
 
         private Assembly? DeserializeAssembly(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
-            var (position, operation, shouldMemo) = DoDeserialize(state);
+            var (position, operation) = DoDeserialize(state);
 
             switch (operation)
             {
@@ -1643,7 +1641,7 @@ namespace Ibasa.Pikala
 
         private Module? DeserializeModule(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
-            var (position, operation, shouldMemo) = DoDeserialize(state);
+            var (position, operation) = DoDeserialize(state);
 
             switch (operation)
             {
@@ -1672,7 +1670,7 @@ namespace Ibasa.Pikala
 
         private PickledTypeInfo? DeserializeType(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
-            var (position, operation, shouldMemo) = DoDeserialize(state);
+            var (position, operation) = DoDeserialize(state);
 
             switch (operation)
             {
@@ -1695,7 +1693,7 @@ namespace Ibasa.Pikala
                         {
                             arrayType = elementType.Type.MakeArrayType(rank);
                         }
-                        return state.SetMemo(position, shouldMemo, new PickledTypeInfoRef(arrayType));
+                        return state.SetMemo(position, true, new PickledTypeInfoRef(arrayType));
                     }
 
                 case PickleOperation.GenericInstantiation:
@@ -1712,7 +1710,7 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an MVar operation without a current method context");
                         }
-                        return state.SetMemo(position, shouldMemo, PickledTypeInfo.FromType(typeContext.GenericMethodParameters[genericParameterPosition]));
+                        return state.SetMemo(position, true, PickledTypeInfo.FromType(typeContext.GenericMethodParameters[genericParameterPosition]));
                     }
 
                 case PickleOperation.TVar:
@@ -1722,7 +1720,7 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an TVar operation without a current type context");
                         }
-                        return state.SetMemo(position, shouldMemo, PickledTypeInfo.FromType(typeContext.GenericTypeParameters[genericParameterPosition]));
+                        return state.SetMemo(position, true, PickledTypeInfo.FromType(typeContext.GenericTypeParameters[genericParameterPosition]));
                     }
 
                 case PickleOperation.TypeRef:
@@ -1734,7 +1732,7 @@ namespace Ibasa.Pikala
                 default:
                     foreach (var kv in wellKnownTypes)
                     {
-                        if (kv.Value == operation) return state.SetMemo(position, shouldMemo, new PickledTypeInfoRef(kv.Key));
+                        if (kv.Value == operation) return state.SetMemo(position, true, new PickledTypeInfoRef(kv.Key));
                     }
                     break;
             }
@@ -1744,7 +1742,7 @@ namespace Ibasa.Pikala
 
         private PickledFieldInfo? DeserializeFieldInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
-            var (position, operation, shouldMemo) = DoDeserialize(state);
+            var (position, operation) = DoDeserialize(state);
 
             switch (operation)
             {
@@ -1763,7 +1761,7 @@ namespace Ibasa.Pikala
 
         private PickledPropertyInfo? DeserializePropertyInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
-            var (position, operation, shouldMemo) = DoDeserialize(state);
+            var (position, operation) = DoDeserialize(state);
 
             switch (operation)
             {
@@ -1782,7 +1780,7 @@ namespace Ibasa.Pikala
 
         private PickledConstructorInfo? DeserializeConstructorInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
-            var (position, operation, shouldMemo) = DoDeserialize(state);
+            var (position, operation) = DoDeserialize(state);
 
             switch (operation)
             {
@@ -1801,7 +1799,7 @@ namespace Ibasa.Pikala
 
         private PickledMethodInfo? DeserializeMethodInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
-            var (position, operation, shouldMemo) = DoDeserialize(state);
+            var (position, operation) = DoDeserialize(state);
 
             switch (operation)
             {
@@ -1820,7 +1818,7 @@ namespace Ibasa.Pikala
 
         private PickledMethodBase? DeserializeMethodBase(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
-            var (position, operation, shouldMemo) = DoDeserialize(state);
+            var (position, operation) = DoDeserialize(state);
 
             switch (operation)
             {
@@ -1842,7 +1840,7 @@ namespace Ibasa.Pikala
 
         private PickledMemberInfo? DeserializeMemberInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
-            var (position, operation, shouldMemo) = DoDeserialize(state);
+            var (position, operation) = DoDeserialize(state);
 
             switch (operation)
             {
@@ -1880,7 +1878,7 @@ namespace Ibasa.Pikala
                         {
                             arrayType = elementType.Type.MakeArrayType(rank);
                         }
-                        return state.SetMemo(position, shouldMemo, new PickledTypeInfoRef(arrayType));
+                        return state.SetMemo(position, true, new PickledTypeInfoRef(arrayType));
                     }
 
                 case PickleOperation.GenericInstantiation:
@@ -1897,7 +1895,7 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an MVar operation without a current method context");
                         }
-                        return state.SetMemo(position, shouldMemo, PickledTypeInfo.FromType(typeContext.GenericMethodParameters[genericParameterPosition]));
+                        return state.SetMemo(position, true, PickledTypeInfo.FromType(typeContext.GenericMethodParameters[genericParameterPosition]));
                     }
 
                 case PickleOperation.TVar:
@@ -1907,7 +1905,7 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an TVar operation without a current type context");
                         }
-                        return state.SetMemo(position, shouldMemo, PickledTypeInfo.FromType(typeContext.GenericTypeParameters[genericParameterPosition]));
+                        return state.SetMemo(position, true, PickledTypeInfo.FromType(typeContext.GenericTypeParameters[genericParameterPosition]));
                     }
 
                 case PickleOperation.TypeRef:
@@ -1919,7 +1917,7 @@ namespace Ibasa.Pikala
                 default:
                     foreach (var kv in wellKnownTypes)
                     {
-                        if (kv.Value == operation) return state.SetMemo(position, shouldMemo, new PickledTypeInfoRef(kv.Key));
+                        if (kv.Value == operation) return state.SetMemo(position, true, new PickledTypeInfoRef(kv.Key));
                     }
                     break;
             }
