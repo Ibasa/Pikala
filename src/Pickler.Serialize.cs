@@ -1665,7 +1665,7 @@ namespace Ibasa.Pikala
         {
             var info = new SerialisedObjectTypeInfo();
 
-            info.Flags = 
+            info.Flags =
                 (type.IsValueType ? PickledTypeFlags.IsValueType : 0) |
                 (type.IsSealed ? PickledTypeFlags.IsSealed : 0) |
                 (type.IsEnum ? PickledTypeFlags.IsEnum : 0) |
@@ -1680,7 +1680,7 @@ namespace Ibasa.Pikala
                 {
                     var (_, fields) = operation.Fields;
                     info.SerialisedFields = new (Type, FieldInfo)[fields.Length];
-                    for(int i = 0; i < fields.Length; ++i)
+                    for (int i = 0; i < fields.Length; ++i)
                     {
                         info.SerialisedFields[i] = (fields[i].FieldType, fields[i]);
                     }
