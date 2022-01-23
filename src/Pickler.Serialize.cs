@@ -55,7 +55,7 @@ namespace Ibasa.Pikala
             if (staticType.IsValueType) { return false; }
 
             // Don't bother memoing the well known types, they only take a byte to write out anyway
-            foreach(var type in wellKnownTypes)
+            foreach (var type in wellKnownTypes)
             {
                 if (Object.ReferenceEquals(type, obj)) return false;
             }
