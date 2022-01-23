@@ -19,7 +19,11 @@ namespace Ibasa.Pikala
             {
                 if (_type == null)
                 {
-                    _type = _value?.GetType() ?? typeof(object);
+                    if (_value == null)
+                    {
+                        throw new Exception("Didn't expect to request the runtime type for a null object");
+                    }
+                    _type = _value.GetType();
                 }
                 return _type;
             }
@@ -44,6 +48,28 @@ namespace Ibasa.Pikala
 
     public sealed partial class Pickler
     {
+        private static HashSet<Type> reflectionTypes = new HashSet<Type>()
+        {
+            typeof(Type),
+            typeof(FieldInfo),
+            typeof(PropertyInfo),
+            typeof(MethodInfo),
+            typeof(ConstructorInfo),
+            typeof(EventInfo),
+            typeof(Module),
+            typeof(Assembly),
+        };
+
+        private Type SanatizeType(Type type)
+        {
+            // We do a sanitisation pass here for reflection types, so that we don't see things like RuntimeType, just Type.
+            foreach (var t in reflectionTypes)
+            {
+                if (type.IsAssignableTo(t)) { type = t; break; }
+            }
+            return type;
+        }
+
         /// <summary>
         /// There are some objects that we shouldn't bother to memoise because it's cheaper to just write their tokens.
         /// </summary>
@@ -480,7 +506,7 @@ namespace Ibasa.Pikala
                         {
                             var methodToken = ilReader.ReadInt32();
                             var methodInfo = methodModule.ResolveMethod(methodToken, genericTypeParameters, genericMethodParameters);
-                            Serialize(state, methodInfo, MakeInfo(methodInfo, typeof(MethodInfo)), genericTypeParameters, genericMethodParameters);
+                            Serialize(state, methodInfo, MakeInfo(methodInfo, typeof(MethodBase)), genericTypeParameters, genericMethodParameters);
                             break;
                         }
 
@@ -1358,8 +1384,6 @@ namespace Ibasa.Pikala
         {
             // Delegates are just a target and a method
             var invocationList = multicastDelegate.GetInvocationList();
-            SerializeType(state, runtimeType, null, null);
-            DoSeenType(state, runtimeType);
             state.Writer.Write7BitEncodedInt(invocationList.Length);
             foreach (var invocation in invocationList)
             {
@@ -1450,8 +1474,6 @@ namespace Ibasa.Pikala
             var serializationInfo = new System.Runtime.Serialization.SerializationInfo(info.RuntimeType, new System.Runtime.Serialization.FormatterConverter());
             iserializable.GetObjectData(serializationInfo, context);
 
-            SerializeType(state, info.RuntimeType, null, null);
-            DoSeenType(state, info.RuntimeType);
             state.Writer.Write7BitEncodedInt(serializationInfo.MemberCount);
             foreach (var member in serializationInfo)
             {
@@ -1463,8 +1485,6 @@ namespace Ibasa.Pikala
         private void SerializeObject(PicklerSerializationState state, object obj, SerializeInformation info, Tuple<ValueTuple<string, Type>[], FieldInfo[]> fields)
         {
             // Must be an object, try and dump all it's fields
-            SerializeType(state, info.RuntimeType, null, null);
-            DoSeenType(state, info.RuntimeType);
 
             var (namesAndTypes, fieldInfos) = fields;
 
@@ -1756,6 +1776,13 @@ namespace Ibasa.Pikala
 
         private void Serialize(PicklerSerializationState state, object? obj, SerializeInformation info, Type[]? genericTypeParameters = null, Type[]? genericMethodParameters = null)
         {
+            var sanatizedStaticType = SanatizeType(info.StaticType);
+            // Check that we don't have a static type for a derived reflection type
+            if (sanatizedStaticType != info.StaticType)
+            {
+                throw new Exception($"Pikala can not serialise types derived from {sanatizedStaticType}");
+            }
+
             DoSeenType(state, info.StaticType);
             if (IsNullableType(info.StaticType, out var nullableInnerType))
             {
@@ -1776,7 +1803,26 @@ namespace Ibasa.Pikala
                 state.Writer.Write((byte)PickleOperation.Null);
                 return;
             }
-            else if (ShouldMemo(obj, info.StaticType) && state.DoMemo(obj))
+
+            // If this is a null it doesn't have a runtime type, and if it's memo'd then well we don't care because we just memo'd it. But else we'll be picking how 
+            // to deserialise it based on its type. However often the static type will be sufficent to also tell us the runtime type.
+            if (!info.StaticType.IsValueType)
+            {
+                // If the static type is a reflection type then we don't need to write out the runtime type
+                if (!reflectionTypes.Contains(sanatizedStaticType))
+                {
+                    var sanatizedType = SanatizeType(info.RuntimeType);
+
+                    SerializeType(state, sanatizedType, genericTypeParameters, genericMethodParameters);
+                    DoSeenType(state, sanatizedType);
+                }
+            }
+            else
+            {
+                System.Diagnostics.Debug.Assert(info.StaticType == info.RuntimeType, "Static type was a ValueType but didn't match runtime type");
+            }
+
+            if (ShouldMemo(obj, info.StaticType) && state.DoMemo(obj))
             {
                 return;
             }
@@ -1805,15 +1851,6 @@ namespace Ibasa.Pikala
                     {
                         case PickleOperation.Enum:
                             System.Diagnostics.Debug.Assert(info.RuntimeType.IsEnum, "Trying to enum serialise a type that is not an enum");
-
-                            // StaticType will be object/ValueType or Nullable or the enum type (Anything else is a bug)
-                            // If this is the enum type (or nullable<enumType>) we can skip writing out the type token
-                            // iff the enum type is statically final
-                            if (!info.StaticType.IsValueType)
-                            {
-                                SerializeType(state, info.RuntimeType, genericTypeParameters, genericMethodParameters);
-                                DoSeenType(state, info.RuntimeType);
-                            }
                             // typeCode for an enum will be something like Int32
                             WriteEnumerationValue(state.Writer, operationEntry.TypeCode, obj);
                             return;

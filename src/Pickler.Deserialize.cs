@@ -993,11 +993,6 @@ namespace Ibasa.Pikala
 
         private object DeserializeObject(PicklerDeserializationState state, long position, bool shouldMemo, Type objectType, SerialisedObjectTypeInfo typeInfo, DeserializationTypeContext typeContext)
         {
-            if (typeInfo.Error != null)
-            {
-                throw new Exception(typeInfo.Error);
-            }
-
             var uninitalizedObject = state.SetMemo(position, shouldMemo, System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objectType));
 
             System.Diagnostics.Debug.Assert(typeInfo.SerialisedFields != null, "Error was null, but so was Fields");
@@ -1101,22 +1096,14 @@ namespace Ibasa.Pikala
             });
         }
 
-        private object DeserializeDelegate(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
+        private object DeserializeDelegate(PicklerDeserializationState state, long position, Type delegateType, DeserializationTypeContext typeContext)
         {
-            var objType = AssertNonNull(DeserializeType(state, typeContext)).Type;
-            var objInfo = GetOrReadSerialisedObjectTypeInfo(state, objType);
-            if (objInfo.Error != null)
-            {
-                // This was a delegate when it was serialised out, but no longer
-                throw new Exception(objInfo.Error);
-            }
-
             var invocationList = new Delegate[state.Reader.Read7BitEncodedInt()];
             for (int i = 0; i < invocationList.Length; ++i)
             {
                 var target = Deserialize(state, typeof(object), typeContext);
                 var method = AssertNonNull(DeserializeMethodInfo(state, typeContext));
-                invocationList[i] = Delegate.CreateDelegate(objType, target, method.MethodInfo);
+                invocationList[i] = Delegate.CreateDelegate(delegateType, target, method.MethodInfo);
             }
             return state.SetMemo(position, true, Delegate.Combine(invocationList)!);
         }
@@ -1683,17 +1670,21 @@ namespace Ibasa.Pikala
                 case PickleOperation.ArrayType:
                     {
                         var rank = state.Reader.ReadByte();
-                        var elementType = AssertNonNull(DeserializeType(state, typeContext));
-                        Type arrayType;
-                        if (rank == 0)
+                        var memo = state.RegisterMemoCallback(position, (PickledTypeInfo elementType) =>
                         {
-                            arrayType = elementType.Type.MakeArrayType();
-                        }
-                        else
-                        {
-                            arrayType = elementType.Type.MakeArrayType(rank);
-                        }
-                        return state.SetMemo(position, true, new PickledTypeInfoRef(arrayType));
+                            Type arrayType;
+                            if (rank == 0)
+                            {
+                                arrayType = elementType.Type.MakeArrayType();
+                            }
+                            else
+                            {
+                                arrayType = elementType.Type.MakeArrayType(rank);
+                            }
+                            return state.SetMemo(position, true, new PickledTypeInfoRef(arrayType));
+                        });
+                        var _ = DeserializeType(state, typeContext);
+                        return memo.Invoke();
                     }
 
                 case PickleOperation.GenericInstantiation:
@@ -1818,6 +1809,15 @@ namespace Ibasa.Pikala
 
         private PickledMethodBase? DeserializeMethodBase(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
+            var pickledRuntimeType = DeserializeType(state, typeContext);
+            // if this runtimeType is NULL the value must of been null just return null
+            if (pickledRuntimeType == null) return null;
+
+            var runtimeType = pickledRuntimeType.Type;
+            var runtimeTypeInfo = GetOrReadSerialisedObjectTypeInfo(state, runtimeType);
+
+            System.Diagnostics.Debug.Assert(runtimeType.IsAssignableTo(typeof(MethodBase)), "Expected a MethodBase type");
+
             var (position, operation) = DoDeserialize(state);
 
             switch (operation)
@@ -1840,6 +1840,15 @@ namespace Ibasa.Pikala
 
         private PickledMemberInfo? DeserializeMemberInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
+            var pickledRuntimeType = DeserializeType(state, typeContext);
+            // if this runtimeType is NULL the value must of been null just return null
+            if (pickledRuntimeType == null) return null;
+
+            var runtimeType = pickledRuntimeType.Type;
+            var runtimeTypeInfo = GetOrReadSerialisedObjectTypeInfo(state, runtimeType);
+
+            System.Diagnostics.Debug.Assert(runtimeType.IsAssignableTo(typeof(MemberInfo)), "Expected a MemberInfo type");
+
             var (position, operation) = DoDeserialize(state);
 
             switch (operation)
@@ -2016,6 +2025,8 @@ namespace Ibasa.Pikala
 
         private object? Deserialize(PicklerDeserializationState state, Type staticType, DeserializationTypeContext typeContext)
         {
+            System.Diagnostics.Debug.Assert(SanatizeType(staticType) == staticType, "Static type didn't match sanatized static type");
+
             var staticInfo = GetOrReadSerialisedObjectTypeInfo(state, staticType);
             if (IsNullableType(staticType, out var nullableInnerType))
             {
@@ -2029,6 +2040,23 @@ namespace Ibasa.Pikala
             }
 
             var shouldMemo = !staticInfo.Flags.HasFlag(PickledTypeFlags.IsValueType);
+
+            var runtimeType = staticType;
+            var runtimeInfo = staticInfo;
+            if (!staticInfo.Flags.HasFlag(PickledTypeFlags.IsValueType) && !reflectionTypes.Contains(staticType))
+            {
+                var pickledRuntimeType = DeserializeType(state, typeContext);
+                // if this runtimeType is NULL the value must of been null just return null
+                if (pickledRuntimeType == null) return null;
+
+                runtimeType = pickledRuntimeType.Type;
+                runtimeInfo = GetOrReadSerialisedObjectTypeInfo(state, runtimeType);
+            }
+
+            if (runtimeInfo.Error != null)
+            {
+                throw new Exception(runtimeInfo.Error);
+            }
 
             var position = state.Reader.BaseStream.Position;
 
@@ -2160,27 +2188,10 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.Enum:
                     {
-                        // StaticType will be object/ValueType or Nullable or the enum type (Anything else is a bug)
-                        // If this is the enum type (or nullable<enumType>) we can skip writing out the type token
-                        // iff the enum type is statically final
-                        var enumType = staticType;
-                        var enumInfo = staticInfo;
-                        if (!staticInfo.Flags.HasFlag(PickledTypeFlags.IsValueType))
-                        {
-                            enumType = AssertNonNull(DeserializeType(state, typeContext)).Type;
-                            enumInfo = GetOrReadSerialisedObjectTypeInfo(state, enumType);
-                        }
+                        System.Diagnostics.Debug.Assert(runtimeType.IsEnum, "Expected type to be an enumeration type");
+                        System.Diagnostics.Debug.Assert(runtimeInfo.TypeCode != null, "Expected enumeration type to have a TypeCode");
 
-                        if (enumInfo.Error != null)
-                        {
-                            // This was an enum when it was serialised out, but no longer
-                            throw new Exception(enumInfo.Error);
-                        }
-
-                        System.Diagnostics.Debug.Assert(enumType.IsEnum, "Expected type to be an enumeration type");
-                        System.Diagnostics.Debug.Assert(enumInfo.TypeCode != null, "Expected enumeration type to have a TypeCode");
-
-                        var result = Enum.ToObject(enumType, ReadEnumerationValue(state.Reader, enumInfo.TypeCode.Value));
+                        var result = Enum.ToObject(runtimeType, ReadEnumerationValue(state.Reader, runtimeInfo.TypeCode.Value));
                         state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
@@ -2277,7 +2288,7 @@ namespace Ibasa.Pikala
                     return DeserializeConstructorRef(state, position, typeContext).ConstructorInfo;
 
                 case PickleOperation.Delegate:
-                    return DeserializeDelegate(state, position, typeContext);
+                    return DeserializeDelegate(state, position, runtimeType, typeContext);
 
                 case PickleOperation.Tuple:
                 case PickleOperation.ValueTuple:
@@ -2290,29 +2301,12 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.ISerializable:
                     {
-                        var pickledObjType = AssertNonNull(DeserializeType(state, typeContext));
-                        var info = GetOrReadSerialisedObjectTypeInfo(state, pickledObjType.Type);
-
-                        if (info.Error != null)
-                        {
-                            throw new Exception(info.Error);
-                        }
-
-                        var objType = pickledObjType.Type;
-                        return state.SetMemo(position, shouldMemo, DeserializeISerializable(state, objType, typeContext));
+                        return state.SetMemo(position, shouldMemo, DeserializeISerializable(state, runtimeType, typeContext));
                     }
 
                 case PickleOperation.Object:
                     {
-                        var objectType = AssertNonNull(DeserializeType(state, typeContext)).Type;
-                        var info = GetOrReadSerialisedObjectTypeInfo(state, objectType);
-
-                        if (info.Error != null)
-                        {
-                            throw new Exception(info.Error);
-                        }
-
-                        return DeserializeObject(state, position, shouldMemo, objectType, info, typeContext);
+                        return DeserializeObject(state, position, shouldMemo, runtimeType, runtimeInfo, typeContext);
                     }
 
                 default:

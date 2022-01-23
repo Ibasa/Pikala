@@ -76,6 +76,7 @@ namespace Ibasa.Pikala
         // Basic Types
         MscorlibModule,
         TypeVoid,
+        TypeObject,
         TypeBoolean,
         TypeByte,
         TypeSByte,
@@ -263,6 +264,7 @@ namespace Ibasa.Pikala
 
             wellKnownTypes = new Dictionary<Type, PickleOperation>()
             {
+                { typeof(object), PickleOperation.TypeObject },
                 { typeof(void), PickleOperation.TypeVoid },
                 { typeof(bool), PickleOperation.TypeBoolean },
                 { typeof(char), PickleOperation.TypeChar },
@@ -420,12 +422,14 @@ namespace Ibasa.Pikala
 
         private static bool IsTupleType(Type type)
         {
+            // Need to check for ElementType so arrays and pointers don't get caught by this
             return !type.HasElementType && type.Assembly == mscorlib && type.Namespace == "System" && (
                 type.Name.StartsWith("ValueTuple", StringComparison.Ordinal) || type.Name.StartsWith("Tuple", StringComparison.Ordinal));
         }
 
         private static bool IsNullableType(Type type, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Type? elementType)
         {
+            // Need to check for ElementType so arrays and pointers don't get caught by this
             var isNullable = !type.HasElementType && type.Assembly == mscorlib && type.Namespace == "System" && type.Name == "Nullable`1";
             if (isNullable)
             {
