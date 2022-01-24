@@ -2017,12 +2017,15 @@ namespace Ibasa.Pikala
         private object? Deserialize(PicklerDeserializationState state, Type staticType, DeserializationTypeContext typeContext)
         {
             var staticInfo = GetOrReadSerialisedObjectTypeInfo(state, staticType);
-            Type? nullableStaticType = null;
-            SerialisedObjectTypeInfo? nullableStaticInfo = null;
-            if (IsNullableType(staticType))
+            if (IsNullableType(staticType, out var nullableInnerType))
             {
-                nullableStaticType = staticType.GetGenericArguments()[0];
-                nullableStaticInfo = GetOrReadSerialisedObjectTypeInfo(state, nullableStaticType);
+                // Nullable<T> always works the same, if the 
+                var hasValue = state.Reader.ReadBoolean();
+                if (hasValue)
+                {
+                    return Deserialize(state, nullableInnerType, typeContext);
+                }
+                return null;
             }
 
             var shouldMemo = !staticInfo.Flags.HasFlag(PickledTypeFlags.IsValueType);
@@ -2160,8 +2163,8 @@ namespace Ibasa.Pikala
                         // StaticType will be object/ValueType or Nullable or the enum type (Anything else is a bug)
                         // If this is the enum type (or nullable<enumType>) we can skip writing out the type token
                         // iff the enum type is statically final
-                        var enumType = nullableStaticType ?? staticType;
-                        var enumInfo = nullableStaticInfo ?? staticInfo;
+                        var enumType = staticType;
+                        var enumInfo = staticInfo;
                         if (!staticInfo.Flags.HasFlag(PickledTypeFlags.IsValueType))
                         {
                             enumType = AssertNonNull(DeserializeType(state, typeContext)).Type;

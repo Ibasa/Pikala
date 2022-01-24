@@ -1757,9 +1757,18 @@ namespace Ibasa.Pikala
         private void Serialize(PicklerSerializationState state, object? obj, SerializeInformation info, Type[]? genericTypeParameters = null, Type[]? genericMethodParameters = null)
         {
             DoSeenType(state, info.StaticType);
-            if (IsNullableType(info.StaticType))
+            if (IsNullableType(info.StaticType, out var nullableInnerType))
             {
-                DoSeenType(state, info.StaticType.GetGenericArguments()[0]);
+                // Nullable<T> always writes the same way
+                if (Object.ReferenceEquals(obj, null))
+                {
+                    state.Writer.Write(false);
+                    return;
+                }
+
+                state.Writer.Write(true);
+                Serialize(state, obj, MakeInfo(obj, nullableInnerType), genericTypeParameters, genericMethodParameters);
+                return;
             }
 
             if (Object.ReferenceEquals(obj, null))

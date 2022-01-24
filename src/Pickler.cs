@@ -424,9 +424,17 @@ namespace Ibasa.Pikala
                 type.Name.StartsWith("ValueTuple", StringComparison.Ordinal) || type.Name.StartsWith("Tuple", StringComparison.Ordinal));
         }
 
-        private static bool IsNullableType(Type type)
+        private static bool IsNullableType(Type type, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Type? elementType)
         {
-            return !type.HasElementType && type.Assembly == mscorlib && type.Namespace == "System" && type.Name == "Nullable`1";
+            var isNullable = !type.HasElementType && type.Assembly == mscorlib && type.Namespace == "System" && type.Name == "Nullable`1";
+            if (isNullable)
+            {
+                var genericArguments = type.GetGenericArguments();
+                elementType = genericArguments[0];
+                return true;
+            }
+            elementType = null;
+            return false;
         }
     }
 }
