@@ -1696,6 +1696,8 @@ namespace Ibasa.Pikala
                 (type.IsEnum ? PickledTypeFlags.IsEnum : 0) |
                 (type.IsAbstract ? PickledTypeFlags.IsAbstract : 0);
 
+            info.TypeCode = Type.GetTypeCode(type);
+
             if (!type.IsAbstract)
             {
                 // Work out what sort of operation this type needs
@@ -1723,6 +1725,11 @@ namespace Ibasa.Pikala
             state.Writer.Write((byte)info.Flags);
             // Bit of a hack for now, but operation might be null because this is an abstract object (for static type)
             state.Writer.Write((byte)(info.Operation ?? PickleOperation.Null));
+            if (info.Operation == PickleOperation.Enum)
+            {
+                // If it's an enum write out the typecode, we need to ensure we read back the same type code size
+                state.Writer.Write((byte)info.TypeCode);
+            }
             if (info.SerialisedFields != null)
             {
                 var fields = info.SerialisedFields;
@@ -1750,6 +1757,10 @@ namespace Ibasa.Pikala
         private void Serialize(PicklerSerializationState state, object? obj, SerializeInformation info, Type[]? genericTypeParameters = null, Type[]? genericMethodParameters = null)
         {
             DoSeenType(state, info.StaticType);
+            if (IsNullableType(info.StaticType))
+            {
+                DoSeenType(state, info.StaticType.GetGenericArguments()[0]);
+            }
 
             if (Object.ReferenceEquals(obj, null))
             {
@@ -1789,26 +1800,7 @@ namespace Ibasa.Pikala
                             // StaticType will be object/ValueType or Nullable or the enum type (Anything else is a bug)
                             // If this is the enum type (or nullable<enumType>) we can skip writing out the type token
                             // iff the enum type is statically final
-                            bool needTypeToken;
-                            if (info.StaticType == typeof(object) || info.StaticType == typeof(ValueType))
-                            {
-                                needTypeToken = true;
-                            }
-                            else if (info.StaticType == info.RuntimeType)
-                            {
-                                needTypeToken = !IsStaticallyFinal(null, info.StaticType);
-                            }
-                            else
-                            {
-                                System.Diagnostics.Debug.Assert(info.StaticType.Name == "Nullable`1", "Expected static type for enum to be Nullable<T>", "But was {0}", info.StaticType);
-                                var genericArguments = info.StaticType.GetGenericArguments();
-                                System.Diagnostics.Debug.Assert(genericArguments.Length == 1, "Expected Nullable<T> to have one generic argument");
-                                var genericArgument = genericArguments[0];
-                                System.Diagnostics.Debug.Assert(genericArgument == info.RuntimeType, "Expected T of Nullable<T> to match enum type");
-                                needTypeToken = !IsStaticallyFinal(null, info.RuntimeType);
-                            }
-
-                            if (needTypeToken)
+                            if (!info.StaticType.IsValueType)
                             {
                                 SerializeType(state, info.RuntimeType, genericTypeParameters, genericMethodParameters);
                                 DoSeenType(state, info.RuntimeType);

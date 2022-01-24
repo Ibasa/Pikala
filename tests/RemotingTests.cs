@@ -848,5 +848,56 @@ namespace Ibasa.Pikala.Tests
 
             Assert.Equal("({ Value = 1 }, { Value = 1 })", result);
         }
+
+        [Fact]
+        public void TestChangeFromEnumTypeCodeErrorsCorrectly()
+        {
+            // Test that if we serialise an enum type, then try to read it back in a new 
+            // context where it's underlying type code has changed we get an error.
+
+            var scriptA = string.Join('\n', new[]
+            {
+                ScriptHeader_PickleByReference,
+                "type Test =",
+                "   | A = 128us",
+                "   | B = 256us",
+                "   | C = 10000us",
+                "let value = [| Test.A; Test.B; Test.C |]",
+                "let base64 = serializeBase64 value",
+                "printf \"%s\" base64",
+            });
+
+            var pickledbase64 = RunFsi(scriptA);
+
+            // Try a larger typecode
+            var scriptB = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "type Test =",
+                "   | A = 128u",
+                "   | B = 256u",
+                "   | C = 10000u",
+                "let value = deserializeBase64 \"" + pickledbase64 + "\" :?> Test array",
+                "printf \"%O\" value",
+            });
+
+            var exception = Assert.Throws<Exception>(() => RunFsi(scriptB));
+            Assert.Contains("Can not deserialise FSI_0001+Test expected it to be an enumeration of UInt16 but was UInt32", exception.Message);
+
+            // Try a smaller typecode
+            var scriptC = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "type Test =",
+                "   | A = 128uy",
+                "   | B = 0uy",
+                "   | C = 16uy",
+                "let value = deserializeBase64 \"" + pickledbase64 + "\" :?> Test array",
+                "printf \"%O\" value",
+            });
+
+            exception = Assert.Throws<Exception>(() => RunFsi(scriptC));
+            Assert.Contains("Can not deserialise FSI_0001+Test expected it to be an enumeration of UInt16 but was Byte", exception.Message);
+        }
     }
 }

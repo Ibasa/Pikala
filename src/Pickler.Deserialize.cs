@@ -1988,9 +1988,17 @@ namespace Ibasa.Pikala
                 }
                 else if (info.Operation == PickleOperation.Enum)
                 {
+                    info.TypeCode = (TypeCode)state.Reader.ReadByte();
+
                     if (!type.IsEnum)
                     {
                         info.Error = $"Can not deserialise {type} expected it to be an enumeration type";
+                    }
+
+                    var typeCode = Type.GetTypeCode(type);
+                    if (info.TypeCode != typeCode && info.Error == null)
+                    {
+                        info.Error = $"Can not deserialise {type} expected it to be an enumeration of {info.TypeCode} but was {typeCode}";
                     }
                 }
                 else if (info.Operation == PickleOperation.Delegate)
@@ -2009,12 +2017,19 @@ namespace Ibasa.Pikala
         private object? Deserialize(PicklerDeserializationState state, Type staticType, DeserializationTypeContext typeContext)
         {
             var staticInfo = GetOrReadSerialisedObjectTypeInfo(state, staticType);
+            Type? nullableStaticType = null;
+            SerialisedObjectTypeInfo? nullableStaticInfo = null;
+            if (IsNullableType(staticType))
+            {
+                nullableStaticType = staticType.GetGenericArguments()[0];
+                nullableStaticInfo = GetOrReadSerialisedObjectTypeInfo(state, nullableStaticType);
+            }
 
             var shouldMemo = !staticInfo.Flags.HasFlag(PickledTypeFlags.IsValueType);
 
             var position = state.Reader.BaseStream.Position;
 
-            var maybeOperation = InferOperationFromStaticType(state.IsConstructedAssembly, staticType);
+            var maybeOperation = InferOperationFromStaticType(staticInfo, staticType);
             PickleOperation operation;
             if (maybeOperation.HasValue)
             {
@@ -2145,39 +2160,24 @@ namespace Ibasa.Pikala
                         // StaticType will be object/ValueType or Nullable or the enum type (Anything else is a bug)
                         // If this is the enum type (or nullable<enumType>) we can skip writing out the type token
                         // iff the enum type is statically final
-                        bool needTypeToken;
-                        if (staticType == typeof(object) || staticType == typeof(ValueType))
-                        {
-                            needTypeToken = true;
-                        }
-                        else if (staticType.Name == "Nullable`1")
-                        {
-                            var genericArguments = staticType.GetGenericArguments();
-                            System.Diagnostics.Debug.Assert(genericArguments.Length == 1, "Expected Nullable<T> to have one generic argument");
-                            var genericArgument = genericArguments[0];
-                            needTypeToken = !IsStaticallyFinal(null, genericArgument);
-                        }
-                        else
-                        {
-                            needTypeToken = !IsStaticallyFinal(null, staticType);
-                        }
-
-                        var enumType = staticType;
-                        if (needTypeToken)
+                        var enumType = nullableStaticType ?? staticType;
+                        var enumInfo = nullableStaticInfo ?? staticInfo;
+                        if (!staticInfo.Flags.HasFlag(PickledTypeFlags.IsValueType))
                         {
                             enumType = AssertNonNull(DeserializeType(state, typeContext)).Type;
-                            var enumInfo = GetOrReadSerialisedObjectTypeInfo(state, enumType);
-                            if (enumInfo.Error != null)
-                            {
-                                // This was an enum when it was serialised out, but no longer
-                                throw new Exception($"Can not deserialise {enumType} expected it to be an enumeration type");
-                            }
+                            enumInfo = GetOrReadSerialisedObjectTypeInfo(state, enumType);
+                        }
+
+                        if (enumInfo.Error != null)
+                        {
+                            // This was an enum when it was serialised out, but no longer
+                            throw new Exception(enumInfo.Error);
                         }
 
                         System.Diagnostics.Debug.Assert(enumType.IsEnum, "Expected type to be an enumeration type");
+                        System.Diagnostics.Debug.Assert(enumInfo.TypeCode != null, "Expected enumeration type to have a TypeCode");
 
-                        var enumTypeCode = Type.GetTypeCode(enumType);
-                        var result = Enum.ToObject(enumType, ReadEnumerationValue(state.Reader, enumTypeCode));
+                        var result = Enum.ToObject(enumType, ReadEnumerationValue(state.Reader, enumInfo.TypeCode.Value));
                         state.SetMemo(position, shouldMemo, result);
                         return result;
                     }
@@ -2289,6 +2289,12 @@ namespace Ibasa.Pikala
                     {
                         var pickledObjType = AssertNonNull(DeserializeType(state, typeContext));
                         var info = GetOrReadSerialisedObjectTypeInfo(state, pickledObjType.Type);
+
+                        if (info.Error != null)
+                        {
+                            throw new Exception(info.Error);
+                        }
+
                         var objType = pickledObjType.Type;
                         return state.SetMemo(position, shouldMemo, DeserializeISerializable(state, objType, typeContext));
                     }
@@ -2297,6 +2303,12 @@ namespace Ibasa.Pikala
                     {
                         var objectType = AssertNonNull(DeserializeType(state, typeContext)).Type;
                         var info = GetOrReadSerialisedObjectTypeInfo(state, objectType);
+
+                        if (info.Error != null)
+                        {
+                            throw new Exception(info.Error);
+                        }
+
                         return DeserializeObject(state, position, shouldMemo, objectType, info, typeContext);
                     }
 

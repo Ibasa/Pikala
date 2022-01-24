@@ -22,6 +22,7 @@ namespace Ibasa.Pikala
         // Non null if there was an error building Fields (we should use a DU really)
         public string? Error;
         public PickleOperation? Operation;
+        public TypeCode? TypeCode;
     }
 
     abstract class PickledTypeInfo : PickledMemberInfo
