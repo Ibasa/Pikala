@@ -614,5 +614,17 @@ namespace Ibasa.Pikala.Tests
             // This should fail
             Assert.Throws<ArrayTypeMismatchException>(() => array[1] = 4);
         }
+
+        [Fact]
+        public void TestStaticReflectionValues()
+        {
+            // This test checks that if we have static types for reflection objects we can still handle null or values correctly
+
+            var pickler = new Pickler();
+
+            RoundTrip.Assert(pickler, Tuple.Create<Type, System.Reflection.Assembly, System.Reflection.Module, System.Reflection.FieldInfo>(null, null, null, null));
+
+            RoundTrip.Assert(pickler, Tuple.Create(typeof(Stream), typeof(Stream).Module, typeof(Stream).Assembly, typeof(Stream).GetMethods()[0]));
+        }
     }
 }
