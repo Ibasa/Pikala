@@ -596,5 +596,23 @@ namespace Ibasa.Pikala.Tests
             Assert.Same(w.Item1, w.Item2);
             Assert.NotSame(w.Item2, w.Item3);
         }
+
+        [Fact]
+        public void TestArrayVariance()
+        {
+            var pickler = new Pickler();
+
+            var stringArray = new string[2] { "A", "B" };
+            var objArray = (object[])stringArray;
+            // Wrap in a tuple so the array type is staticly known
+            var tuple = Tuple.Create(objArray);
+            var result = RoundTrip.Do(pickler, tuple);
+
+            var array = tuple.Item1;
+            // Should be able to write this
+            array[0] = "C";
+            // This should fail
+            Assert.Throws<ArrayTypeMismatchException>(() => array[1] = 4);
+        }
     }
 }
