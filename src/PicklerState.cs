@@ -318,16 +318,19 @@ namespace Ibasa.Pikala
             memo = new Dictionary<object, long>(ReferenceEqualityComparer.Default);
             Writer = new BinaryWriter(new PickleStream(stream));
         }
-
-        public bool DoMemo(object value)
+        public bool MaybeWriteMemo(object value, byte op)
         {
             if (memo.TryGetValue(value, out var offset))
             {
-                Writer.Write((byte)PickleOperation.Memo);
+                Writer.Write((byte)op);
                 Writer.Write15BitEncodedLong(offset);
                 return true;
             }
+            return false;
+        }
 
+        public void AddMemo(object value)
+        {
             // Save it in the memo for any later (or self) references
             memo.Add(value, Writer.BaseStream.Position);
 #if DEBUG
@@ -336,6 +339,17 @@ namespace Ibasa.Pikala
             var set = new HashSet<long>(memo.Values);
             System.Diagnostics.Debug.Assert(set.Count == memo.Count, "Two distinct objects tried to memoise to the same position");
 #endif
+        }
+
+        public bool DoMemo(object value, byte op)
+        {
+            if (MaybeWriteMemo(value, op))
+            {
+                return true;
+            }
+
+            AddMemo(value);
+
             return false;
         }
 

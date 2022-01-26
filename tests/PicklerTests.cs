@@ -449,7 +449,7 @@ namespace Ibasa.Pikala.Tests
 
             var exc = Assert.Throws<MemoException>(() => RoundTrip.Do(pickler, value));
 
-            Assert.Equal("Tried to reference object from position 143 in the stream, but that object is not yet created.", exc.Message);
+            Assert.Equal("Tried to reference object from position 144 in the stream, but that object is not yet created.", exc.Message);
         }
 
         [Fact]

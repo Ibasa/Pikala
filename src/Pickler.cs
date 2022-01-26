@@ -13,6 +13,13 @@ namespace Ibasa.Pikala
         public (MethodBase, object?, object?[]) Reduce(Type type, object obj);
     }
 
+    enum ObjectOperation : byte
+    {
+        Null = 0,
+        Memo = 1,
+        Object = 2,
+    }
+
     enum PickleOperation : byte
     {
         Null = 0,

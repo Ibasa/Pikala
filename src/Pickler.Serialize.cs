@@ -992,7 +992,7 @@ namespace Ibasa.Pikala
                 state.Writer.Write((byte)PickleOperation.Null);
                 return;
             }
-            else if (!skipMemo && ShouldMemo(assembly, typeof(Assembly)) && state.DoMemo(assembly))
+            else if (!skipMemo && ShouldMemo(assembly, typeof(Assembly)) && state.DoMemo(assembly, (byte)PickleOperation.Memo))
             {
                 return;
             }
@@ -1033,7 +1033,7 @@ namespace Ibasa.Pikala
                 state.Writer.Write((byte)PickleOperation.Null);
                 return;
             }
-            else if (!skipMemo && ShouldMemo(module, typeof(Module)) && state.DoMemo(module))
+            else if (!skipMemo && ShouldMemo(module, typeof(Module)) && state.DoMemo(module, (byte)PickleOperation.Memo))
             {
                 return;
             }
@@ -1077,7 +1077,7 @@ namespace Ibasa.Pikala
                 state.Writer.Write((byte)PickleOperation.Null);
                 return;
             }
-            else if (!skipMemo && ShouldMemo(type, typeof(Type)) && state.DoMemo(type))
+            else if (!skipMemo && ShouldMemo(type, typeof(Type)) && state.DoMemo(type, (byte)PickleOperation.Memo))
             {
                 return;
             }
@@ -1757,7 +1757,7 @@ namespace Ibasa.Pikala
                 foreach (var (fieldType, fieldInfo) in fields)
                 {
                     state.Writer.Write(fieldInfo.Name);
-                    Serialize(state, fieldType, MakeInfo(fieldType, typeof(Type)));
+                    SerializeType(state, fieldType, null, null);
                 }
             }
         }
@@ -1798,16 +1798,23 @@ namespace Ibasa.Pikala
                 return;
             }
 
-            if (Object.ReferenceEquals(obj, null))
-            {
-                state.Writer.Write((byte)PickleOperation.Null);
-                return;
-            }
-
             // If this is a null it doesn't have a runtime type, and if it's memo'd then well we don't care because we just memo'd it. But else we'll be picking how 
             // to deserialise it based on its type. However often the static type will be sufficent to also tell us the runtime type.
             if (!info.StaticType.IsValueType)
             {
+                if (Object.ReferenceEquals(obj, null))
+                {
+                    state.Writer.Write((byte)ObjectOperation.Null);
+                    return;
+                }
+
+                if (state.MaybeWriteMemo(obj, (byte)ObjectOperation.Memo))
+                {
+                    return;
+                }
+
+                state.Writer.Write((byte)ObjectOperation.Object);
+
                 // If the static type is a reflection type then we don't need to write out the runtime type
                 if (!reflectionTypes.Contains(sanatizedStaticType))
                 {
@@ -1816,16 +1823,18 @@ namespace Ibasa.Pikala
                     SerializeType(state, sanatizedType, genericTypeParameters, genericMethodParameters);
                     DoSeenType(state, sanatizedType);
                 }
+
+                if (ShouldMemo(obj, info.StaticType))
+                {
+                    state.AddMemo(obj);
+                }
             }
             else
             {
                 System.Diagnostics.Debug.Assert(info.StaticType == info.RuntimeType, "Static type was a ValueType but didn't match runtime type");
             }
 
-            if (ShouldMemo(obj, info.StaticType) && state.DoMemo(obj))
-            {
-                return;
-            }
+            System.Diagnostics.Debug.Assert(obj != null, "Object was unexpectedly null");
 
             var operationEntry = GetOperation(info.RuntimeType);
             switch (operationEntry.Group)
