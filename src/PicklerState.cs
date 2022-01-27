@@ -322,7 +322,7 @@ namespace Ibasa.Pikala
         {
             if (memo.TryGetValue(value, out var offset))
             {
-                Writer.Write((byte)op);
+                Writer.Write(op);
                 Writer.Write15BitEncodedLong(offset);
                 return true;
             }
