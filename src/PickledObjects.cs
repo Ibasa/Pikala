@@ -12,6 +12,7 @@ namespace Ibasa.Pikala
         IsSealed = 2,
         IsValueType = 4,
         IsEnum = 8,
+        IsDelegate = 16,
     }
 
     sealed class SerialisedObjectTypeInfo

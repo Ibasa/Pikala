@@ -1714,7 +1714,8 @@ namespace Ibasa.Pikala
                 (type.IsValueType ? PickledTypeFlags.IsValueType : 0) |
                 (type.IsSealed ? PickledTypeFlags.IsSealed : 0) |
                 (type.IsEnum ? PickledTypeFlags.IsEnum : 0) |
-                (type.IsAbstract ? PickledTypeFlags.IsAbstract : 0);
+                (type.IsAbstract ? PickledTypeFlags.IsAbstract : 0) |
+                (type.IsAssignableTo(typeof(MulticastDelegate)) ? PickledTypeFlags.IsDelegate : 0);
 
             info.TypeCode = Type.GetTypeCode(type);
 
