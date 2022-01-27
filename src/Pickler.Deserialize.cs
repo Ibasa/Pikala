@@ -1652,16 +1652,7 @@ namespace Ibasa.Pikala
                         var rank = state.Reader.ReadByte();
                         var memo = state.RegisterMemoCallback(position, (PickledTypeInfo elementType) =>
                         {
-                            Type arrayType;
-                            if (rank == 0)
-                            {
-                                arrayType = elementType.Type.MakeArrayType();
-                            }
-                            else
-                            {
-                                arrayType = elementType.Type.MakeArrayType(rank);
-                            }
-                            return state.SetMemo(position, true, new PickledTypeInfoRef(arrayType));
+                            return state.SetMemo(position, true, new PickledArrayType(elementType, rank));
                         });
                         var _ = DeserializeType(state, typeContext);
                         return memo.Invoke();
@@ -1925,16 +1916,7 @@ namespace Ibasa.Pikala
                     {
                         var rank = state.Reader.ReadByte();
                         var elementType = DeserializeType(state, typeContext);
-                        Type arrayType;
-                        if (rank == 0)
-                        {
-                            arrayType = elementType.Type.MakeArrayType();
-                        }
-                        else
-                        {
-                            arrayType = elementType.Type.MakeArrayType(rank);
-                        }
-                        return state.SetMemo(position, true, new PickledTypeInfoRef(arrayType));
+                        return state.SetMemo(position, true, new PickledArrayType(elementType, rank));
                     }
 
                 case PickleOperation.GenericInstantiation:
@@ -2293,16 +2275,7 @@ namespace Ibasa.Pikala
                     {
                         var rank = state.Reader.ReadByte();
                         var elementType = DeserializeType(state, typeContext);
-                        Type arrayType;
-                        if (rank == 0)
-                        {
-                            arrayType = elementType.Type.MakeArrayType();
-                        }
-                        else
-                        {
-                            arrayType = elementType.Type.MakeArrayType(rank);
-                        }
-                        return state.SetMemo(position, true, new PickledTypeInfoRef(arrayType)).Type;
+                        return state.SetMemo(position, true, new PickledArrayType(elementType, rank)).Type;
                     }
 
                 case PickleOperation.GenericInstantiation:

@@ -101,6 +101,7 @@ namespace Ibasa.Pikala
     {
         public PickledTypeInfoRef(Type type)
         {
+            System.Diagnostics.Debug.Assert(!type.IsArray, "Tried to create a TypeRef for an array type, this should of been an ArrayType");
             System.Diagnostics.Debug.Assert(!type.IsConstructedGenericType, "Tried to create a TypeRef for a constructed generic type, this should of been a GenericType");
             System.Diagnostics.Debug.Assert(!type.IsGenericParameter, "Tried to create a TypeRef for a generic parameter, this should of been a PickledGenericParameterRef");
 
@@ -192,6 +193,114 @@ namespace Ibasa.Pikala
         public override PickledTypeInfo Reify(PickledTypeInfo[] genericArguments)
         {
             return this;
+        }
+    }
+
+    sealed class PickledArrayType : PickledTypeInfo
+    {
+        public PickledArrayType(PickledTypeInfo type, int rank)
+        {
+            Rank = rank;
+            ElementType = type;
+        }
+
+        private readonly int Rank;
+        private readonly PickledTypeInfo ElementType;
+
+        public override (Type, bool) Resolve()
+        {
+            var (elementType, isComplete) = ElementType.Resolve();
+            Type arrayType;
+            if (Rank == 0)
+            {
+                arrayType = elementType.MakeArrayType();
+            }
+            else
+            {
+                arrayType = elementType.MakeArrayType(Rank);
+            }
+            return (arrayType, isComplete);
+        }
+
+        public override PickledConstructorInfo GetConstructor(Signature signature)
+        {
+            var constructors = Type.GetConstructors(BindingsAll);
+            foreach (var constructor in constructors)
+            {
+                if (Signature.GetSignature(constructor).Equals(signature))
+                {
+                    return new PickledConstructorInfoRef(constructor);
+                }
+            }
+
+            throw new Exception($"Could not load constructor '{signature}' from type '{Type.Name}'");
+        }
+
+        public override PickledMethodInfo GetMethod(Signature signature)
+        {
+            var methods = Type.GetMethods(BindingsAll);
+            foreach (var method in methods)
+            {
+                if (Signature.GetSignature(method).Equals(signature))
+                {
+                    return new PickledMethodInfoRef(method);
+                }
+            }
+
+            throw new Exception($"Could not load method '{signature}' from type '{Type.Name}'");
+        }
+
+        public override IEnumerable<PickledFieldInfo> GetFields()
+        {
+            foreach (var field in Type.GetFields(BindingsAll))
+            {
+                yield return new PickledFieldInfoRef(field);
+            }
+        }
+
+        public override PickledFieldInfo GetField(string name)
+        {
+            var result = Type.GetField(name, BindingsAll);
+            if (result == null)
+            {
+                throw new Exception($"Could not load field '{name}' from type '{Type.Name}'");
+            }
+            return new PickledFieldInfoRef(result);
+        }
+
+        public override PickledEventInfo GetEvent(string name)
+        {
+            var result = Type.GetEvent(name, BindingsAll);
+            if (result == null)
+            {
+                throw new Exception($"Could not load event '{name}' from type '{Type.Name}'");
+            }
+            return new PickledEventInfoRef(result);
+        }
+
+        public override PickledPropertyInfo GetProperty(Signature signature)
+        {
+            var properties = Type.GetProperties(BindingsAll);
+            foreach (var property in properties)
+            {
+                if (Signature.GetSignature(property).Equals(signature))
+                {
+                    return new PickledPropertyInfoRef(property);
+                }
+            }
+
+            throw new Exception($"Could not load property '{signature}' from type '{Type.Name}'");
+        }
+
+        public override PickledTypeInfo GetGenericArgument(int position)
+        {
+            return new PickledGenericParameterRef(Type.GetGenericArguments()[position]);
+        }
+
+        public override PickledTypeInfo Reify(PickledTypeInfo[] genericArguments)
+        {
+            var elementType = ElementType.Reify(genericArguments);
+            return new PickledArrayType(elementType, Rank);
         }
     }
 
