@@ -22,8 +22,6 @@ namespace Ibasa.Pikala
 
     enum PickleOperation : byte
     {
-        Null = 0,
-
         // Primitives
         Boolean = 1,
         Byte = 2,
@@ -119,7 +117,8 @@ namespace Ibasa.Pikala
         Delegate = 1,
         Struct = 2,
         Class = 3,
-        Nested = 4,
+        Interface = 4,
+        Nested = 8,
     }
 
     /// <summary>

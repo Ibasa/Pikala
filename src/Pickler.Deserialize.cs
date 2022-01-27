@@ -84,7 +84,7 @@ namespace Ibasa.Pikala
             {
                 case SignatureElementOperation.Type:
                     {
-                        var type = AssertNonNull(DeserializeType(state, default));
+                        var type = DeserializeType(state, default);
                         return new SignatureType(type.Type);
                     }
 
@@ -94,7 +94,7 @@ namespace Ibasa.Pikala
 
                 case SignatureElementOperation.Generic:
                     {
-                        var genericTypeDefinition = AssertNonNull(DeserializeType(state, default));
+                        var genericTypeDefinition = DeserializeType(state, default);
                         var genericArguments = new SignatureElement[state.Reader.Read7BitEncodedInt()];
                         for (int i = 0; i < genericArguments.Length; ++i)
                         {
@@ -147,7 +147,7 @@ namespace Ibasa.Pikala
                 parameterTypes = new Type[parameterCount];
                 for (int j = 0; j < parameterTypes.Length; ++j)
                 {
-                    var parameterType = AssertNonNull(DeserializeType(state, typeContext));
+                    var parameterType = DeserializeType(state, typeContext);
                     parameterTypes[j] = parameterType.Type;
                 }
             }
@@ -173,7 +173,7 @@ namespace Ibasa.Pikala
             for (int j = 0; j < locals.Length; ++j)
             {
                 // We can't actually DECLARE locals here, so store them on the ConstructingMethod till construction time
-                locals[j] = AssertNonNull(DeserializeType(state, typeContext));
+                locals[j] = DeserializeType(state, typeContext);
             }
 
             constructingConstructor = new PickledConstructorInfoDef(constructingType, constructorBuilder, parameters, parameterTypes, locals);
@@ -182,7 +182,7 @@ namespace Ibasa.Pikala
             for (int j = 0; j < usedTypes; ++j)
             {
                 // We can just discared the type here, we just need it in the stream before the method body is done
-                AssertNonNull(DeserializeType(state, typeContext));
+                DeserializeType(state, typeContext);
             }
         }
 
@@ -209,14 +209,14 @@ namespace Ibasa.Pikala
 
             var typeContext = new DeserializationTypeContext(genericTypeParameters, constructingMethod.GenericParameters, null);
 
-            var returnType = AssertNonNull(DeserializeType(state, typeContext));
+            var returnType = DeserializeType(state, typeContext);
             var parameterCount = state.Reader.Read7BitEncodedInt();
             if (parameterCount != 0)
             {
                 constructingMethod.ParameterTypes = new Type[parameterCount];
                 for (int j = 0; j < constructingMethod.ParameterTypes.Length; ++j)
                 {
-                    var parameterType = AssertNonNull(DeserializeType(state, typeContext));
+                    var parameterType = DeserializeType(state, typeContext);
                     constructingMethod.ParameterTypes[j] = parameterType.Type;
                 }
 
@@ -249,7 +249,7 @@ namespace Ibasa.Pikala
                 for (int j = 0; j < constructingMethod.Locals.Length; ++j)
                 {
                     // We can't actually DECLARE locals here, so store them on the ConstructingMethod till construction time
-                    constructingMethod.Locals[j] = AssertNonNull(DeserializeType(state, typeContext));
+                    constructingMethod.Locals[j] = DeserializeType(state, typeContext);
                 }
 
                 var usedTypes = state.Reader.Read7BitEncodedInt();
@@ -329,28 +329,28 @@ namespace Ibasa.Pikala
 
                     case OperandType.InlineTok:
                         {
-                            var memberInfo = AssertNonNull(DeserializeMemberInfo(state, typeContext));
+                            var memberInfo = DeserializeMemberInfo(state, typeContext);
                             memberInfo.Emit(ilGenerator, opCode);
                             break;
                         }
 
                     case OperandType.InlineType:
                         {
-                            var typeInfo = AssertNonNull(DeserializeType(state, typeContext));
+                            var typeInfo = DeserializeType(state, typeContext);
                             ilGenerator.Emit(opCode, typeInfo.Type);
                             break;
                         }
 
                     case OperandType.InlineField:
                         {
-                            var fieldInfo = AssertNonNull(DeserializeFieldInfo(state, typeContext));
+                            var fieldInfo = DeserializeFieldInfo(state, typeContext);
                             ilGenerator.Emit(opCode, fieldInfo.FieldInfo);
                             break;
                         }
 
                     case OperandType.InlineMethod:
                         {
-                            var methodBase = AssertNonNull(DeserializeMethodBase(state, typeContext));
+                            var methodBase = DeserializeMethodBase(state, typeContext);
                             methodBase.Emit(ilGenerator, opCode);
                             break;
                         }
@@ -426,24 +426,22 @@ namespace Ibasa.Pikala
         private void DeserializeTypeDefComplex(PicklerDeserializationState state, PickledTypeInfoDef constructingType)
         {
             var isValueType = constructingType.TypeDef == TypeDef.Struct;
+            var isInterface = constructingType.TypeDef == TypeDef.Interface;
             var typeBuilder = constructingType.TypeBuilder;
 
             var typeContext = new DeserializationTypeContext(constructingType.GenericParameters, null, null);
 
-            if (!isValueType)
+            if (!isValueType && !isInterface)
             {
                 var baseType = DeserializeType(state, typeContext);
-                if (baseType != null)
-                {
-                    typeBuilder.SetParent(baseType.Type);
-                }
+                typeBuilder.SetParent(baseType.Type);
             }
 
             var interfaceCount = state.Reader.Read7BitEncodedInt();
             var interfaceMap = new List<(PickledMethodInfo, Signature)>();
             for (int i = 0; i < interfaceCount; ++i)
             {
-                var interfaceType = AssertNonNull(DeserializeType(state, typeContext));
+                var interfaceType = DeserializeType(state, typeContext);
                 typeBuilder.AddInterfaceImplementation(interfaceType.Type);
 
                 var mapCount = state.Reader.Read7BitEncodedInt();
@@ -463,7 +461,7 @@ namespace Ibasa.Pikala
             {
                 var fieldName = state.Reader.ReadString();
                 var fieldAttributes = (FieldAttributes)state.Reader.ReadInt32();
-                var fieldType = AssertNonNull(DeserializeType(state, typeContext));
+                var fieldType = DeserializeType(state, typeContext);
                 var fieldBuilder = typeBuilder.DefineField(fieldName, fieldType.Type, fieldAttributes);
                 constructingType.Fields[i] = new PickledFieldInfoDef(constructingType, fieldBuilder);
 
@@ -521,12 +519,12 @@ namespace Ibasa.Pikala
             {
                 var propertyName = state.Reader.ReadString();
                 var propertyAttributes = (PropertyAttributes)state.Reader.ReadInt32();
-                var propertyType = AssertNonNull(DeserializeType(state, typeContext));
+                var propertyType = DeserializeType(state, typeContext);
                 var propertyParametersCount = state.Reader.Read7BitEncodedInt();
                 var propertyParameters = new Type[propertyParametersCount];
                 for (int j = 0; j < propertyParametersCount; ++j)
                 {
-                    propertyParameters[j] = AssertNonNull(DeserializeType(state, typeContext)).Type;
+                    propertyParameters[j] = DeserializeType(state, typeContext).Type;
                 }
 
                 var propertyBuilder = typeBuilder.DefineProperty(propertyName, propertyAttributes, propertyType.Type, propertyParameters);
@@ -557,7 +555,7 @@ namespace Ibasa.Pikala
             {
                 var eventName = state.Reader.ReadString();
                 var eventAttributes = (EventAttributes)state.Reader.ReadInt32();
-                var eventType = AssertNonNull(DeserializeType(state, typeContext));
+                var eventType = DeserializeType(state, typeContext);
 
 
                 var eventBuilder = typeBuilder.DefineEvent(eventName, eventAttributes, eventType.Type);
@@ -672,6 +670,9 @@ namespace Ibasa.Pikala
                 case TypeDef.Class:
                     return new PickledTypeInfoDef(typeDef, defineType(typeName, typeAttributes, null));
 
+                case TypeDef.Interface:
+                    return new PickledTypeInfoDef(typeDef, defineType(typeName, typeAttributes, null));
+
                 default:
                     throw new Exception($"Unrecgonized TypeDef: {typeDef}");
             }
@@ -721,14 +722,14 @@ namespace Ibasa.Pikala
                 var constructingConstructor = new PickledConstructorInfoDef(constructingType, constructorBuilder, parameters, constructorParameters, null);
                 constructingType.Constructors = new PickledConstructorInfoDef[] { constructingConstructor };
 
-                var returnType = AssertNonNull(DeserializeType(state, typeContext));
+                var returnType = DeserializeType(state, typeContext);
                 var parameterCount = state.Reader.Read7BitEncodedInt();
                 var parameterNames = new string?[parameterCount];
                 var parameterTypes = new Type[parameterCount];
                 for (int i = 0; i < parameterCount; ++i)
                 {
                     parameterNames[i] = state.Reader.ReadNullableString();
-                    var parameterType = AssertNonNull(DeserializeType(state, typeContext));
+                    var parameterType = DeserializeType(state, typeContext);
                     parameterTypes[i] = parameterType.Type;
                 }
 
@@ -757,7 +758,7 @@ namespace Ibasa.Pikala
 
         private Array DeserializeArray(PicklerDeserializationState state, bool isSZArray, long position, DeserializationTypeContext typeContext)
         {
-            var pickledType = AssertNonNull(DeserializeType(state, typeContext));
+            var pickledType = DeserializeType(state, typeContext);
             var elementType = pickledType.Type;
 
             Array array;
@@ -960,7 +961,7 @@ namespace Ibasa.Pikala
 
         private object DeserializeReducer(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
-            var method = AssertNonNull(DeserializeMethodBase(state, typeContext));
+            var method = DeserializeMethodBase(state, typeContext);
 
             object? target;
             if (method is PickledConstructorInfo)
@@ -1016,7 +1017,7 @@ namespace Ibasa.Pikala
                 var type = typeContext.ContextType;
                 if (type == null)
                 {
-                    type = AssertNonNull(DeserializeType(state, typeContext));
+                    type = DeserializeType(state, typeContext);
                 }
                 var name = state.Reader.ReadString();
                 return state.SetMemo(position, true, type.GetField(name));
@@ -1030,7 +1031,7 @@ namespace Ibasa.Pikala
                 var type = typeContext.ContextType;
                 if (type == null)
                 {
-                    type = AssertNonNull(DeserializeType(state, typeContext));
+                    type = DeserializeType(state, typeContext);
                 }
                 var signature = DeserializeSignature(state);
                 return state.SetMemo(position, true, type.GetProperty(signature));
@@ -1044,7 +1045,7 @@ namespace Ibasa.Pikala
                 var type = typeContext.ContextType;
                 if (type == null)
                 {
-                    type = AssertNonNull(DeserializeType(state, typeContext));
+                    type = DeserializeType(state, typeContext);
                 }
                 var name = state.Reader.ReadString();
                 return state.SetMemo(position, true, type.GetEvent(name));
@@ -1058,7 +1059,7 @@ namespace Ibasa.Pikala
                 var type = typeContext.ContextType;
                 if (type == null)
                 {
-                    type = AssertNonNull(DeserializeType(state, typeContext));
+                    type = DeserializeType(state, typeContext);
                 }
                 var signature = DeserializeSignature(state);
                 return state.SetMemo(position, true, type.GetConstructor(signature));
@@ -1072,7 +1073,7 @@ namespace Ibasa.Pikala
                 var type = typeContext.ContextType;
                 if (type == null)
                 {
-                    type = AssertNonNull(DeserializeType(state, typeContext));
+                    type = DeserializeType(state, typeContext);
                 }
                 var signature = DeserializeSignature(state);
                 var genericArgumentCount = state.Reader.Read7BitEncodedInt();
@@ -1082,7 +1083,7 @@ namespace Ibasa.Pikala
                     genericArguments = new PickledTypeInfo[genericArgumentCount];
                     for (int i = 0; i < genericArgumentCount; ++i)
                     {
-                        genericArguments[i] = AssertNonNull(DeserializeType(state, typeContext));
+                        genericArguments[i] = DeserializeType(state, typeContext);
                     }
                 }
 
@@ -1102,7 +1103,7 @@ namespace Ibasa.Pikala
             for (int i = 0; i < invocationList.Length; ++i)
             {
                 var target = Deserialize(state, typeof(object), typeContext);
-                var method = AssertNonNull(DeserializeMethodInfo(state, typeContext));
+                var method = DeserializeMethodInfo(state, typeContext);
                 invocationList[i] = Delegate.CreateDelegate(delegateType, target, method.MethodInfo);
             }
             return state.SetMemo(position, true, Delegate.Combine(invocationList)!);
@@ -1137,11 +1138,11 @@ namespace Ibasa.Pikala
             var attributeCount = state.Reader.Read7BitEncodedInt();
             for (int i = 0; i < attributeCount; ++i)
             {
-                var attributeType = AssertNonNull(DeserializeType(state, default));
+                var attributeType = DeserializeType(state, default);
 
                 var typeContext = new DeserializationTypeContext(null, null, attributeType);
 
-                var constructor = AssertNonNull(DeserializeConstructorInfo(state, typeContext));
+                var constructor = DeserializeConstructorInfo(state, typeContext);
                 var arguments = new object?[state.Reader.Read7BitEncodedInt()];
                 for (int j = 0; j < arguments.Length; ++j)
                 {
@@ -1152,7 +1153,7 @@ namespace Ibasa.Pikala
                 var propertyValues = new object?[namedProperties.Length];
                 for (int j = 0; j < namedProperties.Length; ++j)
                 {
-                    var propertyInfo = AssertNonNull(DeserializePropertyInfo(state, typeContext));
+                    var propertyInfo = DeserializePropertyInfo(state, typeContext);
                     namedProperties[j] = propertyInfo.PropertyInfo;
                     propertyValues[j] = Deserialize(state, namedProperties[j].PropertyType, default);
                 }
@@ -1161,7 +1162,7 @@ namespace Ibasa.Pikala
                 var fieldValues = new object?[namedFields.Length];
                 for (int j = 0; j < namedFields.Length; ++j)
                 {
-                    var pickledField = AssertNonNull(DeserializeFieldInfo(state, typeContext));
+                    var pickledField = DeserializeFieldInfo(state, typeContext);
                     namedFields[j] = pickledField.FieldInfo;
                     fieldValues[j] = Deserialize(state, namedFields[j].FieldType, default);
                 }
@@ -1366,14 +1367,14 @@ namespace Ibasa.Pikala
 
         private Module DeserializeManifestModuleRef(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
         {
-            var assembly = AssertNonNull(DeserializeAssembly(state, typeContext));
+            var assembly = DeserializeAssembly(state, typeContext);
             return state.SetMemo(position, ShouldMemo(assembly, typeof(Module)), assembly.ManifestModule);
         }
 
         private Module DeserializeModuleRef(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
         {
             var name = state.Reader.ReadString();
-            var assembly = AssertNonNull(DeserializeAssembly(state, typeContext));
+            var assembly = DeserializeAssembly(state, typeContext);
             var module = assembly.GetModule(name);
             if (module == null)
             {
@@ -1455,12 +1456,12 @@ namespace Ibasa.Pikala
 
         private PickledGenericType DeserializeGenericInstantiation(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
         {
-            var genericType = AssertNonNull(DeserializeType(state, typeContext));
+            var genericType = DeserializeType(state, typeContext);
             var genericArgumentCount = state.Reader.Read7BitEncodedInt();
             var genericArguments = new PickledTypeInfo[genericArgumentCount];
             for (int i = 0; i < genericArguments.Length; ++i)
             {
-                genericArguments[i] = AssertNonNull(DeserializeType(state, typeContext));
+                genericArguments[i] = DeserializeType(state, typeContext);
             }
             return state.SetMemo(position, true, new PickledGenericType(genericType, genericArguments));
         }
@@ -1471,12 +1472,12 @@ namespace Ibasa.Pikala
             PickledTypeInfo genericParameter;
             if (isTypeParam)
             {
-                var type = AssertNonNull(DeserializeType(state, typeContext));
+                var type = DeserializeType(state, typeContext);
                 genericParameter = type.GetGenericArgument(genericParameterPosition);
             }
             else
             {
-                var method = AssertNonNull(DeserializeMethodInfo(state, typeContext));
+                var method = DeserializeMethodInfo(state, typeContext);
                 genericParameter = method.GetGenericArgument(genericParameterPosition);
             }
             return state.SetMemo(position, true, genericParameter);
@@ -1490,7 +1491,7 @@ namespace Ibasa.Pikala
             PickledTypeInfoRef result;
             if (isNested)
             {
-                var declaringType = AssertNonNull(DeserializeType(state, typeContext)).Type;
+                var declaringType = DeserializeType(state, typeContext).Type;
                 var type = declaringType.GetNestedType(typeName, BindingFlags.Public | BindingFlags.NonPublic);
                 if (type == null)
                 {
@@ -1501,7 +1502,7 @@ namespace Ibasa.Pikala
             }
             else
             {
-                var module = AssertNonNull(DeserializeModule(state, typeContext));
+                var module = DeserializeModule(state, typeContext);
                 var type = module.GetType(typeName);
                 if (type == null)
                 {
@@ -1524,7 +1525,7 @@ namespace Ibasa.Pikala
                 var typeAttributes = (TypeAttributes)state.Reader.ReadInt32();
                 var typeFlags = state.Reader.ReadByte();
                 var isNested = (typeFlags & (int)TypeDef.Nested) != 0;
-                var typeDef = (TypeDef)(typeFlags & 0x3);
+                var typeDef = (TypeDef)(typeFlags & 0x7);
                 string[]? genericParameters = null;
                 if (typeDef != TypeDef.Enum)
                 {
@@ -1581,15 +1582,6 @@ namespace Ibasa.Pikala
             });
         }
 
-        private T AssertNonNull<T>(T? result) where T : class
-        {
-            if (result == null)
-            {
-                throw new Exception($"Got unexpected null object");
-            }
-            return result;
-        }
-
         private (long, PickleOperation) DoDeserialize(PicklerDeserializationState state)
         {
             var position = state.Reader.BaseStream.Position;
@@ -1597,15 +1589,12 @@ namespace Ibasa.Pikala
             return (position, operation);
         }
 
-        private Assembly? DeserializeAssembly(PicklerDeserializationState state, DeserializationTypeContext typeContext)
+        private Assembly DeserializeAssembly(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
             var (position, operation) = DoDeserialize(state);
 
             switch (operation)
             {
-                case PickleOperation.Null:
-                    return null;
-
                 case PickleOperation.Memo:
                     return (Assembly)state.DoMemo();
 
@@ -1623,15 +1612,12 @@ namespace Ibasa.Pikala
             throw new Exception($"Unexpected operation '{operation}' for Assembly");
         }
 
-        private Module? DeserializeModule(PicklerDeserializationState state, DeserializationTypeContext typeContext)
+        private Module DeserializeModule(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
             var (position, operation) = DoDeserialize(state);
 
             switch (operation)
             {
-                case PickleOperation.Null:
-                    return null;
-
                 case PickleOperation.Memo:
                     return (Module)state.DoMemo();
 
@@ -1652,15 +1638,12 @@ namespace Ibasa.Pikala
             throw new Exception($"Unexpected operation '{operation}' for Module");
         }
 
-        private PickledTypeInfo? DeserializeType(PicklerDeserializationState state, DeserializationTypeContext typeContext)
+        private PickledTypeInfo DeserializeType(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
             var (position, operation) = DoDeserialize(state);
 
             switch (operation)
             {
-                case PickleOperation.Null:
-                    return null;
-
                 case PickleOperation.Memo:
                     return (PickledTypeInfo)state.DoMemo();
 
@@ -1728,13 +1711,13 @@ namespace Ibasa.Pikala
             throw new Exception($"Unexpected operation '{operation}' for Type");
         }
 
-        private PickledFieldInfo? DeserializeFieldInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
+        private PickledFieldInfo DeserializeFieldInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
             var objectOperation = (ObjectOperation)state.Reader.ReadByte();
             switch (objectOperation)
             {
                 case ObjectOperation.Null:
-                    return null;
+                    throw new Exception($"Unexpected null for FieldInfo");
 
                 case ObjectOperation.Memo:
                     return (PickledFieldInfo)state.DoMemo();
@@ -1750,9 +1733,6 @@ namespace Ibasa.Pikala
 
             switch (operation)
             {
-                case PickleOperation.Null:
-                    return null;
-
                 case PickleOperation.Memo:
                     return (PickledFieldInfo)state.DoMemo();
 
@@ -1763,13 +1743,13 @@ namespace Ibasa.Pikala
             throw new Exception($"Unexpected operation '{operation}' for FieldInfo");
         }
 
-        private PickledPropertyInfo? DeserializePropertyInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
+        private PickledPropertyInfo DeserializePropertyInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
             var objectOperation = (ObjectOperation)state.Reader.ReadByte();
             switch (objectOperation)
             {
                 case ObjectOperation.Null:
-                    return null;
+                    throw new Exception($"Unexpected null for PropertyInfo");
 
                 case ObjectOperation.Memo:
                     return (PickledPropertyInfo)state.DoMemo();
@@ -1785,9 +1765,6 @@ namespace Ibasa.Pikala
 
             switch (operation)
             {
-                case PickleOperation.Null:
-                    return null;
-
                 case PickleOperation.Memo:
                     return (PickledPropertyInfo)state.DoMemo();
 
@@ -1798,13 +1775,13 @@ namespace Ibasa.Pikala
             throw new Exception($"Unexpected operation '{operation}' for PropertyInfo");
         }
 
-        private PickledConstructorInfo? DeserializeConstructorInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
+        private PickledConstructorInfo DeserializeConstructorInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
             var objectOperation = (ObjectOperation)state.Reader.ReadByte();
             switch (objectOperation)
             {
                 case ObjectOperation.Null:
-                    return null;
+                    throw new Exception($"Unexpected null for ConstructorInfo");
 
                 case ObjectOperation.Memo:
                     return (PickledConstructorInfo)state.DoMemo();
@@ -1820,9 +1797,6 @@ namespace Ibasa.Pikala
 
             switch (operation)
             {
-                case PickleOperation.Null:
-                    return null;
-
                 case PickleOperation.Memo:
                     return (PickledConstructorInfo)state.DoMemo();
 
@@ -1833,13 +1807,13 @@ namespace Ibasa.Pikala
             throw new Exception($"Unexpected operation '{operation}' for ConstructorInfo");
         }
 
-        private PickledMethodInfo? DeserializeMethodInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
+        private PickledMethodInfo DeserializeMethodInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
             var objectOperation = (ObjectOperation)state.Reader.ReadByte();
             switch (objectOperation)
             {
                 case ObjectOperation.Null:
-                    return null;
+                    throw new Exception($"Unexpected null for MethodInfo");
 
                 case ObjectOperation.Memo:
                     return (PickledMethodInfo)state.DoMemo();
@@ -1862,13 +1836,13 @@ namespace Ibasa.Pikala
             throw new Exception($"Unexpected operation '{operation}' for MethodInfo");
         }
 
-        private PickledMethodBase? DeserializeMethodBase(PicklerDeserializationState state, DeserializationTypeContext typeContext)
+        private PickledMethodBase DeserializeMethodBase(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
             var objectOperation = (ObjectOperation)state.Reader.ReadByte();
             switch (objectOperation)
             {
                 case ObjectOperation.Null:
-                    return null;
+                    throw new Exception($"Unexpected null for MethodBase");
 
                 case ObjectOperation.Memo:
                     return (PickledMethodBase)state.DoMemo();
@@ -1880,11 +1854,7 @@ namespace Ibasa.Pikala
                     throw new Exception($"Unexpected operation '{objectOperation}' for MethodBase");
             }
 
-            var pickledRuntimeType = DeserializeType(state, typeContext);
-            // if this runtimeType is NULL the value must of been null just return null
-            if (pickledRuntimeType == null) return null;
-
-            var runtimeType = pickledRuntimeType.Type;
+            var runtimeType = DeserializeType(state, typeContext).Type;
             var runtimeTypeInfo = GetOrReadSerialisedObjectTypeInfo(state, runtimeType);
 
             System.Diagnostics.Debug.Assert(runtimeType.IsAssignableTo(typeof(MethodBase)), "Expected a MethodBase type");
@@ -1893,9 +1863,6 @@ namespace Ibasa.Pikala
 
             switch (operation)
             {
-                case PickleOperation.Null:
-                    return null;
-
                 case PickleOperation.Memo:
                     return (PickledMethodBase)state.DoMemo();
 
@@ -1909,13 +1876,13 @@ namespace Ibasa.Pikala
             throw new Exception($"Unexpected operation '{operation}' for MethodBase");
         }
 
-        private PickledMemberInfo? DeserializeMemberInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
+        private PickledMemberInfo DeserializeMemberInfo(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
             var objectOperation = (ObjectOperation)state.Reader.ReadByte();
             switch (objectOperation)
             {
                 case ObjectOperation.Null:
-                    return null;
+                    throw new Exception($"Unexpected null for MemberInfo");
 
                 case ObjectOperation.Memo:
                     return (PickledMemberInfo)state.DoMemo();
@@ -1927,11 +1894,7 @@ namespace Ibasa.Pikala
                     throw new Exception($"Unexpected operation '{objectOperation}' for MemberInfo");
             }
 
-            var pickledRuntimeType = DeserializeType(state, typeContext);
-            // if this runtimeType is NULL the value must of been null just return null
-            if (pickledRuntimeType == null) return null;
-
-            var runtimeType = pickledRuntimeType.Type;
+            var runtimeType = DeserializeType(state, typeContext).Type;
             var runtimeTypeInfo = GetOrReadSerialisedObjectTypeInfo(state, runtimeType);
 
             System.Diagnostics.Debug.Assert(runtimeType.IsAssignableTo(typeof(MemberInfo)), "Expected a MemberInfo type");
@@ -1940,9 +1903,6 @@ namespace Ibasa.Pikala
 
             switch (operation)
             {
-                case PickleOperation.Null:
-                    return null;
-
                 case PickleOperation.Memo:
                     return (PickledMemberInfo)state.DoMemo();
 
@@ -1964,7 +1924,7 @@ namespace Ibasa.Pikala
                 case PickleOperation.ArrayType:
                     {
                         var rank = state.Reader.ReadByte();
-                        var elementType = AssertNonNull(DeserializeType(state, typeContext));
+                        var elementType = DeserializeType(state, typeContext);
                         Type arrayType;
                         if (rank == 0)
                         {
@@ -2039,7 +1999,7 @@ namespace Ibasa.Pikala
                 info.Flags = (PickledTypeFlags)state.Reader.ReadByte();
                 info.Operation = (PickleOperation)state.Reader.ReadByte();
 
-                if (info.Operation == PickleOperation.Null)
+                if (info.Operation == 0)
                 {
                     // Hack to remove Null written by NonSerailisable type
                     info.Operation = null;
@@ -2062,7 +2022,7 @@ namespace Ibasa.Pikala
                     for (int i = 0; i < writtenLength; ++i)
                     {
                         var fieldName = state.Reader.ReadString();
-                        var fieldType = AssertNonNull(DeserializeType(state, default)).Type;
+                        var fieldType = DeserializeType(state, default).Type;
 
                         FieldInfo? toSet = null;
                         foreach (var field in currentFields)
@@ -2183,9 +2143,6 @@ namespace Ibasa.Pikala
 
             switch (operation)
             {
-                case PickleOperation.Null:
-                    return null;
-
                 case PickleOperation.Memo:
                     {
                         var obj = state.DoMemo();
@@ -2335,7 +2292,7 @@ namespace Ibasa.Pikala
                 case PickleOperation.ArrayType:
                     {
                         var rank = state.Reader.ReadByte();
-                        var elementType = AssertNonNull(DeserializeType(state, typeContext));
+                        var elementType = DeserializeType(state, typeContext);
                         Type arrayType;
                         if (rank == 0)
                         {

@@ -662,12 +662,13 @@ namespace Ibasa.Pikala
             {
                 // Value types don't ever have any base class
             }
-            else if (type.BaseType == typeof(object))
+            else if (type.IsInterface)
             {
-                state.Writer.Write((byte)PickleOperation.Null);
+                // Interface types don't have any base class
             }
             else
             {
+                System.Diagnostics.Debug.Assert(type.BaseType != null, "Got user defined type that had no base type");
                 SerializeType(state, type.BaseType, genericParameters, null);
             }
 
@@ -989,10 +990,10 @@ namespace Ibasa.Pikala
         {
             if (Object.ReferenceEquals(assembly, null))
             {
-                state.Writer.Write((byte)PickleOperation.Null);
-                return;
+                throw new ArgumentNullException(nameof(assembly));
             }
-            else if (!skipMemo && ShouldMemo(assembly, typeof(Assembly)) && state.DoMemo(assembly, (byte)PickleOperation.Memo))
+
+            if (!skipMemo && ShouldMemo(assembly, typeof(Assembly)) && state.DoMemo(assembly, (byte)PickleOperation.Memo))
             {
                 return;
             }
@@ -1030,10 +1031,10 @@ namespace Ibasa.Pikala
         {
             if (Object.ReferenceEquals(module, null))
             {
-                state.Writer.Write((byte)PickleOperation.Null);
-                return;
+                throw new ArgumentNullException(nameof(module));
             }
-            else if (!skipMemo && ShouldMemo(module, typeof(Module)) && state.DoMemo(module, (byte)PickleOperation.Memo))
+
+            if (!skipMemo && ShouldMemo(module, typeof(Module)) && state.DoMemo(module, (byte)PickleOperation.Memo))
             {
                 return;
             }
@@ -1070,14 +1071,14 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeType(PicklerSerializationState state, Type? type, Type[]? genericTypeParameters, Type[]? genericMethodParameters, bool skipMemo = false)
+        private void SerializeType(PicklerSerializationState state, Type type, Type[]? genericTypeParameters, Type[]? genericMethodParameters, bool skipMemo = false)
         {
             if (Object.ReferenceEquals(type, null))
             {
-                state.Writer.Write((byte)PickleOperation.Null);
-                return;
+                throw new ArgumentNullException(nameof(type));
             }
-            else if (!skipMemo && ShouldMemo(type, typeof(Type)) && state.DoMemo(type, (byte)PickleOperation.Memo))
+
+            if (!skipMemo && ShouldMemo(type, typeof(Type)) && state.DoMemo(type, (byte)PickleOperation.Memo))
             {
                 return;
             }
@@ -1380,7 +1381,7 @@ namespace Ibasa.Pikala
             });
         }
 
-        private void SerializeMulticastDelegate(PicklerSerializationState state, MulticastDelegate multicastDelegate, Type runtimeType)
+        private void SerializeMulticastDelegate(PicklerSerializationState state, MulticastDelegate multicastDelegate)
         {
             // Delegates are just a target and a method
             var invocationList = multicastDelegate.GetInvocationList();
@@ -1400,7 +1401,7 @@ namespace Ibasa.Pikala
                 if (genericArguments == null)
                 {
                     // This must be an empty value tuple just write out a null params and return
-                    state.Writer.Write((byte)PickleOperation.Null);
+                    state.Writer.Write((byte)ObjectOperation.Null);
                     return;
                 }
 
@@ -1735,7 +1736,7 @@ namespace Ibasa.Pikala
                 }
                 // This is Null but eh we're probably going to have to loop back to this
                 // later at somepoint this is good enough for now. The main thing is it isn't Object.
-                info.Operation = operation.Operation ?? PickleOperation.Null;
+                info.Operation = operation.Operation ?? 0;
             }
 
             return info;
@@ -1745,7 +1746,7 @@ namespace Ibasa.Pikala
         {
             state.Writer.Write((byte)info.Flags);
             // Bit of a hack for now, but operation might be null because this is an abstract object (for static type)
-            state.Writer.Write((byte)(info.Operation ?? PickleOperation.Null));
+            state.Writer.Write((byte)(info.Operation ?? 0));
             if (info.Operation == PickleOperation.Enum)
             {
                 // If it's an enum write out the typecode, we need to ensure we read back the same type code size
@@ -1935,7 +1936,7 @@ namespace Ibasa.Pikala
                             SerializeConstructorInfo(state, info, (ConstructorInfo)obj);
                             return;
                         case PickleOperation.Delegate:
-                            SerializeMulticastDelegate(state, (MulticastDelegate)obj, info.RuntimeType);
+                            SerializeMulticastDelegate(state, (MulticastDelegate)obj);
                             return;
                         case PickleOperation.Tuple:
                         case PickleOperation.ValueTuple:
