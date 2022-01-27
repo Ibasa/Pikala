@@ -145,7 +145,7 @@ namespace Ibasa.Pikala.Tests
                 {
                     pickler.Serialize(memoryStream, ptr);
                 });
-                Assert.Equal("Pointer types are not serializable: 'System.Reflection.Pointer'", exc.Message);
+                Assert.Equal("Pointer types are not serializable: 'System.Int32*'", exc.Message);
             }
         }
 

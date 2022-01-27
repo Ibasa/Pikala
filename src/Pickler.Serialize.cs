@@ -1298,12 +1298,12 @@ namespace Ibasa.Pikala
             {
                 System.Diagnostics.Debug.Assert(info.ContextType == null || info.ContextType == field.ReflectedType);
 
+                state.Writer.Write(field.Name);
+
                 if (info.ContextType == null)
                 {
                     SerializeType(state, field.ReflectedType, null, null);
                 }
-
-                state.Writer.Write(field.Name);
             });
         }
 
@@ -1313,12 +1313,12 @@ namespace Ibasa.Pikala
             {
                 System.Diagnostics.Debug.Assert(info.ContextType == null || info.ContextType == property.ReflectedType);
 
+                SerializeSignature(state, Signature.GetSignature(property));
+
                 if (info.ContextType == null)
                 {
                     SerializeType(state, property.ReflectedType, null, null);
                 }
-
-                SerializeSignature(state, Signature.GetSignature(property));
             });
         }
 
@@ -1328,12 +1328,12 @@ namespace Ibasa.Pikala
             {
                 System.Diagnostics.Debug.Assert(info.ContextType == null || info.ContextType == evt.ReflectedType);
 
+                state.Writer.Write(evt.Name);
+
                 if (info.ContextType == null)
                 {
                     SerializeType(state, evt.ReflectedType, null, null);
                 }
-
-                state.Writer.Write(evt.Name);
             });
         }
 
@@ -1342,11 +1342,6 @@ namespace Ibasa.Pikala
             state.RunWithTrailers(() =>
             {
                 System.Diagnostics.Debug.Assert(info.ContextType == null || info.ContextType == method.ReflectedType);
-
-                if (info.ContextType == null)
-                {
-                    SerializeType(state, method.ReflectedType, null, null);
-                }
 
                 if (method.IsConstructedGenericMethod)
                 {
@@ -1363,6 +1358,11 @@ namespace Ibasa.Pikala
                     SerializeSignature(state, Signature.GetSignature(method));
                     state.Writer.Write7BitEncodedInt(0);
                 }
+
+                if (info.ContextType == null)
+                {
+                    SerializeType(state, method.ReflectedType, null, null);
+                }
             });
         }
 
@@ -1372,12 +1372,12 @@ namespace Ibasa.Pikala
             {
                 System.Diagnostics.Debug.Assert(info.ContextType == null || info.ContextType == constructor.ReflectedType);
 
+                SerializeSignature(state, Signature.GetSignature(constructor));
+
                 if (info.ContextType == null)
                 {
                     SerializeType(state, constructor.ReflectedType, null, null);
                 }
-
-                SerializeSignature(state, Signature.GetSignature(constructor));
             });
         }
 
@@ -1596,63 +1596,9 @@ namespace Ibasa.Pikala
                                         return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from Type.");
                                     }
                                 }
-                                else if (runtimeType.IsAssignableTo(typeof(FieldInfo)))
-                                {
-                                    if (runtimeType.IsAssignableTo(runtimeFieldInfoType))
-                                    {
-                                        return new OperationCacheEntry(typeCode, PickleOperation.FieldRef);
-                                    }
-                                    else
-                                    {
-                                        return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from FieldInfo.");
-                                    }
-                                }
-                                else if (runtimeType.IsAssignableTo(typeof(PropertyInfo)))
-                                {
-                                    if (runtimeType.IsAssignableTo(runtimePropertyInfoType))
-                                    {
-                                        return new OperationCacheEntry(typeCode, PickleOperation.PropertyRef);
-                                    }
-                                    else
-                                    {
-                                        return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from PropertyInfo.");
-                                    }
-                                }
-                                else if (runtimeType.IsAssignableTo(typeof(EventInfo)))
-                                {
-                                    if (runtimeType.IsAssignableTo(runtimeEventInfoType))
-                                    {
-                                        return new OperationCacheEntry(typeCode, PickleOperation.EventRef);
-                                    }
-                                    else
-                                    {
-                                        return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from EventInfo.");
-                                    }
-                                }
-                                else if (runtimeType.IsAssignableTo(typeof(MethodInfo)))
-                                {
-                                    if (runtimeType.IsAssignableTo(runtimeMethodInfoType))
-                                    {
-                                        return new OperationCacheEntry(typeCode, PickleOperation.MethodRef);
-                                    }
-                                    else
-                                    {
-                                        return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from MethodInfo.");
-                                    }
-                                }
-                                else if (runtimeType.IsAssignableTo(typeof(ConstructorInfo)))
-                                {
-                                    if (runtimeType.IsAssignableTo(runtimeConstructorInfoType))
-                                    {
-                                        return new OperationCacheEntry(typeCode, PickleOperation.ConstructorRef);
-                                    }
-                                    else
-                                    {
-                                        return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from ConstructorInfo.");
-                                    }
-                                }
                                 else
                                 {
+                                    // TODO FieldInfo et.al won't hit this because they hit the code to select the serialization method by type not operation
                                     return new OperationCacheEntry($"Type '{runtimeType}' is not automaticly serializable as it inherits from MemberInfo.");
                                 }
                             }
@@ -1768,8 +1714,14 @@ namespace Ibasa.Pikala
         {
             if (!state.HasSeenType(type))
             {
+                // If this type has an element type (array, pointer or ref) just write that instead 
+                var elementType = GetRootElementType(type);
+                if (elementType != null)
+                {
+                    DoSeenType(state, elementType);
+                }
                 // If this type is from mscorlib or pickled by value we don't need to write any info out for it because we assume it won't change
-                if (type.Assembly != mscorlib && !PickleByValue(type.Assembly))
+                else if (type.Assembly != mscorlib && !PickleByValue(type.Assembly))
                 {
                     WriteSerialisedObjectTypeInfo(state, GetSerialisedObjectTypeInfo(type));
                 }
@@ -1778,6 +1730,13 @@ namespace Ibasa.Pikala
 
         private void Serialize(PicklerSerializationState state, object? obj, SerializeInformation info, Type[]? genericTypeParameters = null, Type[]? genericMethodParameters = null)
         {
+            // Early out for types we can't possibly deal with
+            if (info.StaticType.IsPointer)
+            {
+                throw new Exception($"Pointer types are not serializable: '{info.StaticType}'");
+            }
+
+
             var sanatizedStaticType = SanatizeType(info.StaticType);
             // Check that we don't have a static type for a derived reflection type
             if (sanatizedStaticType != info.StaticType)
@@ -1817,13 +1776,28 @@ namespace Ibasa.Pikala
 
                 state.Writer.Write((byte)ObjectOperation.Object);
 
-                // If the static type is a reflection type then we don't need to write out the runtime type
-                if (!reflectionTypes.Contains(sanatizedStaticType))
-                {
-                    var sanatizedType = SanatizeType(info.RuntimeType);
+                var sanatizedType = SanatizeType(info.RuntimeType);
 
+                // If the static type is a reflection type or sealed then we don't need to write out the runtime type
+                // All arrays are sealed but what actually matters for arrays is if the element type is sealed.
+                // e.g. object[] is sealed but we still need to write out the runtime type for, while string[] is 
+                // also sealed but so is string so we don't need to write the runtime type out for it. Likewise
+                // for int[].
+                var maybeElementType = GetRootElementType(sanatizedStaticType);
+                System.Diagnostics.Debug.Assert(maybeElementType == null || sanatizedStaticType.IsArray, "Got an element type for a non-array type");
+
+                var isSealed =
+                    (maybeElementType == null && sanatizedStaticType.IsSealed) ||
+                    (maybeElementType != null && (maybeElementType.IsSealed || maybeElementType.IsValueType));
+
+                if (!reflectionTypes.Contains(sanatizedStaticType) && !isSealed)
+                {
                     SerializeType(state, sanatizedType, genericTypeParameters, genericMethodParameters);
                     DoSeenType(state, sanatizedType);
+                }
+                else
+                {
+                    System.Diagnostics.Debug.Assert(sanatizedStaticType == sanatizedType, "Elided runtime type but it didn't match the static type");
                 }
 
                 if (ShouldMemo(obj, info.StaticType))
@@ -1837,6 +1811,32 @@ namespace Ibasa.Pikala
             }
 
             System.Diagnostics.Debug.Assert(obj != null, "Object was unexpectedly null");
+
+            if (obj is FieldInfo fieldInfo)
+            {
+                SerializeFieldInfo(state, info, fieldInfo);
+                return;
+            }
+            else if (obj is PropertyInfo propertyInfo)
+            {
+                SerializePropertyInfo(state, info, propertyInfo);
+                return;
+            }
+            else if (obj is EventInfo eventInfo)
+            {
+                SerializeEventInfo(state, info, eventInfo);
+                return;
+            }
+            else if (obj is MethodInfo methodInfo)
+            {
+                SerializeMethodInfo(state, info, methodInfo);
+                return;
+            }
+            else if (obj is ConstructorInfo constructorInfo)
+            {
+                SerializeConstructorInfo(state, info, constructorInfo);
+                return;
+            }
 
             var operationEntry = GetOperation(info.RuntimeType);
             switch (operationEntry.Group)
@@ -1919,21 +1919,6 @@ namespace Ibasa.Pikala
                         case PickleOperation.Array:
                         case PickleOperation.SZArray:
                             SerializeArray(state, (Array)obj, info.RuntimeType);
-                            return;
-                        case PickleOperation.FieldRef:
-                            SerializeFieldInfo(state, info, (FieldInfo)obj);
-                            return;
-                        case PickleOperation.PropertyRef:
-                            SerializePropertyInfo(state, info, (PropertyInfo)obj);
-                            return;
-                        case PickleOperation.EventRef:
-                            SerializeEventInfo(state, info, (EventInfo)obj);
-                            return;
-                        case PickleOperation.MethodRef:
-                            SerializeMethodInfo(state, info, (MethodInfo)obj);
-                            return;
-                        case PickleOperation.ConstructorRef:
-                            SerializeConstructorInfo(state, info, (ConstructorInfo)obj);
                             return;
                         case PickleOperation.Delegate:
                             SerializeMulticastDelegate(state, (MulticastDelegate)obj);

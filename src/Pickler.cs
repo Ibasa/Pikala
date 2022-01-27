@@ -57,11 +57,6 @@ namespace Ibasa.Pikala
         ManifestModuleRef = 26,
         ModuleRef = 27,
         TypeRef = 28,
-        FieldRef = 29,
-        PropertyRef = 30,
-        EventRef = 31,
-        MethodRef = 32,
-        ConstructorRef = 33,
         AssemblyDef = 34,
         ModuleDef = 35,
         TypeDef = 36,
@@ -406,6 +401,8 @@ namespace Ibasa.Pikala
                 return null;
             }
 
+            if (staticType.IsArray) return null;
+
             if (!_inferCache.TryGetValue(staticType, out var operation))
             {
                 operation = Infer(info, staticType);
@@ -445,6 +442,28 @@ namespace Ibasa.Pikala
             }
             elementType = null;
             return false;
+        }
+
+        /// <summary>
+        /// This returns the root element type of a given type.
+        /// E.g. GetRootElementType(int[][]) returns `int`, while GetElementType would return `int[]`
+        /// </summary>
+        /// <param name="type
+        private static Type? GetRootElementType(Type type)
+        {
+            var elementType = type.GetElementType();
+            if (elementType == null)
+            {
+                return null;
+            }
+
+            do
+            {
+                type = elementType;
+                elementType = type.GetElementType();
+            } while (elementType != null);
+
+            return type;
         }
     }
 }

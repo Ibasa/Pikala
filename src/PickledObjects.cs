@@ -75,6 +75,27 @@ namespace Ibasa.Pikala
             }
         }
 
+        /// <summary>
+        /// Like type but throws if not complete
+        /// </summary>
+        public Type CompleteType
+        {
+            get
+            {
+
+                if (_type == null)
+                {
+                    var (tp, complete) = Resolve();
+                    if (!complete)
+                    {
+                        throw new Exception($"Expected {this} to be a complete type, not a constructing one");
+                    }
+                    _type = tp;
+                }
+                return _type;
+            }
+        }
+
         public abstract PickledConstructorInfo GetConstructor(Signature signature);
 
         public abstract PickledMethodInfo GetMethod(Signature signature);
