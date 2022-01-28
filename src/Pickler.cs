@@ -42,7 +42,6 @@ namespace Ibasa.Pikala
 
         // Basic types
         String = 17,
-        Enum = 18,
         Array = 19,
         SZArray = 20,
         Tuple = 21,
@@ -68,7 +67,6 @@ namespace Ibasa.Pikala
         MVar = 42,
 
         // Structs and classes
-        Delegate = 43,
         Reducer = 44,
         ISerializable = 45,
         Object = 46,
@@ -391,10 +389,6 @@ namespace Ibasa.Pikala
                     else if (IsTupleType(staticType))
                     {
                         return PickleOperation.ValueTuple;
-                    }
-                    else if ((info != null && info.Flags.HasFlag(PickledTypeFlags.IsEnum)) || (info == null && staticType.IsEnum))
-                    {
-                        return PickleOperation.Enum;
                     }
                 }
 

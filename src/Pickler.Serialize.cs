@@ -1505,7 +1505,7 @@ namespace Ibasa.Pikala
 
                 if (runtimeType.IsEnum)
                 {
-                    return new OperationCacheEntry(typeCode, PickleOperation.Enum);
+                    return new OperationCacheEntry($"Enum types should use type driven not operation driven serialization: '{runtimeType}'");
                 }
 
                 switch (typeCode)
@@ -1606,7 +1606,7 @@ namespace Ibasa.Pikala
 
                             if (runtimeType.IsAssignableTo(typeof(MulticastDelegate)))
                             {
-                                return new OperationCacheEntry(typeCode, PickleOperation.Delegate);
+                                return new OperationCacheEntry($"Delegate types should use type driven not operation driven serialization: '{runtimeType}'");
                             }
 
                             // Tuples!
@@ -1692,8 +1692,20 @@ namespace Ibasa.Pikala
         {
             state.Writer.Write((byte)info.Flags);
             // Bit of a hack for now, but operation might be null because this is an abstract object (for static type)
-            state.Writer.Write((byte)(info.Operation ?? 0));
-            if (info.Operation == PickleOperation.Enum)
+            if (info.Flags.HasFlag(PickledTypeFlags.IsEnum))
+            {
+                state.Writer.Write((byte)1); //anything but 0
+            }
+            else if (info.Flags.HasFlag(PickledTypeFlags.IsDelegate))
+            {
+                state.Writer.Write((byte)1); //anything but 0
+            }
+            else
+            {
+                state.Writer.Write((byte)(info.Operation ?? 0));
+            }
+
+            if (info.Flags.HasFlag(PickledTypeFlags.IsEnum))
             {
                 // If it's an enum write out the typecode, we need to ensure we read back the same type code size
                 state.Writer.Write((byte)info.TypeCode);
@@ -1812,6 +1824,13 @@ namespace Ibasa.Pikala
 
             System.Diagnostics.Debug.Assert(obj != null, "Object was unexpectedly null");
 
+            if (info.RuntimeType.IsEnum)
+            {
+                // typeCode for an enum will be something like Int32
+                WriteEnumerationValue(state.Writer, Type.GetTypeCode(info.RuntimeType), obj);
+                return;
+            }
+
             if (obj is FieldInfo fieldInfo)
             {
                 SerializeFieldInfo(state, info, fieldInfo);
@@ -1838,6 +1857,12 @@ namespace Ibasa.Pikala
                 return;
             }
 
+            else if (obj is MulticastDelegate multicastDelegate)
+            {
+                SerializeMulticastDelegate(state, multicastDelegate);
+                return;
+            }
+
             var operationEntry = GetOperation(info.RuntimeType);
             switch (operationEntry.Group)
             {
@@ -1860,12 +1885,6 @@ namespace Ibasa.Pikala
 
                     switch (operation)
                     {
-                        case PickleOperation.Enum:
-                            System.Diagnostics.Debug.Assert(info.RuntimeType.IsEnum, "Trying to enum serialise a type that is not an enum");
-                            // typeCode for an enum will be something like Int32
-                            WriteEnumerationValue(state.Writer, operationEntry.TypeCode, obj);
-                            return;
-
                         case PickleOperation.Boolean:
                             state.Writer.Write((bool)obj);
                             return;
@@ -1919,9 +1938,6 @@ namespace Ibasa.Pikala
                         case PickleOperation.Array:
                         case PickleOperation.SZArray:
                             SerializeArray(state, (Array)obj, info.RuntimeType);
-                            return;
-                        case PickleOperation.Delegate:
-                            SerializeMulticastDelegate(state, (MulticastDelegate)obj);
                             return;
                         case PickleOperation.Tuple:
                         case PickleOperation.ValueTuple:

@@ -1996,7 +1996,7 @@ namespace Ibasa.Pikala
                         info.SerialisedFields[i] = (fieldType, toSet);
                     }
                 }
-                else if (info.Operation == PickleOperation.Enum)
+                else if (info.Flags.HasFlag(PickledTypeFlags.IsEnum))
                 {
                     info.TypeCode = (TypeCode)state.Reader.ReadByte();
 
@@ -2011,7 +2011,7 @@ namespace Ibasa.Pikala
                         info.Error = $"Can not deserialise {type} expected it to be an enumeration of {info.TypeCode} but was {typeCode}";
                     }
                 }
-                else if (info.Operation == PickleOperation.Delegate)
+                else if (info.Flags.HasFlag(PickledTypeFlags.IsDelegate))
                 {
                     if (!type.IsAssignableTo(typeof(MulticastDelegate)))
                     {
@@ -2086,6 +2086,17 @@ namespace Ibasa.Pikala
                 throw new Exception(runtimeInfo.Error);
             }
 
+            var position = state.Reader.BaseStream.Position;
+
+            if (runtimeType.IsEnum)
+            {
+                System.Diagnostics.Debug.Assert(runtimeInfo.TypeCode != null, "Expected enumeration type to have a TypeCode");
+
+                var result = Enum.ToObject(runtimeType, ReadEnumerationValue(state.Reader, runtimeInfo.TypeCode.Value));
+                state.SetMemo(position, shouldMemo, result);
+                return result;
+            }
+
             if (runtimeType == typeof(FieldInfo))
             {
                 return DeserializeFieldRef(state, typeContext).FieldInfo;
@@ -2107,7 +2118,11 @@ namespace Ibasa.Pikala
                 return DeserializeConstructorRef(state, typeContext).ConstructorInfo;
             }
 
-            var position = state.Reader.BaseStream.Position;
+            // TODO we want to do this via info flags eventually but due to the dumb way we handle arrays it easier to do this for now
+            else if (runtimeType.IsAssignableTo(typeof(MulticastDelegate)))
+            {
+                return DeserializeDelegate(state, position, runtimeType, typeContext);
+            }
 
             var maybeOperation = InferOperationFromStaticType(staticInfo, staticType);
             PickleOperation operation;
@@ -2232,16 +2247,6 @@ namespace Ibasa.Pikala
                         return result;
                     }
 
-                case PickleOperation.Enum:
-                    {
-                        System.Diagnostics.Debug.Assert(runtimeType.IsEnum, "Expected type to be an enumeration type");
-                        System.Diagnostics.Debug.Assert(runtimeInfo.TypeCode != null, "Expected enumeration type to have a TypeCode");
-
-                        var result = Enum.ToObject(runtimeType, ReadEnumerationValue(state.Reader, runtimeInfo.TypeCode.Value));
-                        state.SetMemo(position, shouldMemo, result);
-                        return result;
-                    }
-
                 case PickleOperation.SZArray:
                 case PickleOperation.Array:
                     return DeserializeArray(state, operation == PickleOperation.SZArray, position, typeContext);
@@ -2308,9 +2313,6 @@ namespace Ibasa.Pikala
 
                 case PickleOperation.TypeDef:
                     return DeserializeTypeDef(state, position, typeContext).Type;
-
-                case PickleOperation.Delegate:
-                    return DeserializeDelegate(state, position, runtimeType, typeContext);
 
                 case PickleOperation.Tuple:
                 case PickleOperation.ValueTuple:
