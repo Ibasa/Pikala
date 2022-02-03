@@ -222,6 +222,8 @@ namespace Ibasa.Pikala
 
     public sealed partial class Pickler
     {
+        private static readonly Assembly pikala = typeof(Pickler).Assembly;
+
         private static readonly Assembly mscorlib = typeof(int).Assembly;
         private static readonly Type runtimeTypeType = mscorlib.GetType("System.RuntimeType", true)!;
         private static readonly Type runtimeModuleType = mscorlib.GetType("System.Reflection.RuntimeModule", true)!;

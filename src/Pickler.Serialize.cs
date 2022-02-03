@@ -104,6 +104,10 @@ namespace Ibasa.Pikala
         {
             // We never pickle mscorlib by value, don't even give the user a choice
             if (assembly == mscorlib) { return false; }
+            // We also never pickle pikala itself.
+            // Firstly you need pikala present already on both sides so that you can even start the deserialisation.
+            // Secondly it looks like an LGPL violation.
+            if (assembly == pikala) { return false; }
 
             var mode = _assemblyPickleMode(assembly);
 
