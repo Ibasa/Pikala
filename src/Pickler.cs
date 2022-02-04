@@ -20,88 +20,68 @@ namespace Ibasa.Pikala
         Object = 2,
     }
 
-    enum PickleOperation : byte
+    enum AssemblyOperation : byte
     {
+        Memo = 0,
+        MscorlibAssembly = 1,
+        AssemblyRef = 2,
+        AssemblyDef = 3,
+    }
+
+    enum ModuleOperation : byte
+    {
+        Memo = 0,
+        MscorlibModule = 1,
+        ManifestModuleRef = 2,
+        ModuleRef = 3,
+        ModuleDef = 4,
+    }
+    enum TypeOperation : byte
+    {
+        Memo = 0,
+
         // Primitives
-        Boolean = 1,
-        Byte = 2,
-        SByte = 3,
-        Int16 = 4,
+        Void = 1,
+        Boolean = 2,
+        Char = 3,
+        Byte = 4,
         UInt16 = 5,
-        Int32 = 6,
-        UInt32 = 7,
-        Int64 = 8,
-        UInt64 = 9,
-        IntPtr = 10,
-        UIntPtr = 11,
-        Char = 12,
+        UInt32 = 6,
+        UInt64 = 7,
+        SByte = 8,
+        Int16 = 9,
+        Int32 = 10,
+        Int64 = 11,
+        Single = 12,
         Double = 13,
-        Single = 14,
-        Decimal = 15,
-        DBNull = 16,
+        Decimal = 14,
+        UIntPtr = 15,
+        IntPtr = 16,
+        DBNull = 17,
 
         // Basic types
-        String = 17,
-        Array = 19,
-        SZArray = 20,
-        Tuple = 21,
-        ValueTuple = 22,
-
-        // Memoised
-        Memo = 23,
+        Object = 18,
+        String = 19,
+        Assembly = 20,
+        Module = 21,
+        TypeInfo = 22,
+        FieldInfo = 23,
+        PropertyInfo = 24,
+        EventInfo = 25,
+        MethodInfo = 26,
+        ConsturctorInfo = 27,
+        MethodBase = 28,
+        MemberInfo = 29,
 
         // Reflection
-        MscorlibAssembly = 24,
-        AssemblyRef = 25,
-        ManifestModuleRef = 26,
-        ModuleRef = 27,
-        TypeRef = 28,
-        AssemblyDef = 34,
-        ModuleDef = 35,
-        TypeDef = 36,
-        ArrayType = 37,
-        GenericInstantiation = 38,
-        GenericTypeParameter = 39,
-        GenericMethodParameter = 40,
-        TVar = 41,
-        MVar = 42,
-
-        // Structs and classes
-        Reducer = 44,
-        ISerializable = 45,
-        Object = 46,
-
-        // Basic Types
-        MscorlibModule,
-        TypeVoid,
-        TypeObject,
-        TypeBoolean,
-        TypeByte,
-        TypeSByte,
-        TypeInt16,
-        TypeUInt16,
-        TypeInt32,
-        TypeUInt32,
-        TypeInt64,
-        TypeUInt64,
-        TypeIntPtr,
-        TypeUIntPtr,
-        TypeChar,
-        TypeDouble,
-        TypeSingle,
-        TypeDecimal,
-        TypeString,
-        TypeAssembly,
-        TypeModule,
-        TypeTypeInfo,
-        TypeFieldInfo,
-        TypeMethodInfo,
-        TypePropertyInfo,
-        TypeConsturctorInfo,
-        TypeEventInfo,
-        TypeMemberInfo,
-
-        // This is written as a byte so we're limited to 255 operations
+        TypeRef = 30,
+        TypeDef = 31,
+        ArrayType = 32,
+        GenericInstantiation = 33,
+        GenericTypeParameter = 34,
+        GenericMethodParameter = 35,
+        TVar = 36,
+        MVar = 37,
     }
 
     enum TypeDef : byte
@@ -127,99 +107,6 @@ namespace Ibasa.Pikala
         PickleByValue,
     }
 
-    /// <summary>
-    /// Sometimes our operation cache doesn't know the exact operation to do but we do know a rough grouping.
-    /// E.g. The Type "Assembly" is always an AssemblyRef or Def or Mscorlib but we need to look at the value itself to work that out while our cache is by type.
-    /// </summary>
-    enum OperationGroup
-    {
-        FullyKnown,
-        Assembly,
-        Module,
-        Type,
-        NonSerializable,
-    }
-
-    sealed class OperationCacheEntry
-    {
-        public readonly OperationGroup Group;
-        public readonly TypeCode TypeCode;
-        public readonly PickleOperation? Operation;
-        public readonly IReducer? Reducer;
-        public readonly Tuple<ValueTuple<string, Type>[], FieldInfo[]>? Fields;
-        public readonly Type[]? GenericArguments;
-        public readonly string? ErrorMessage;
-
-        public OperationCacheEntry(string errorMessage)
-        {
-            TypeCode = TypeCode.Object;
-            Group = OperationGroup.NonSerializable;
-            Operation = null;
-            Reducer = null;
-            Fields = null;
-            GenericArguments = null;
-            ErrorMessage = errorMessage;
-        }
-
-        public OperationCacheEntry(TypeCode typeCode, OperationGroup group)
-        {
-            System.Diagnostics.Debug.Assert(group != OperationGroup.FullyKnown, "Passed FullyKnown into OperationCacheEntry without operation");
-            TypeCode = typeCode;
-            Group = group;
-            Operation = null;
-            Reducer = null;
-            Fields = null;
-            GenericArguments = null;
-        }
-
-        public OperationCacheEntry(TypeCode typeCode, PickleOperation operation)
-        {
-            TypeCode = typeCode;
-            Group = OperationGroup.FullyKnown;
-            Operation = operation;
-            Reducer = null;
-            Fields = null;
-            GenericArguments = null;
-        }
-
-        public OperationCacheEntry(TypeCode typeCode, bool isValueTuple, Type[]? genericArguments)
-        {
-            TypeCode = typeCode;
-            Group = OperationGroup.FullyKnown;
-            Operation = isValueTuple ? PickleOperation.ValueTuple : PickleOperation.Tuple;
-            Reducer = null;
-            Fields = null;
-            GenericArguments = genericArguments;
-        }
-
-
-        public OperationCacheEntry(TypeCode typeCode, IReducer reducer)
-        {
-            TypeCode = typeCode;
-            Group = OperationGroup.FullyKnown;
-            Operation = PickleOperation.Reducer;
-            Reducer = reducer;
-            Fields = null;
-            GenericArguments = null;
-        }
-
-        public OperationCacheEntry(TypeCode typeCode, FieldInfo[] fields)
-        {
-            TypeCode = typeCode;
-            Group = OperationGroup.FullyKnown;
-            Operation = PickleOperation.Object;
-            Reducer = null;
-            GenericArguments = null;
-
-            var fieldNamesAndTypes = new ValueTuple<string, Type>[fields.Length];
-            for (int i = 0; i < fields.Length; ++i)
-            {
-                fieldNamesAndTypes[i] = ValueTuple.Create(fields[i].Name, fields[i].FieldType);
-            }
-            Fields = Tuple.Create(fieldNamesAndTypes, fields);
-        }
-    }
-
     public sealed partial class Pickler
     {
         private static readonly Assembly pikala = typeof(Pickler).Assembly;
@@ -238,7 +125,9 @@ namespace Ibasa.Pikala
 
         private static OpCode[] _oneByteOpCodes;
         private static OpCode[] _twoByteOpCodes;
-        private static Dictionary<Type, PickleOperation> wellKnownTypes;
+        private static Dictionary<Type, TypeOperation> _wellKnownTypes;
+
+        private static Version _pikalaVersion;
 
         static Pickler()
         {
@@ -263,48 +152,51 @@ namespace Ibasa.Pikala
                 }
             }
 
-            wellKnownTypes = new Dictionary<Type, PickleOperation>()
+            _wellKnownTypes = new Dictionary<Type, TypeOperation>()
             {
-                { typeof(object), PickleOperation.TypeObject },
-                { typeof(void), PickleOperation.TypeVoid },
-                { typeof(bool), PickleOperation.TypeBoolean },
-                { typeof(char), PickleOperation.TypeChar },
-                { typeof(sbyte), PickleOperation.TypeSByte },
-                { typeof(short), PickleOperation.TypeInt16 },
-                { typeof(int), PickleOperation.TypeInt32 },
-                { typeof(long), PickleOperation.TypeInt64 },
-                { typeof(byte), PickleOperation.TypeByte },
-                { typeof(ushort), PickleOperation.TypeUInt16 },
-                { typeof(uint), PickleOperation.TypeUInt32 },
-                { typeof(ulong), PickleOperation.TypeUInt64 },
-                { typeof(float), PickleOperation.TypeSingle },
-                { typeof(double), PickleOperation.TypeDouble },
-                { typeof(decimal), PickleOperation.TypeDecimal },
-                { typeof(string), PickleOperation.TypeString },
-                { typeof(UIntPtr), PickleOperation.TypeUIntPtr },
-                { typeof(IntPtr), PickleOperation.TypeIntPtr },
-                { typeof(Type), PickleOperation.TypeTypeInfo },
-                { typeof(FieldInfo), PickleOperation.TypeFieldInfo },
-                { typeof(MethodInfo), PickleOperation.TypeMethodInfo },
-                { typeof(ConstructorInfo), PickleOperation.TypeConsturctorInfo },
-                { typeof(EventInfo), PickleOperation.TypeEventInfo },
-                { typeof(PropertyInfo), PickleOperation.TypePropertyInfo },
-                { typeof(MemberInfo), PickleOperation.TypeMemberInfo },
-                { typeof(Module), PickleOperation.TypeModule },
-                { typeof(Assembly), PickleOperation.TypeAssembly },
+                { typeof(object), TypeOperation.Object },
+                { typeof(void), TypeOperation.Void },
+                { typeof(bool), TypeOperation.Boolean },
+                { typeof(char), TypeOperation.Char },
+                { typeof(sbyte), TypeOperation.SByte },
+                { typeof(short), TypeOperation.Int16 },
+                { typeof(int), TypeOperation.Int32 },
+                { typeof(long), TypeOperation.Int64 },
+                { typeof(byte), TypeOperation.Byte },
+                { typeof(ushort), TypeOperation.UInt16 },
+                { typeof(uint), TypeOperation.UInt32 },
+                { typeof(ulong), TypeOperation.UInt64 },
+                { typeof(float), TypeOperation.Single },
+                { typeof(double), TypeOperation.Double },
+                { typeof(decimal), TypeOperation.Decimal },
+                { typeof(string), TypeOperation.String },
+                { typeof(UIntPtr), TypeOperation.UIntPtr },
+                { typeof(IntPtr), TypeOperation.IntPtr },
+                { typeof(Type), TypeOperation.TypeInfo },
+                { typeof(FieldInfo), TypeOperation.FieldInfo },
+                { typeof(MethodInfo), TypeOperation.MethodInfo },
+                { typeof(ConstructorInfo), TypeOperation.ConsturctorInfo },
+                { typeof(MethodBase), TypeOperation.MethodBase },
+                { typeof(EventInfo), TypeOperation.EventInfo },
+                { typeof(PropertyInfo), TypeOperation.PropertyInfo },
+                { typeof(MemberInfo), TypeOperation.MemberInfo },
+                { typeof(Module), TypeOperation.Module },
+                { typeof(Assembly), TypeOperation.Assembly },
             };
+
+            var version = pikala.GetName().Version;
+            System.Diagnostics.Debug.Assert(version != null, "Pikala assembly version was null");
+            _pikalaVersion = version;
         }
 
-        private Func<Assembly, AssemblyPickleMode> _assemblyPickleMode;
-        private Dictionary<Type, IReducer> _reducers;
-        // This is keyed by the static type of the object we're serialising or deserialising
-        private Dictionary<Type, PickleOperation?> _inferCache;
-        // This is keyed by the runtime type of the object we're serialising
-        private Dictionary<Type, OperationCacheEntry> _operationCache;
+        private readonly Func<Assembly, AssemblyPickleMode> _assemblyPickleMode;
+        private readonly Dictionary<Type, IReducer> _reducers;
+        // This is only accessed during serialisation because we know type flags and mode can't change across one serialiser (TODO Correct only once reducers are passed in as an option, not a mutable value)
+        // but flags might differ across various binary streams for deserialisation (e.g. you serialise once with X being reduced, next with it defaulting to auto object)
+        private readonly Dictionary<Type, SerialisedObjectTypeInfo> _typeInfo;
 
         // Variables that are written to the start of the Pikala stream for framing checks
         private const uint _header = ((byte)'P' << 0 | (byte)'K' << 8 | (byte)'L' << 16 | (byte)'A' << 24);
-        private const uint _version = 1U;
 
         public AssemblyLoadContext AssemblyLoadContext { get; private set; }
 
@@ -314,97 +206,9 @@ namespace Ibasa.Pikala
             AssemblyLoadContext = (assemblyLoadContext ?? AssemblyLoadContext.CurrentContextualReflectionContext) ?? AssemblyLoadContext.Default;
             _assemblyPickleMode = assemblyPickleMode ?? (_ => AssemblyPickleMode.Default);
             _reducers = new Dictionary<Type, IReducer>();
-            _inferCache = new Dictionary<Type, PickleOperation?>();
-            _operationCache = new Dictionary<Type, OperationCacheEntry>();
+            _typeInfo = new Dictionary<Type, SerialisedObjectTypeInfo>();
 
             RegisterReducer(new DictionaryReducer());
-        }
-
-        private PickleOperation? InferOperationFromStaticType(SerialisedObjectTypeInfo? info, Type staticType)
-        {
-            PickleOperation? Infer(SerialisedObjectTypeInfo? info, Type staticType)
-            {
-                if ((info != null && info.Flags.HasFlag(PickledTypeFlags.IsValueType)) || (info == null && staticType.IsValueType))
-                {
-                    // This is a static value type, we probably didn't write an operation out for this
-
-                    if (staticType == typeof(bool))
-                    {
-                        return PickleOperation.Boolean;
-                    }
-                    else if (staticType == typeof(char))
-                    {
-                        return PickleOperation.Char;
-                    }
-                    else if (staticType == typeof(sbyte))
-                    {
-                        return PickleOperation.SByte;
-                    }
-                    else if (staticType == typeof(short))
-                    {
-                        return PickleOperation.Int16;
-                    }
-                    else if (staticType == typeof(int))
-                    {
-                        return PickleOperation.Int32;
-                    }
-                    else if (staticType == typeof(long))
-                    {
-                        return PickleOperation.Int64;
-                    }
-                    else if (staticType == typeof(byte))
-                    {
-                        return PickleOperation.Byte;
-                    }
-                    else if (staticType == typeof(ushort))
-                    {
-                        return PickleOperation.UInt16;
-                    }
-                    else if (staticType == typeof(uint))
-                    {
-                        return PickleOperation.UInt32;
-                    }
-                    else if (staticType == typeof(ulong))
-                    {
-                        return PickleOperation.UInt64;
-                    }
-                    else if (staticType == typeof(float))
-                    {
-                        return PickleOperation.Single;
-                    }
-                    else if (staticType == typeof(double))
-                    {
-                        return PickleOperation.Double;
-                    }
-                    else if (staticType == typeof(decimal))
-                    {
-                        return PickleOperation.Decimal;
-                    }
-                    else if (staticType == typeof(IntPtr))
-                    {
-                        return PickleOperation.IntPtr;
-                    }
-                    else if (staticType == typeof(UIntPtr))
-                    {
-                        return PickleOperation.UIntPtr;
-                    }
-                    else if (IsTupleType(staticType))
-                    {
-                        return PickleOperation.ValueTuple;
-                    }
-                }
-
-                return null;
-            }
-
-            if (staticType.IsArray) return null;
-
-            if (!_inferCache.TryGetValue(staticType, out var operation))
-            {
-                operation = Infer(info, staticType);
-                _inferCache.Add(staticType, operation);
-            }
-            return operation;
         }
 
         public bool RegisterReducer(IReducer reducer)
@@ -441,25 +245,31 @@ namespace Ibasa.Pikala
         }
 
         /// <summary>
+        /// Returns true if this is a builtin type. That is one that pickler has specific code for handling.
+        /// It will never make use of a reducer or other user code.
+        /// </summary>
+        private static bool IsBuiltinType(Type type)
+        {
+            System.Diagnostics.Debug.Assert(!type.IsGenericTypeDefinition, "Only expect closed types to be passed to IsBuiltinType", "Got type {0}", type);
+
+            if (type.IsArray) return true;
+            if (_wellKnownTypes.ContainsKey(type)) return true;
+            if (IsNullableType(type, out var _)) return true;
+            if (IsTupleType(type)) return true;
+            return false;
+        }
+
+        /// <summary>
         /// This returns the root element type of a given type.
         /// E.g. GetRootElementType(int[][]) returns `int`, while GetElementType would return `int[]`
         /// </summary>
-        /// <param name="type
-        private static Type? GetRootElementType(Type type)
+        private static SerialisedObjectTypeInfo GetRootElementType(SerialisedObjectTypeInfo info)
         {
-            var elementType = type.GetElementType();
-            if (elementType == null)
+            while (info.Element != null)
             {
-                return null;
+                info = info.Element;
             }
-
-            do
-            {
-                type = elementType;
-                elementType = type.GetElementType();
-            } while (elementType != null);
-
-            return type;
+            return info;
         }
     }
 }

@@ -6,24 +6,46 @@ using System.Reflection.Emit;
 namespace Ibasa.Pikala
 {
     [Flags]
-    public enum PickledTypeFlags : byte
+    public enum PickledTypeFlags
     {
         IsAbstract = 1,
         IsSealed = 2,
         IsValueType = 4,
-        IsEnum = 8,
-        IsDelegate = 16,
+        HasElementType = 8,
+    }
+
+    public enum PickledTypeMode
+    {
+        IsBuiltin = -1,
+        IsEnum = 0,
+        IsDelegate = 1,
+        IsReduced = 2,
+        IsISerializable = 3,
+        IsAutoSerialisedObject = 4,
     }
 
     sealed class SerialisedObjectTypeInfo
     {
+        public readonly Type Type;
+        public SerialisedObjectTypeInfo(Type type)
+        {
+            Type = type;
+        }
+
+        public PickledTypeMode Mode;
         public PickledTypeFlags Flags;
         // Null if this wasn't serailised using object format, or if the fields have changed.
-        public (Type, FieldInfo)[]? SerialisedFields;
-        // Non null if there was an error building Fields (we should use a DU really)
+        public (SerialisedObjectTypeInfo, FieldInfo)[]? SerialisedFields;
+        // Non null if there was an error building Fields (we should use a DU really) or this type couldn't be serialised
         public string? Error;
-        public PickleOperation? Operation;
+        // Only non-null if an enum
         public TypeCode? TypeCode;
+        // Either an array OR Nullable<T>
+        public SerialisedObjectTypeInfo? Element;
+        // Only non-null if reduced
+        public IReducer? Reducer;
+        // Only non-null if tuple
+        public SerialisedObjectTypeInfo[]? TupleArguments;
     }
 
     abstract class PickledTypeInfo : PickledMemberInfo

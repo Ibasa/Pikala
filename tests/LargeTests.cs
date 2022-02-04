@@ -22,13 +22,16 @@ namespace Ibasa.Pikala.Tests
         private void LargeArrayTest<X, Y>(Func<X> generator, Func<X, Y> checker, long expectedSize)
         {
             // Large array tests output so much data they won't fit into a .NET byte array, we have to serialize to a FileStream.
-            var file = Path.GetTempFileName();
+            // We put this in a folder inside temp so it's easier to clean out
+            var directory = Path.Join(Path.GetTempPath(), "Pikala");
+            var file = Path.Join(directory, Path.GetRandomFileName());
             try
             {
                 Y Write()
                 {
                     var value = generator();
 
+                    var _ = Directory.CreateDirectory(directory);
                     using var fileStream = File.OpenWrite(file);
                     var pickler = new Pickler();
                     pickler.Serialize(fileStream, value);
@@ -74,7 +77,7 @@ namespace Ibasa.Pikala.Tests
                 // These are huge arrays so we just check that the lengths, first, and last elements are correct.
                 return (value.Length, value[0], value[value.Length - 1]);
             },
-            2147483669);
+            2147483666);
         }
 
         [FactLargeTest]
@@ -92,7 +95,7 @@ namespace Ibasa.Pikala.Tests
                 // These are huge arrays so we just check that the lengths, first, and last elements are correct.
                 return (value.Length, value[0], value[value.Length - 1]);
             },
-            3221225493);
+            3221225490);
         }
 
         [FactLargeTest]
@@ -113,7 +116,7 @@ namespace Ibasa.Pikala.Tests
                 // These are huge arrays so we just check that the lengths, first, and last elements are correct.
                 return (value.Length, value[0], value[value.Length - 1]);
             },
-            1073741866);
+            1073741863);
         }
 
         [FactLargeTest]
@@ -135,7 +138,7 @@ namespace Ibasa.Pikala.Tests
                 // These are huge arrays so we just check that the lengths, first, and last elements are correct.
                 return (value.Length, value[0], value[value.Length - 1]);
             },
-            1744830617);
+            1610612885);
         }
 
         [FactLargeTest]
@@ -157,7 +160,7 @@ namespace Ibasa.Pikala.Tests
                 // These are huge arrays so we just check that the lengths, first, and last elements are correct.
                 return (value.Length, value[0], value[value.Length - 1]);
             },
-            2617245849);
+            2415919253);
         }
     }
 }

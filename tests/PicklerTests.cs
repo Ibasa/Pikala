@@ -210,6 +210,9 @@ namespace Ibasa.Pikala.Tests
             new[] { typeof(double?) },
             new[] { typeof(System.TypeCode?) },
             new[] { typeof(TestTypes.EnumurationType?) },
+            new[] { typeof(Tuple<int, double>) },
+            new[] { typeof(ValueTuple<,,>) },
+            new[] { typeof(Nullable<>) },
         };
 
         [Theory]
@@ -449,7 +452,7 @@ namespace Ibasa.Pikala.Tests
 
             var exc = Assert.Throws<MemoException>(() => RoundTrip.Do(pickler, value));
 
-            Assert.Equal("Tried to reference object from position 144 in the stream, but that object is not yet created.", exc.Message);
+            Assert.Equal("Tried to reference object from position 143 in the stream, but that object is not yet created.", exc.Message);
         }
 
         [Fact]
@@ -513,6 +516,13 @@ namespace Ibasa.Pikala.Tests
         public void TestReadmeExample()
         {
             // This test checks that the string in README.md matches what the Pickler currently generates
+
+            // The pikala stream include the current assembly version and runtime versions so this test is only valid
+            // for our dotnet6.0 run
+            if (Environment.Version.Major != 6)
+            {
+                return;
+            }
 
             var pickler = new Pickler();
             var stream = new MemoryStream();

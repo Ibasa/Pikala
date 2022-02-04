@@ -357,14 +357,7 @@ namespace Ibasa.Pikala
         List<Action> statics = new List<Action>();
         int trailerDepth = 0;
 
-        HashSet<Type> seenTypes = new HashSet<Type>();
-
-        public bool HasSeenType(Type type)
-        {
-            if (seenTypes.Contains(type)) return true;
-            seenTypes.Add(type);
-            return false;
-        }
+        public readonly HashSet<Type> SeenTypes = new HashSet<Type>();
 
         public void CheckTrailers()
         {
