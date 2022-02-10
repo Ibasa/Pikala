@@ -925,12 +925,6 @@ namespace Ibasa.Pikala
             // Theres a performance optimisation we could do here with value types,
             // we we fetch the handler only once.
 
-            if (obj.Rank > byte.MaxValue)
-            {
-                // Who has 256 rank arrays!? The runtime specification says this can be at most 32.
-                throw new NotImplementedException($"Pikala does not support arrays of rank higher than {byte.MaxValue}, got {obj.Rank}");
-            }
-
             state.Writer.Write((byte)0); // Dumb padding byte
 
             var elementType = objType.GetElementType();
@@ -1186,9 +1180,16 @@ namespace Ibasa.Pikala
                 }
                 else
                 {
-                    state.Writer.Write((byte)type.GetArrayRank());
+                    var rank = type.GetArrayRank();
+                    if (rank > byte.MaxValue)
+                    {
+                        // Who has 256 rank arrays!? The runtime specification says this can be at most 32.
+                        throw new NotImplementedException($"Pikala does not support arrays of rank higher than {byte.MaxValue}, got {rank}");
+                    }
+                    state.Writer.Write((byte)rank);
                 }
                 var elementType = type.GetElementType();
+                System.Diagnostics.Debug.Assert(elementType != null, "GetElementType returned null for an array type");
                 SerializeType(state, elementType, genericTypeParameters, genericMethodParameters);
             }
 
