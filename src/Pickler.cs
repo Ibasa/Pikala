@@ -82,6 +82,26 @@ namespace Ibasa.Pikala
         GenericMethodParameter = 35,
         TVar = 36,
         MVar = 37,
+
+        // Common generics
+        Nullable = 38,
+        ValueTuple = 39,
+        ValueTuple1 = 40,
+        ValueTuple2 = 41,
+        ValueTuple3 = 42,
+        ValueTuple4 = 43,
+        ValueTuple5 = 44,
+        ValueTuple6 = 45,
+        ValueTuple7 = 46,
+        ValueTuple8 = 47,
+        Tuple1 = 48,
+        Tuple2 = 49,
+        Tuple3 = 50,
+        Tuple4 = 51,
+        Tuple5 = 52,
+        Tuple6 = 53,
+        Tuple7 = 54,
+        Tuple8 = 55,
     }
 
     enum TypeDef : byte
@@ -182,6 +202,24 @@ namespace Ibasa.Pikala
                 { typeof(MemberInfo), TypeOperation.MemberInfo },
                 { typeof(Module), TypeOperation.Module },
                 { typeof(Assembly), TypeOperation.Assembly },
+                { typeof(Nullable<>), TypeOperation.Nullable },
+                { typeof(ValueTuple), TypeOperation.ValueTuple },
+                { typeof(ValueTuple<>), TypeOperation.ValueTuple1 },
+                { typeof(ValueTuple<,>), TypeOperation.ValueTuple2 },
+                { typeof(ValueTuple<,,>), TypeOperation.ValueTuple3 },
+                { typeof(ValueTuple<,,,>), TypeOperation.ValueTuple4 },
+                { typeof(ValueTuple<,,,,>), TypeOperation.ValueTuple5 },
+                { typeof(ValueTuple<,,,,,>), TypeOperation.ValueTuple6 },
+                { typeof(ValueTuple<,,,,,,>), TypeOperation.ValueTuple7 },
+                { typeof(ValueTuple<,,,,,,,>), TypeOperation.ValueTuple8 },
+                { typeof(Tuple<>), TypeOperation.Tuple1 },
+                { typeof(Tuple<,>), TypeOperation.Tuple2 },
+                { typeof(Tuple<,,>), TypeOperation.Tuple3 },
+                { typeof(Tuple<,,,>), TypeOperation.Tuple4 },
+                { typeof(Tuple<,,,,>), TypeOperation.Tuple5 },
+                { typeof(Tuple<,,,,,>), TypeOperation.Tuple6 },
+                { typeof(Tuple<,,,,,,>), TypeOperation.Tuple7 },
+                { typeof(Tuple<,,,,,,,>), TypeOperation.Tuple8 },
             };
 
             var version = pikala.GetName().Version;

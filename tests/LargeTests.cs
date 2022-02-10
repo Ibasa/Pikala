@@ -116,7 +116,7 @@ namespace Ibasa.Pikala.Tests
                 // These are huge arrays so we just check that the lengths, first, and last elements are correct.
                 return (value.Length, value[0], value[value.Length - 1]);
             },
-            1073741863);
+            1073741841);
         }
 
         [FactLargeTest]
