@@ -115,6 +115,26 @@ namespace Ibasa.Pikala
                         var elementType = DeserializeSignatureElement(state);
                         return new SignatureByRef(elementType);
                     }
+
+                case SignatureElementOperation.Pointer:
+                    {
+                        var elementType = DeserializeSignatureElement(state);
+                        return new SignaturePointer(elementType);
+                    }
+
+                case SignatureElementOperation.Modreq:
+                    {
+                        var elementType = DeserializeSignatureElement(state);
+                        var modifier = DeserializeType(state, default);
+                        return new SignatureReq(elementType, modifier.Type);
+                    }
+
+                case SignatureElementOperation.Modopt:
+                    {
+                        var elementType = DeserializeSignatureElement(state);
+                        var modifier = DeserializeType(state, default);
+                        return new SignatureOpt(elementType, modifier.Type);
+                    }
             }
 
             throw new NotImplementedException($"Unhandled SignatureElement: {operation}");
@@ -141,19 +161,49 @@ namespace Ibasa.Pikala
             var callingConvention = (CallingConventions)state.Reader.ReadInt32();
 
             var parameterCount = state.Reader.Read7BitEncodedInt();
+            var hasModifiers = (parameterCount & 0x1) != 0;
+            parameterCount >>= 1;
+
             Type[]? parameterTypes = null;
+            Type[][]? requiredCustomModifiers = null;
+            Type[][]? optionalCustomModifiers = null;
             if (parameterCount != 0)
             {
                 parameterTypes = new Type[parameterCount];
+                if (hasModifiers)
+                {
+                    requiredCustomModifiers = new Type[parameterCount][];
+                    optionalCustomModifiers = new Type[parameterCount][];
+                }
+
                 for (int j = 0; j < parameterTypes.Length; ++j)
                 {
                     var parameterType = DeserializeType(state, typeContext);
                     parameterTypes[j] = parameterType.Type;
+
+                    if (hasModifiers)
+                    {
+                        var mods = state.Reader.ReadByte();
+                        var reqmodCount = mods >> 4;
+                        var optmodCount = mods & 0xF;
+
+                        requiredCustomModifiers[j] = new Type[reqmodCount];
+                        optionalCustomModifiers[j] = new Type[optmodCount];
+
+                        for (int k = 0; k < reqmodCount; ++k)
+                        {
+                            requiredCustomModifiers[j][k] = DeserializeType(state, typeContext).Type;
+                        }
+                        for (int k = 0; k < optmodCount; ++k)
+                        {
+                            optionalCustomModifiers[j][k] = DeserializeType(state, typeContext).Type;
+                        }
+                    }
                 }
             }
 
             var typeBuilder = constructingType.TypeBuilder;
-            var constructorBuilder = typeBuilder.DefineConstructor(methodAttributes, callingConvention, parameterTypes);
+            var constructorBuilder = typeBuilder.DefineConstructor(methodAttributes, callingConvention, parameterTypes, requiredCustomModifiers, optionalCustomModifiers);
 
             ParameterBuilder[]? parameters = null;
             if (parameterTypes != null)
@@ -164,6 +214,12 @@ namespace Ibasa.Pikala
                     var parameterName = state.Reader.ReadNullableString();
                     var parameterAttributes = (ParameterAttributes)state.Reader.ReadInt32();
                     parameters[j] = constructorBuilder.DefineParameter(1 + j, parameterAttributes, parameterName);
+
+                    if (parameterAttributes.HasFlag(ParameterAttributes.HasDefault))
+                    {
+                        var defaultValue = Deserialize(state, parameterTypes[j]);
+                        parameters[j].SetConstant(defaultValue);
+                    }
                 }
             }
 
@@ -193,46 +249,102 @@ namespace Ibasa.Pikala
             var methodImplAttributes = (MethodImplAttributes)state.Reader.ReadInt32();
             var callingConventions = (CallingConventions)state.Reader.ReadInt32();
             var typeBuilder = constructingType.TypeBuilder;
-            var methodBuilder = typeBuilder.DefineMethod(methodName, methodAttributes, callingConventions);
-            constructingMethod = new PickledMethodInfoDef(constructingType, methodBuilder);
 
-            var methodGenericParameterCount = state.Reader.Read7BitEncodedInt();
-            if (methodGenericParameterCount != 0)
+            var methodBuilder = typeBuilder.DefineMethod(methodName, methodAttributes, callingConventions);
+
+            var methodGenericParameterNames = new string[state.Reader.Read7BitEncodedInt()];
+            for (int j = 0; j < methodGenericParameterNames.Length; ++j)
             {
-                var methodGenericParameterNames = new string[methodGenericParameterCount];
-                for (int j = 0; j < methodGenericParameterCount; ++j)
+                methodGenericParameterNames[j] = state.Reader.ReadString();
+            }
+            var genericParameters = methodGenericParameterNames.Length == 0 ? null : methodBuilder.DefineGenericParameters(methodGenericParameterNames);
+
+            var typeContext = new DeserializationTypeContext(genericTypeParameters, genericParameters, null);
+
+            var returnType = DeserializeType(state, typeContext).Type;
+            Type[]? returnTypeRequiredCustomModifiers;
+            Type[]? returnTypeOptionalCustomModifiers;
+
+            {
+                var mods = state.Reader.ReadByte();
+                var reqmodCount = mods >> 4;
+                var optmodCount = mods & 0xF;
+
+                returnTypeRequiredCustomModifiers = new Type[reqmodCount];
+                returnTypeOptionalCustomModifiers = new Type[optmodCount];
+
+                for (int k = 0; k < reqmodCount; ++k)
                 {
-                    methodGenericParameterNames[j] = state.Reader.ReadString();
+                    returnTypeRequiredCustomModifiers[k] = DeserializeType(state, typeContext).Type;
                 }
-                constructingMethod.GenericParameters = methodBuilder.DefineGenericParameters(methodGenericParameterNames);
+                for (int k = 0; k < optmodCount; ++k)
+                {
+                    returnTypeOptionalCustomModifiers[k] = DeserializeType(state, typeContext).Type;
+                }
             }
 
-            var typeContext = new DeserializationTypeContext(genericTypeParameters, constructingMethod.GenericParameters, null);
-
-            var returnType = DeserializeType(state, typeContext);
             var parameterCount = state.Reader.Read7BitEncodedInt();
+            var hasModifiers = (parameterCount & 0x1) != 0;
+            parameterCount >>= 1;
+
+            Type[]? parameterTypes = null;
+            Type[][]? parameterTypeRequiredCustomModifiers = null;
+            Type[][]? parameterTypeOptionalCustomModifiers = null;
             if (parameterCount != 0)
             {
-                constructingMethod.ParameterTypes = new Type[parameterCount];
-                for (int j = 0; j < constructingMethod.ParameterTypes.Length; ++j)
+                parameterTypes = new Type[parameterCount];
+                if (hasModifiers)
+                {
+                    parameterTypeRequiredCustomModifiers = new Type[parameterCount][];
+                    parameterTypeOptionalCustomModifiers = new Type[parameterCount][];
+                }
+
+                for (int j = 0; j < parameterTypes.Length; ++j)
                 {
                     var parameterType = DeserializeType(state, typeContext);
-                    constructingMethod.ParameterTypes[j] = parameterType.Type;
-                }
+                    parameterTypes[j] = parameterType.Type;
 
-                methodBuilder.SetSignature(returnType.Type, null, null, constructingMethod.ParameterTypes, null, null);
+                    if (hasModifiers)
+                    {
+                        var mods = state.Reader.ReadByte();
+                        var reqmodCount = mods >> 4;
+                        var optmodCount = mods & 0xF;
 
-                constructingMethod.Parameters = new ParameterBuilder[parameterCount];
-                for (int j = 0; j < constructingMethod.ParameterTypes.Length; ++j)
-                {
-                    var parameterName = state.Reader.ReadNullableString();
-                    var parameterAttributes = (ParameterAttributes)state.Reader.ReadInt32();
-                    constructingMethod.Parameters[j] = methodBuilder.DefineParameter(1 + j, parameterAttributes, parameterName);
+                        parameterTypeRequiredCustomModifiers[j] = new Type[reqmodCount];
+                        parameterTypeOptionalCustomModifiers[j] = new Type[optmodCount];
+
+                        for (int k = 0; k < reqmodCount; ++k)
+                        {
+                            parameterTypeRequiredCustomModifiers[j][k] = DeserializeType(state, typeContext).Type;
+                        }
+                        for (int k = 0; k < optmodCount; ++k)
+                        {
+                            parameterTypeOptionalCustomModifiers[j][k] = DeserializeType(state, typeContext).Type;
+                        }
+                    }
                 }
             }
-            else
+
+            methodBuilder.SetSignature(
+                returnType, returnTypeRequiredCustomModifiers, returnTypeOptionalCustomModifiers,
+                parameterTypes, parameterTypeRequiredCustomModifiers, parameterTypeOptionalCustomModifiers);
+
+            constructingMethod = new PickledMethodInfoDef(constructingType, methodBuilder);
+            constructingMethod.ParameterTypes = parameterTypes;
+            constructingMethod.GenericParameters = genericParameters;
+
+            constructingMethod.Parameters = new ParameterBuilder[parameterCount];
+            for (int j = 0; j < constructingMethod.Parameters.Length; ++j)
             {
-                methodBuilder.SetSignature(returnType.Type, null, null, null, null, null);
+                var parameterName = state.Reader.ReadNullableString();
+                var parameterAttributes = (ParameterAttributes)state.Reader.ReadInt32();
+                constructingMethod.Parameters[j] = methodBuilder.DefineParameter(1 + j, parameterAttributes, parameterName);
+
+                if (parameterAttributes.HasFlag(ParameterAttributes.HasDefault))
+                {
+                    var defaultValue = Deserialize(state, constructingMethod.ParameterTypes[j]);
+                    constructingMethod.Parameters[j].SetConstant(defaultValue);
+                }
             }
 
             methodBuilder.SetImplementationFlags(methodImplAttributes);

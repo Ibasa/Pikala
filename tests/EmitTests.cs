@@ -379,5 +379,39 @@ namespace Ibasa.Pikala.Tests
             // handler was removed so invoke shouldn't of invoked our method again
             Assert.Equal(2, invokeCount);
         }
+
+        [Fact]
+        public void TestPointersAndRefs()
+        {
+            var pickler = CreatePickler();
+
+            var obj = new TestTypes.ClassWithPointersAndRefs();
+            var result = RoundTrip.Do<object>(pickler, obj);
+
+            Assert.Equal(obj.ToString(), result.ToString());
+        }
+
+        [Fact]
+        public void TestDefaultParameters()
+        {
+            var pickler = CreatePickler();
+
+            var type = typeof(TestTypes.ClassWithDefaults);
+            var resultType = RoundTrip.Do<Type>(pickler, type);
+
+            var defaultStringMethod = resultType.GetMethod("Defaults");
+
+            var defaultIntParam = defaultStringMethod.GetParameters()[0];
+            Assert.True(defaultIntParam.HasDefaultValue);
+            Assert.Equal(2, defaultIntParam.DefaultValue);
+
+            var defaultStringParam = defaultStringMethod.GetParameters()[1];
+            Assert.True(defaultStringParam.HasDefaultValue);
+            Assert.Equal("hi", defaultStringParam.DefaultValue);
+
+            var defaultNullStringParam = defaultStringMethod.GetParameters()[2];
+            Assert.True(defaultNullStringParam.HasDefaultValue);
+            Assert.Null(defaultNullStringParam.DefaultValue);
+        }
     }
 }

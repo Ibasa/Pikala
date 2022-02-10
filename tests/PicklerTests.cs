@@ -213,6 +213,7 @@ namespace Ibasa.Pikala.Tests
             new[] { typeof(Tuple<int, double>) },
             new[] { typeof(ValueTuple<,,>) },
             new[] { typeof(Nullable<>) },
+            new[] { typeof(double*) },
         };
 
         [Theory]

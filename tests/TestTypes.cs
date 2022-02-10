@@ -563,5 +563,59 @@ namespace Ibasa.Pikala.Tests
                 PropertyEvent -= handler;
             }
         }
+
+        public sealed class ClassWithPointersAndRefs
+        {
+            public string OverloadTest1(int i)
+            {
+                return i.ToString();
+            }
+
+            public string OverloadTest1(ref int i)
+            {
+                i = 4;
+                return i.ToString();
+            }
+
+            public unsafe string OverloadTest1(int* i)
+            {
+                *i = *i * 2;
+                return (*i).ToString();
+            }
+
+            public string OverloadTest2(string s)
+            {
+                return s;
+            }
+
+            public string OverloadTest2(out string s)
+            {
+                s = "";
+                return "hello";
+            }
+
+            public override string ToString()
+            {
+                // Weird ToString to test calling all the overloads
+                unsafe
+                {
+                    var i = 0;
+                    var a = OverloadTest1(i); // 0
+                    var b = OverloadTest1(ref i); // 4
+                    var c = OverloadTest1(&i); // 8
+                    var d = OverloadTest2("world"); // world
+                    var e = OverloadTest2(out d); // hello (and d = "")
+                    return a + b + c + d + e; // 048hello
+                }
+            }
+        }
+
+        public sealed class ClassWithDefaults
+        {
+            public void Defaults(int i = 2, string x = "hi", string y = null)
+            {
+
+            }
+        }
     }
 }

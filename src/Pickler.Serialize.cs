@@ -139,6 +139,23 @@ namespace Ibasa.Pikala
                 state.Writer.Write((byte)SignatureElementOperation.ByRef);
                 SerializeSignatureElement(state, sbr.ElementType);
             }
+            else if (signature is SignaturePointer si)
+            {
+                state.Writer.Write((byte)SignatureElementOperation.Pointer);
+                SerializeSignatureElement(state, si.ElementType);
+            }
+            else if (signature is SignatureReq sr)
+            {
+                state.Writer.Write((byte)SignatureElementOperation.Modreq);
+                SerializeSignatureElement(state, sr.ElementType);
+                SerializeType(state, sr.RequiredModifier, null, null);
+            }
+            else if (signature is SignatureOpt so)
+            {
+                state.Writer.Write((byte)SignatureElementOperation.Modopt);
+                SerializeSignatureElement(state, so.ElementType);
+                SerializeType(state, so.OptionalModifier, null, null);
+            }
             else
             {
                 throw new NotImplementedException($"Unhandled SignatureElement: {signature}");
@@ -163,15 +180,54 @@ namespace Ibasa.Pikala
             state.Writer.Write((int)constructor.CallingConvention);
 
             var constructorParameters = constructor.GetParameters();
-            state.Writer.Write7BitEncodedInt(constructorParameters.Length);
+
+            bool hasmodifiers = false;
+            foreach (var parameter in constructorParameters)
+            {
+                if (parameter.GetRequiredCustomModifiers().Length > 0 || parameter.GetOptionalCustomModifiers().Length > 0)
+                {
+                    hasmodifiers = true;
+                    break;
+                }
+            }
+
+            state.Writer.Write7BitEncodedInt((constructorParameters.Length << 1) | (hasmodifiers ? 1 : 0));
+
             foreach (var parameter in constructorParameters)
             {
                 SerializeType(state, parameter.ParameterType, genericTypeParameters, null);
+
+                if (hasmodifiers)
+                {
+                    // Combine the count of required and optional parameters and write that out
+                    var reqmods = parameter.GetRequiredCustomModifiers();
+                    var optmods = parameter.GetOptionalCustomModifiers();
+
+                    if (reqmods.Length > 7) { throw new NotSupportedException("Pikala does not support more than 7 required modifiers"); }
+                    if (optmods.Length > 7) { throw new NotSupportedException("Pikala does not support more than 7 optional modifiers"); }
+
+                    var interleave = (reqmods.Length << 4) | optmods.Length;
+
+                    state.Writer.Write((byte)interleave);
+                    foreach (var reqmod in reqmods)
+                    {
+                        SerializeType(state, reqmod, genericTypeParameters, null);
+                    }
+                    foreach (var optmod in optmods)
+                    {
+                        SerializeType(state, optmod, genericTypeParameters, null);
+                    }
+                }
             }
             foreach (var parameter in constructorParameters)
             {
                 state.Writer.WriteNullableString(parameter.Name);
                 state.Writer.Write((int)parameter.Attributes);
+
+                if (parameter.Attributes.HasFlag(ParameterAttributes.HasDefault))
+                {
+                    Serialize(state, parameter.DefaultValue, parameter.ParameterType);
+                }
             }
 
             var methodBody = constructor.GetMethodBody();
@@ -207,24 +263,84 @@ namespace Ibasa.Pikala
                 state.Writer.Write(parameter.Name);
             }
 
-            SerializeType(state, method.ReturnType, genericTypeParameters, genericMethodParameters);
+            {
+                SerializeType(state, method.ReturnType, genericTypeParameters, genericMethodParameters);
+
+                // Combine the count of required and optional parameters and write that out
+                var reqmods = method.ReturnParameter.GetRequiredCustomModifiers();
+                var optmods = method.ReturnParameter.GetOptionalCustomModifiers();
+
+                if (reqmods.Length > 7) { throw new NotSupportedException("Pikala does not support more than 7 required modifiers"); }
+                if (optmods.Length > 7) { throw new NotSupportedException("Pikala does not support more than 7 optional modifiers"); }
+
+                var interleave = (reqmods.Length << 4) | optmods.Length;
+
+                state.Writer.Write((byte)interleave);
+                foreach (var reqmod in reqmods)
+                {
+                    SerializeType(state, reqmod, genericTypeParameters, null);
+                }
+                foreach (var optmod in optmods)
+                {
+                    SerializeType(state, optmod, genericTypeParameters, null);
+                }
+            }
 
             var methodParameters = method.GetParameters();
-            state.Writer.Write7BitEncodedInt(methodParameters.Length);
+            bool hasmodifiers = false;
+            foreach (var parameter in methodParameters)
+            {
+                if (parameter.GetRequiredCustomModifiers().Length > 0 || parameter.GetOptionalCustomModifiers().Length > 0)
+                {
+                    hasmodifiers = true;
+                    break;
+                }
+            }
+
+            state.Writer.Write7BitEncodedInt((methodParameters.Length << 1) | (hasmodifiers ? 1 : 0));
+
             foreach (var parameter in methodParameters)
             {
                 SerializeType(state, parameter.ParameterType, genericTypeParameters, genericMethodParameters);
+
+                if (hasmodifiers)
+                {
+                    // Combine the count of required and optional parameters and write that out
+                    var reqmods = parameter.GetRequiredCustomModifiers();
+                    var optmods = parameter.GetOptionalCustomModifiers();
+
+                    if (reqmods.Length > 7) { throw new NotSupportedException("Pikala does not support more than 7 required modifiers"); }
+                    if (optmods.Length > 7) { throw new NotSupportedException("Pikala does not support more than 7 optional modifiers"); }
+
+                    var interleave = (reqmods.Length << 4) | optmods.Length;
+
+                    state.Writer.Write((byte)interleave);
+                    foreach (var reqmod in reqmods)
+                    {
+                        SerializeType(state, reqmod, genericTypeParameters, null);
+                    }
+                    foreach (var optmod in optmods)
+                    {
+                        SerializeType(state, optmod, genericTypeParameters, null);
+                    }
+                }
             }
             foreach (var parameter in methodParameters)
             {
                 // 22.33: 9. Name can be null or non-null
                 state.Writer.WriteNullableString(parameter.Name);
                 state.Writer.Write((int)parameter.Attributes);
+
+                if (parameter.Attributes.HasFlag(ParameterAttributes.HasDefault))
+                {
+                    Serialize(state, parameter.DefaultValue, parameter.ParameterType);
+                }
             }
 
             if (method.Attributes.HasFlag(MethodAttributes.PinvokeImpl) || method.Attributes.HasFlag(MethodAttributes.UnmanagedExport) || method.Attributes.HasFlag(MethodAttributes.Abstract))
             {
-
+                var methodBody = method.GetMethodBody();
+                System.Diagnostics.Debug.Assert(methodBody == null, "GetMethodBody returned non-null unexpectedly");
             }
             else
             {

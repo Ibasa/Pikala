@@ -15,6 +15,8 @@ namespace Ibasa.Pikala
         Array = 4,
         ByRef = 5,
         Pointer = 6,
+        Modreq = 7,
+        Modopt = 8,
     }
 
     abstract class SignatureElement : IEquatable<SignatureElement>
@@ -65,13 +67,31 @@ namespace Ibasa.Pikala
             return result;
         }
 
+        public static SignatureElement FromParameter(ParameterInfo parameter)
+        {
+            var innerType = FromType(parameter.ParameterType);
+            var reqs = parameter.GetRequiredCustomModifiers();
+            var opts = parameter.GetOptionalCustomModifiers();
+
+            var result = innerType;
+            foreach (var req in reqs)
+            {
+                result = new SignatureReq(result, req);
+            }
+            foreach (var opt in opts)
+            {
+                result = new SignatureOpt(result, opt);
+            }
+            return result;
+        }
+
         public static SignatureElement[] FromParameters(ParameterInfo[]? parameters)
         {
             if (parameters == null) { return new SignatureElement[0]; }
             var result = new SignatureElement[parameters.Length];
             for (int i = 0; i < parameters.Length; ++i)
             {
-                result[i] = FromType(parameters[i].ParameterType);
+                result[i] = FromParameter(parameters[i]);
             }
             return result;
         }
@@ -201,6 +221,58 @@ namespace Ibasa.Pikala
         public override string ToString()
         {
             return Type.FullName!;
+        }
+    }
+
+    sealed class SignatureReq : SignatureElement
+    {
+        public SignatureElement ElementType { get; private set; }
+        public Type RequiredModifier { get; private set; }
+
+        public SignatureReq(SignatureElement elementType, Type req)
+        {
+            ElementType = elementType;
+            RequiredModifier = req;
+        }
+
+        public override bool Equals(SignatureElement? other)
+        {
+            if (other is SignatureReq sr)
+            {
+                return ElementType.Equals(sr.ElementType) && RequiredModifier == sr.RequiredModifier;
+            }
+            return false;
+        }
+
+        public override string ToString()
+        {
+            return $"{ElementType} modreq {RequiredModifier}";
+        }
+    }
+
+    sealed class SignatureOpt : SignatureElement
+    {
+        public SignatureElement ElementType { get; private set; }
+        public Type OptionalModifier { get; private set; }
+
+        public SignatureOpt(SignatureElement elementType, Type opt)
+        {
+            ElementType = elementType;
+            OptionalModifier = opt;
+        }
+
+        public override bool Equals(SignatureElement? other)
+        {
+            if (other is SignatureOpt so)
+            {
+                return ElementType.Equals(so.ElementType) && OptionalModifier == so.OptionalModifier;
+            }
+            return false;
+        }
+
+        public override string ToString()
+        {
+            return $"{ElementType} modopt {OptionalModifier}";
         }
     }
 

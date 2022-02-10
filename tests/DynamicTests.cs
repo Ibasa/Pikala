@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using Xunit;
@@ -71,6 +72,78 @@ namespace Ibasa.Pikala.Tests
             var exc = Assert.Throws<Exception>(() => RoundTrip.Do(pickler, type2));
 
             Assert.Contains("Ambiguous assembly name 'TestAmbiguousAssemblies, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null', found multiple matching assemblies.", exc.Message);
+        }
+
+        private static void BuildEmptyMethod(MethodBuilder methodBuilder)
+        {
+            var body = methodBuilder.GetILGenerator();
+            body.Emit(OpCodes.Ret);
+        }
+
+        [Fact]
+        public void TestRequiredAndOptionalModifiers()
+        {
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestRequiredAndOptionalModifiers"), AssemblyBuilderAccess.Run);
+            var module = assembly.DefineDynamicModule("main");
+            var type = module.DefineType("test");
+
+            // Build a method with some optional and required modifers and another method without the modifiers and make sure we can emit them correctly and use the correct signatures for them.
+
+            var returnType = typeof(int);
+            var returnTypeRequiredCustomModifiers = new Type[] { typeof(System.Runtime.CompilerServices.IsVolatile) };
+            var returnTypeOptionalCustomModifiers = new Type[] { typeof(System.Runtime.CompilerServices.IsConst) };
+
+            var parameterTypes = new Type[] { typeof(int) };
+            var parameterTypeRequiredCustomModifiers = new Type[][] { new Type[] { typeof(System.Runtime.CompilerServices.IsVolatile) } };
+            var parameterTypeOptionalCustomModifiers = new Type[][] { new Type[] { typeof(System.Runtime.CompilerServices.IsConst) } };
+
+            var methodWithModifers =
+                type.DefineMethod("Method", MethodAttributes.Public, CallingConventions.HasThis,
+                returnType, returnTypeRequiredCustomModifiers, returnTypeOptionalCustomModifiers,
+                parameterTypes, parameterTypeRequiredCustomModifiers, parameterTypeOptionalCustomModifiers);
+            methodWithModifers.DefineParameter(1, ParameterAttributes.None, "x");
+            BuildEmptyMethod(methodWithModifers);
+
+            var methodWithoutModifers =
+                type.DefineMethod("Method", MethodAttributes.Public, CallingConventions.HasThis, returnType, parameterTypes);
+            methodWithoutModifers.DefineParameter(1, ParameterAttributes.None, "y");
+            BuildEmptyMethod(methodWithoutModifers);
+
+            var builtType = type.CreateType();
+
+            var pickler = new Pickler(_ => AssemblyPickleMode.PickleByReference);
+            foreach (var method in builtType.GetMethods())
+            {
+                RoundTrip.Assert(pickler, method);
+            }
+
+            pickler = new Pickler();
+            var rebuiltType = RoundTrip.Do(pickler, builtType);
+
+            var rebuiltMethods = rebuiltType.GetMethods().Where(mi => mi.Name == "Method").ToArray();
+            Assert.Equal(2, rebuiltMethods.Length);
+
+            foreach (var method in rebuiltMethods)
+            {
+                var parameter = method.GetParameters().Single();
+                if (parameter.Name == "x")
+                {
+                    // Should have modifiers
+                    Assert.Equal(new Type[] { typeof(System.Runtime.CompilerServices.IsVolatile) }, parameter.GetRequiredCustomModifiers());
+                    Assert.Equal(new Type[] { typeof(System.Runtime.CompilerServices.IsConst) }, parameter.GetOptionalCustomModifiers());
+
+                    // And so should the return type
+                    var returnParameter = method.ReturnParameter;
+                    Assert.Equal(new Type[] { typeof(System.Runtime.CompilerServices.IsVolatile) }, returnParameter.GetRequiredCustomModifiers());
+                    Assert.Equal(new Type[] { typeof(System.Runtime.CompilerServices.IsConst) }, returnParameter.GetOptionalCustomModifiers());
+                }
+                else
+                {
+                    // Shouldn't have modifers
+                    Assert.Empty(parameter.GetRequiredCustomModifiers());
+                    Assert.Empty(parameter.GetOptionalCustomModifiers());
+                }
+            }
         }
     }
 }
