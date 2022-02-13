@@ -413,5 +413,16 @@ namespace Ibasa.Pikala.Tests
             Assert.True(defaultNullStringParam.HasDefaultValue);
             Assert.Null(defaultNullStringParam.DefaultValue);
         }
+
+        [Fact]
+        public void TestLiterals()
+        {
+            var pickler = CreatePickler();
+
+            var obj = new TestTypes.ClassWithLiterals();
+            var result = RoundTrip.Do<object>(pickler, obj);
+
+            Assert.Equal(obj.ToString(), result.ToString());
+        }
     }
 }

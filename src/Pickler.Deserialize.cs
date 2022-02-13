@@ -535,6 +535,80 @@ namespace Ibasa.Pikala
             }
         }
 
+        private object? ReadConstant(PicklerDeserializationState state, Type constantType)
+        {
+            if (constantType == typeof(object))
+            {
+                // This has to be null
+                return null;
+            }
+            else if (constantType == typeof(string))
+            {
+                return state.Reader.ReadNullableString();
+            }
+
+            if (constantType.IsEnum)
+            {
+                return ReadEnumerationValue(state.Reader, Type.GetTypeCode(constantType));
+            }
+            else if (constantType == typeof(bool))
+            {
+                return state.Reader.ReadBoolean();
+            }
+            else if (constantType == typeof(char))
+            {
+                return state.Reader.ReadChar();
+            }
+            else if (constantType == typeof(byte))
+            {
+                return state.Reader.ReadByte();
+            }
+            else if (constantType == typeof(sbyte))
+            {
+                return state.Reader.ReadSByte();
+            }
+            else if (constantType == typeof(short))
+            {
+                return state.Reader.ReadInt16();
+            }
+            else if (constantType == typeof(ushort))
+            {
+                return state.Reader.ReadUInt16();
+            }
+            else if (constantType == typeof(int))
+            {
+                return state.Reader.ReadInt32();
+            }
+            else if (constantType == typeof(uint))
+            {
+                return state.Reader.ReadUInt32();
+            }
+            else if (constantType == typeof(long))
+            {
+                return state.Reader.ReadInt64();
+            }
+            else if (constantType == typeof(ulong))
+            {
+                return state.Reader.ReadUInt64();
+            }
+            else if (constantType == typeof(float))
+            {
+                return state.Reader.ReadSingle();
+            }
+            else if (constantType == typeof(double))
+            {
+                return state.Reader.ReadDouble();
+            }
+            else if (constantType == typeof(decimal))
+            {
+                return state.Reader.ReadDecimal();
+            }
+            else
+            {
+                throw new NotImplementedException($"Unrecognized type '{constantType}' for constant");
+            }
+        }
+
         private void DeserializeTypeDefComplex(PicklerDeserializationState state, PickledTypeInfoDef constructingType)
         {
             var isValueType = constructingType.TypeDef == TypeDef.Struct;
@@ -580,6 +654,11 @@ namespace Ibasa.Pikala
                 if (!fieldAttributes.HasFlag(FieldAttributes.Literal) && !fieldAttributes.HasFlag(FieldAttributes.Static))
                 {
                     serialisationFields.Add((fieldType, constructingType.Fields[i]));
+                }
+
+                if (fieldAttributes.HasFlag(FieldAttributes.Literal))
+                {
+                    fieldBuilder.SetConstant(ReadConstant(state, fieldBuilder.FieldType));
                 }
             }
 
@@ -739,7 +818,7 @@ namespace Ibasa.Pikala
 
                 var staticFields =
                     type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-                    .Where(field => !field.IsInitOnly)
+                    .Where(field => !field.IsLiteral)
                     .ToArray();
 
                 for (int i = 0; i < staticFields.Length; ++i)

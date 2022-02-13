@@ -617,5 +617,35 @@ namespace Ibasa.Pikala.Tests
 
             }
         }
+
+        public sealed class ClassWithLiterals
+        {
+            private const int integer = 1;
+            private const string nonnullString = "hello";
+            private const string nullString = null;
+            private const object nullObject = null;
+            private const EnumurationType enumuration = EnumurationType.Bar;
+
+            public override string ToString()
+            {
+                // Strange ToString to test that the literals are set correctly
+                // Have to use reflection because normally constants are just folded into the code inline
+                var fields = typeof(ClassWithLiterals).GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                var results = new List<string>();
+                foreach(var field in fields)
+                {
+                    var value = field.GetValue(null);
+                    if (value == null)
+                    {
+                        results.Add("null");
+                    }
+                    else
+                    {
+                        results.Add(value.ToString());
+                    }
+                }
+                return String.Join(":", results);
+            }
+        }
     }
 }
