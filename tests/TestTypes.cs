@@ -632,7 +632,7 @@ namespace Ibasa.Pikala.Tests
                 // Have to use reflection because normally constants are just folded into the code inline
                 var fields = typeof(ClassWithLiterals).GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
                 var results = new List<string>();
-                foreach(var field in fields)
+                foreach (var field in fields)
                 {
                     var value = field.GetValue(null);
                     if (value == null)

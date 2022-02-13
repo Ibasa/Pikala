@@ -1006,7 +1006,7 @@ namespace Ibasa.Pikala
             {
                 // This has to be null
                 return;
-            } 
+            }
             else if (constantType == typeof(string))
             {
                 state.Writer.WriteNullableString((string?)value);
