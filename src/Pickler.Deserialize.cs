@@ -818,7 +818,7 @@ namespace Ibasa.Pikala
 
                 var staticFields =
                     type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-                    .Where(field => !field.IsLiteral)
+                    .Where(field => !field.IsLiteral && !field.IsInitOnly)
                     .ToArray();
 
                 for (int i = 0; i < staticFields.Length; ++i)

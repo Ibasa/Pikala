@@ -911,7 +911,7 @@ namespace Ibasa.Pikala
                 var staticFields = type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
                 foreach (var field in staticFields)
                 {
-                    if (!field.IsInitOnly)
+                    if (!field.IsLiteral && !field.IsInitOnly)
                     {
                         state.Writer.Write(field.Name);
                         var value = field.GetValue(null);
