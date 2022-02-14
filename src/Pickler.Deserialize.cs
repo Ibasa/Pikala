@@ -949,8 +949,6 @@ namespace Ibasa.Pikala
 
         private Array DeserializeArray(PicklerDeserializationState state, long position, Type arrayType)
         {
-            state.Reader.ReadByte(); // Dumb padding byte
-
             var elementType = arrayType.GetElementType();
             System.Diagnostics.Debug.Assert(elementType != null, "GetElementType returned null for an array type");
 

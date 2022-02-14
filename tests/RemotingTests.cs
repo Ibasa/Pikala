@@ -571,6 +571,24 @@ namespace Ibasa.Pikala.Tests
         }
 
         [Fact]
+        public void TestStaticFieldCanBeSavedAndRestored()
+        {
+            var script = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "let intValue = ref 1",
+                "let value = fun i -> i + !intValue",
+                "intValue := 123",
+                "let base64 = serializeBase64 value",
+                "printf \"%s\" base64",
+            });
+
+            var result = Base64ToObject(RunFsi(script)) as Microsoft.FSharp.Core.FSharpFunc<int, int>;
+
+            Assert.Equal(124, result.Invoke(1));
+        }
+
+        [Fact]
         public void TestReturnComplexObject()
         {
             var script = string.Join('\n', new[]

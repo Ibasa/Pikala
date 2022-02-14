@@ -929,8 +929,6 @@ namespace Ibasa.Pikala
             // Theres a performance optimisation we could do here with value types,
             // we we fetch the handler only once.
 
-            state.Writer.Write((byte)0); // Dumb padding byte
-
             var elementType = objType.GetElementType();
             System.Diagnostics.Debug.Assert(elementType != null, "GetElementType returned null for an array type");
 
