@@ -12,13 +12,11 @@ namespace Ibasa.Pikala
     {
         public readonly Type[]? GenericTypeParameters;
         public readonly Type[]? GenericMethodParameters;
-        public readonly PickledTypeInfo? ContextType;
 
-        public DeserializationTypeContext(Type[]? genericTypeParameters, Type[]? genericMethodParameters, PickledTypeInfo? contextType)
+        public DeserializationTypeContext(Type[]? genericTypeParameters, Type[]? genericMethodParameters)
         {
             GenericTypeParameters = genericTypeParameters;
             GenericMethodParameters = genericMethodParameters;
-            ContextType = contextType;
         }
     }
 
@@ -156,7 +154,7 @@ namespace Ibasa.Pikala
 
         private void DeserializeConstructorHeader(PicklerDeserializationState state, Type[]? genericTypeParameters, PickledTypeInfoDef constructingType, out PickledConstructorInfoDef constructingConstructor)
         {
-            var typeContext = new DeserializationTypeContext(genericTypeParameters, null, null);
+            var typeContext = new DeserializationTypeContext(genericTypeParameters, null);
             var methodAttributes = (MethodAttributes)state.Reader.ReadInt32();
             var callingConvention = (CallingConventions)state.Reader.ReadInt32();
 
@@ -259,7 +257,7 @@ namespace Ibasa.Pikala
             }
             var genericParameters = methodGenericParameterNames.Length == 0 ? null : methodBuilder.DefineGenericParameters(methodGenericParameterNames);
 
-            var typeContext = new DeserializationTypeContext(genericTypeParameters, genericParameters, null);
+            var typeContext = new DeserializationTypeContext(genericTypeParameters, genericParameters);
 
             var returnType = DeserializeType(state, typeContext).Type;
             Type[]? returnTypeRequiredCustomModifiers;
@@ -441,7 +439,7 @@ namespace Ibasa.Pikala
 
                     case OperandType.InlineTok:
                         {
-                            var memberInfo = DeserializeMemberInfo(state, null);
+                            var memberInfo = DeserializeMemberInfo(state);
                             memberInfo.Emit(ilGenerator, opCode);
                             break;
                         }
@@ -455,14 +453,14 @@ namespace Ibasa.Pikala
 
                     case OperandType.InlineField:
                         {
-                            var fieldInfo = DeserializeFieldInfo(state, null);
+                            var fieldInfo = DeserializeFieldInfo(state);
                             ilGenerator.Emit(opCode, fieldInfo.FieldInfo);
                             break;
                         }
 
                     case OperandType.InlineMethod:
                         {
-                            var methodBase = DeserializeMethodBase(state, null);
+                            var methodBase = DeserializeMethodBase(state);
                             methodBase.Emit(ilGenerator, opCode);
                             break;
                         }
@@ -615,7 +613,7 @@ namespace Ibasa.Pikala
             var isInterface = constructingType.TypeDef == TypeDef.Interface;
             var typeBuilder = constructingType.TypeBuilder;
 
-            var typeContext = new DeserializationTypeContext(constructingType.GenericParameters, null, null);
+            var typeContext = new DeserializationTypeContext(constructingType.GenericParameters, null);
 
             if (!isValueType && !isInterface)
             {
@@ -783,7 +781,7 @@ namespace Ibasa.Pikala
                     ReadCustomAttributes(state, constructorBuilder.SetCustomAttribute);
 
                     var ilGenerator = constructorBuilder.GetILGenerator();
-                    DeserializeMethodBody(state, new DeserializationTypeContext(typeContext.GenericTypeParameters, null, null), constructor.Locals!, ilGenerator);
+                    DeserializeMethodBody(state, new DeserializationTypeContext(typeContext.GenericTypeParameters, null), constructor.Locals!, ilGenerator);
                 }
                 foreach (var method in constructingType.Methods)
                 {
@@ -796,7 +794,7 @@ namespace Ibasa.Pikala
                     else
                     {
                         var ilGenerator = methodBuilder.GetILGenerator();
-                        DeserializeMethodBody(state, new DeserializationTypeContext(typeContext.GenericTypeParameters, method.GenericParameters, null), method.Locals!, ilGenerator);
+                        DeserializeMethodBody(state, new DeserializationTypeContext(typeContext.GenericTypeParameters, method.GenericParameters), method.Locals!, ilGenerator);
                     }
                 }
                 foreach (var property in constructingType.Properties)
@@ -908,7 +906,7 @@ namespace Ibasa.Pikala
                     constructorBuilder.DefineParameter(2, ParameterAttributes.None, "method"),
                 };
 
-                var typeContext = new DeserializationTypeContext(constructingType.GenericParameters, null, null);
+                var typeContext = new DeserializationTypeContext(constructingType.GenericParameters, null);
 
                 var constructingConstructor = new PickledConstructorInfoDef(constructingType, constructorBuilder, parameters, constructorParameters, null);
                 constructingType.Constructors = new PickledConstructorInfoDef[] { constructingConstructor };
@@ -1142,7 +1140,7 @@ namespace Ibasa.Pikala
 
         private object DeserializeReducer(PicklerDeserializationState state)
         {
-            var method = DeserializeMethodBase(state, default);
+            var method = DeserializeMethodBase(state);
 
             object? target;
             if (method is PickledConstructorInfo)
@@ -1191,67 +1189,51 @@ namespace Ibasa.Pikala
             return uninitalizedObject;
         }
 
-        private PickledFieldInfo DeserializeFieldRef(PicklerDeserializationState state, PickledTypeInfo? contextType)
+        private PickledFieldInfo DeserializeFieldRef(PicklerDeserializationState state)
         {
             return state.RunWithTrailers(() =>
             {
                 var position = state.Reader.BaseStream.Position;
                 var name = state.Reader.ReadString();
-                var type = contextType;
-                if (type == null)
-                {
-                    type = DeserializeType(state, default);
-                }
+                var type = DeserializeType(state, default);
                 return state.SetMemo(position, true, type.GetField(name));
             });
         }
 
-        private PickledPropertyInfo DeserializePropertyRef(PicklerDeserializationState state, PickledTypeInfo? contextType)
+        private PickledPropertyInfo DeserializePropertyRef(PicklerDeserializationState state)
         {
             return state.RunWithTrailers(() =>
             {
                 var position = state.Reader.BaseStream.Position;
                 var signature = DeserializeSignature(state);
-                var type = contextType;
-                if (type == null)
-                {
-                    type = DeserializeType(state, default);
-                }
+                var type = DeserializeType(state, default);
                 return state.SetMemo(position, true, type.GetProperty(signature));
             });
         }
 
-        private PickledEventInfo DeserializeEventRef(PicklerDeserializationState state, PickledTypeInfo? contextType)
+        private PickledEventInfo DeserializeEventRef(PicklerDeserializationState state)
         {
             return state.RunWithTrailers(() =>
             {
                 var position = state.Reader.BaseStream.Position;
                 var name = state.Reader.ReadString();
-                var type = contextType;
-                if (type == null)
-                {
-                    type = DeserializeType(state, default);
-                }
+                var type = DeserializeType(state, default);
                 return state.SetMemo(position, true, type.GetEvent(name));
             });
         }
 
-        private PickledConstructorInfo DeserializeConstructorRef(PicklerDeserializationState state, PickledTypeInfo? contextType)
+        private PickledConstructorInfo DeserializeConstructorRef(PicklerDeserializationState state)
         {
             return state.RunWithTrailers(() =>
             {
                 var position = state.Reader.BaseStream.Position;
                 var signature = DeserializeSignature(state);
-                var type = contextType;
-                if (type == null)
-                {
-                    type = DeserializeType(state, default);
-                }
+                var type = DeserializeType(state, default);
                 return state.SetMemo(position, true, type.GetConstructor(signature));
             });
         }
 
-        private PickledMethodInfo DeserializeMethodRef(PicklerDeserializationState state, PickledTypeInfo? contextType)
+        private PickledMethodInfo DeserializeMethodRef(PicklerDeserializationState state)
         {
             return state.RunWithTrailers(() =>
             {
@@ -1268,11 +1250,7 @@ namespace Ibasa.Pikala
                     }
                 }
 
-                var type = contextType;
-                if (type == null)
-                {
-                    type = DeserializeType(state, default);
-                }
+                var type = DeserializeType(state, default);
 
                 var methodInfo = type.GetMethod(signature);
 
@@ -1290,7 +1268,7 @@ namespace Ibasa.Pikala
             for (int i = 0; i < invocationList.Length; ++i)
             {
                 var target = Deserialize(state, typeof(object));
-                var method = DeserializeMethodInfo(state, default);
+                var method = DeserializeMethodInfo(state);
                 invocationList[i] = Delegate.CreateDelegate(delegateType, target, method.MethodInfo);
             }
             return state.SetMemo(position, true, Delegate.Combine(invocationList)!);
@@ -1320,41 +1298,331 @@ namespace Ibasa.Pikala
             return state.SetMemo(position, ShouldMemo(assembly), assembly);
         }
 
-        private void ReadCustomAttributes(PicklerDeserializationState state, Action<CustomAttributeBuilder> setCustomAttribute)
+        private void ReadCustomAttributes(PicklerDeserializationState state, Action<ConstructorInfo, byte[]> setCustomAttribute)
         {
+            var buffer = new MemoryStream();
+            var writer = new BinaryWriter(buffer);
+
+            void WriteString(string str)
+            {
+                // Strings are emitted with a length prefix in a compressed format (1, 2 or 4 bytes) as used internally by metadata.
+                byte[] utf8Str = System.Text.Encoding.UTF8.GetBytes(str);
+                uint length = (uint)utf8Str.Length;
+                if (length <= 0x7f)
+                {
+                    writer.Write((byte)length);
+                }
+                else if (length <= 0x3fff)
+                {
+                    writer.Write(System.Buffers.Binary.BinaryPrimitives.ReverseEndianness((short)(length | 0x80_00)));
+                }
+                else
+                {
+                    writer.Write(System.Buffers.Binary.BinaryPrimitives.ReverseEndianness(length | 0xC0_00_00_00));
+                }
+                writer.Write(utf8Str);
+            }
+
+            void CopyValue(Type type)
+            {
+                // Read a value of type 'type' from the pickle stream and write it to the buffer in ECMA blob format.
+                // This is mostly a copy of bytes but our encoding of arrays, strings, and types differs.
+
+                if (type.IsEnum)
+                {
+                    switch (Type.GetTypeCode(Enum.GetUnderlyingType(type)))
+                    {
+                        case TypeCode.SByte:
+                            writer.Write(state.Reader.ReadSByte());
+                            break;
+                        case TypeCode.Byte:
+                            writer.Write(state.Reader.ReadByte());
+                            break;
+                        case TypeCode.Int16:
+                            writer.Write(state.Reader.ReadInt16());
+                            break;
+                        case TypeCode.UInt16:
+                            writer.Write(state.Reader.ReadUInt16());
+                            break;
+                        case TypeCode.Int32:
+                            writer.Write(state.Reader.ReadInt32());
+                            break;
+                        case TypeCode.UInt32:
+                            writer.Write(state.Reader.ReadUInt32());
+                            break;
+                        case TypeCode.Int64:
+                            writer.Write(state.Reader.ReadInt64());
+                            break;
+                        case TypeCode.UInt64:
+                            writer.Write(state.Reader.ReadUInt64());
+                            break;
+                        default:
+                            throw new Exception("Invalid base type for enum");
+                    }
+                }
+                else if (type == typeof(string))
+                {
+                    var value = state.Reader.ReadNullableString();
+                    if (value == null)
+                    {
+                        writer.Write((byte)0xFF);
+                    }
+                    else
+                    {
+                        WriteString(value);
+                    }
+                }
+                else if (type == typeof(Type))
+                {
+                    var isNotNull = state.Reader.ReadBoolean();
+                    if (!isNotNull)
+                    {
+                        writer.Write((byte)0xFF);
+                    }
+                    else
+                    {
+                        var value = DeserializeType(state, default);
+                        WriteString(value.Type.AssemblyQualifiedName!);
+                    }
+                }
+                else if (type.IsArray)
+                {
+                    var count = state.Reader.Read7BitEncodedInt();
+                    if (count == -1)
+                    {
+                        writer.Write(0xFFFFFFFF);
+                    }
+                    else
+                    {
+                        writer.Write(count);
+                        var elementType = type.GetElementType()!;
+                        for (int i = 0; i < count; ++i)
+                        {
+                            CopyValue(elementType);
+                        }
+                    }
+                }
+                else if (type.IsPrimitive)
+                {
+                    switch (Type.GetTypeCode(type))
+                    {
+                        case TypeCode.SByte:
+                            writer.Write(state.Reader.ReadSByte());
+                            break;
+                        case TypeCode.Byte:
+                            writer.Write(state.Reader.ReadByte());
+                            break;
+                        case TypeCode.Char:
+                            writer.Write(state.Reader.ReadChar());
+                            break;
+                        case TypeCode.Boolean:
+                            writer.Write(state.Reader.ReadBoolean());
+                            break;
+                        case TypeCode.Int16:
+                            writer.Write(state.Reader.ReadInt16());
+                            break;
+                        case TypeCode.UInt16:
+                            writer.Write(state.Reader.ReadUInt16());
+                            break;
+                        case TypeCode.Int32:
+                            writer.Write(state.Reader.ReadInt32());
+                            break;
+                        case TypeCode.UInt32:
+                            writer.Write(state.Reader.ReadUInt32());
+                            break;
+                        case TypeCode.Int64:
+                            writer.Write(state.Reader.ReadInt64());
+                            break;
+                        case TypeCode.UInt64:
+                            writer.Write(state.Reader.ReadUInt64());
+                            break;
+                        case TypeCode.Single:
+                            writer.Write(state.Reader.ReadSingle());
+                            break;
+                        case TypeCode.Double:
+                            writer.Write(state.Reader.ReadDouble());
+                            break;
+                        default:
+                            throw new Exception("Invalid primitive type for attribute");
+                    }
+                }
+                else if (type == typeof(object))
+                {
+                    var taggedType = ReadType();
+                    WriteType(taggedType);
+                    CopyValue(taggedType);
+                }
+                else
+                {
+                    throw new Exception($"Unsupported type for attrtibute value: {type}");
+                }
+            }
+
+            void WriteType(Type type)
+            {
+                if (type.IsPrimitive)
+                {
+                    switch (Type.GetTypeCode(type))
+                    {
+                        case TypeCode.SByte:
+                            writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.SByte);
+                            break;
+                        case TypeCode.Byte:
+                            writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Byte);
+                            break;
+                        case TypeCode.Char:
+                            writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Char);
+                            break;
+                        case TypeCode.Boolean:
+                            writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Boolean);
+                            break;
+                        case TypeCode.Int16:
+                            writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Int16);
+                            break;
+                        case TypeCode.UInt16:
+                            writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.UInt16);
+                            break;
+                        case TypeCode.Int32:
+                            writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Int32);
+                            break;
+                        case TypeCode.UInt32:
+                            writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.UInt32);
+                            break;
+                        case TypeCode.Int64:
+                            writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Int64);
+                            break;
+                        case TypeCode.UInt64:
+                            writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.UInt64);
+                            break;
+                        case TypeCode.Single:
+                            writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Single);
+                            break;
+                        case TypeCode.Double:
+                            writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Double);
+                            break;
+                        default:
+                            throw new Exception("Invalid primitive type for attribute");
+                    }
+                }
+                else if (type.IsEnum)
+                {
+                    writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Enum);
+                    WriteString(type.AssemblyQualifiedName!);
+                }
+                else if (type == typeof(string))
+                {
+                    writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.String);
+                }
+                else if (type == typeof(Type))
+                {
+                    writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Type);
+                }
+                else if (type.IsArray)
+                {
+                    writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.SZArray);
+                    WriteType(type.GetElementType()!);
+                }
+                else
+                {
+                    writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.TaggedObject);
+                }
+            }
+
+            Type ReadType()
+            {
+                var typeCode = (System.Reflection.Metadata.SerializationTypeCode)state.Reader.ReadByte();
+
+                switch (typeCode)
+                {
+                    case System.Reflection.Metadata.SerializationTypeCode.SByte:
+                        return typeof(sbyte);
+                    case System.Reflection.Metadata.SerializationTypeCode.Byte:
+                        return typeof(byte);
+                    case System.Reflection.Metadata.SerializationTypeCode.Char:
+                        return typeof(char);
+                    case System.Reflection.Metadata.SerializationTypeCode.Boolean:
+                        return typeof(bool);
+                    case System.Reflection.Metadata.SerializationTypeCode.Int16:
+                        return typeof(short);
+                    case System.Reflection.Metadata.SerializationTypeCode.UInt16:
+                        return typeof(ushort);
+                    case System.Reflection.Metadata.SerializationTypeCode.Int32:
+                        return typeof(int);
+                    case System.Reflection.Metadata.SerializationTypeCode.UInt32:
+                        return typeof(uint);
+                    case System.Reflection.Metadata.SerializationTypeCode.Int64:
+                        return typeof(long);
+                    case System.Reflection.Metadata.SerializationTypeCode.UInt64:
+                        return typeof(ulong);
+                    case System.Reflection.Metadata.SerializationTypeCode.Single:
+                        return typeof(float);
+                    case System.Reflection.Metadata.SerializationTypeCode.Double:
+                        return typeof(double);
+                    case System.Reflection.Metadata.SerializationTypeCode.String:
+                        return typeof(string);
+                    case System.Reflection.Metadata.SerializationTypeCode.Type:
+                        return typeof(Type);
+                    case System.Reflection.Metadata.SerializationTypeCode.TaggedObject:
+                        return typeof(object);
+                    case System.Reflection.Metadata.SerializationTypeCode.Enum:
+                        return DeserializeType(state, default).Type;
+                    case System.Reflection.Metadata.SerializationTypeCode.SZArray:
+                        return ReadType().MakeArrayType();
+                }
+
+                throw new Exception($"Unhandled type code: {typeCode}");
+            }
+
             var attributeCount = state.Reader.Read7BitEncodedInt();
             for (int i = 0; i < attributeCount; ++i)
             {
-                var attributeType = DeserializeType(state, default);
+                var constructor = DeserializeConstructorInfo(state);
 
-                var constructor = DeserializeConstructorInfo(state, attributeType);
-                var arguments = new object?[state.Reader.Read7BitEncodedInt()];
-                for (int j = 0; j < arguments.Length; ++j)
+                // We need to build the attribute binary manually because using CustomAttributeBuilder invokes type loads for verification checks we don't need.
+                buffer.SetLength(0);
+
+                // Write the blob header
+                writer.Write((ushort)1);
+
+                // First copy the fixed constructor attributes
+                foreach (var parameter in constructor.GetParameters())
                 {
-                    arguments[j] = Deserialize(state, typeof(object));
+                    CopyValue(parameter);
                 }
 
-                var namedProperties = new PropertyInfo[state.Reader.Read7BitEncodedInt()];
-                var propertyValues = new object?[namedProperties.Length];
-                for (int j = 0; j < namedProperties.Length; ++j)
+                // Read the total number of fields and properties and write out the combined number to the blob stream
+                var fieldCount = state.Reader.Read7BitEncodedInt();
+                var propertyCount = state.Reader.Read7BitEncodedInt();
+
+                writer.Write((ushort)(fieldCount + propertyCount));
+
+                // Read in the fields and copy them to the blob stream
+                for (int j = 0; j < fieldCount; ++j)
                 {
-                    var propertyInfo = DeserializePropertyInfo(state, attributeType);
-                    namedProperties[j] = propertyInfo.PropertyInfo;
-                    propertyValues[j] = Deserialize(state, namedProperties[j].PropertyType);
+                    writer.Write((byte)System.Reflection.Metadata.CustomAttributeNamedArgumentKind.Field);
+
+                    var itemType = ReadType();
+                    var itemName = state.Reader.ReadString();
+
+                    WriteType(itemType);
+                    writer.Write(itemName);
+                    CopyValue(itemType);
                 }
 
-                var namedFields = new FieldInfo[state.Reader.Read7BitEncodedInt()];
-                var fieldValues = new object?[namedFields.Length];
-                for (int j = 0; j < namedFields.Length; ++j)
+                // Read in the properties and copy them to the blob stream
+                for (int j = 0; j < propertyCount; ++j)
                 {
-                    var pickledField = DeserializeFieldInfo(state, attributeType);
-                    namedFields[j] = pickledField.FieldInfo;
-                    fieldValues[j] = Deserialize(state, namedFields[j].FieldType);
+                    writer.Write((byte)System.Reflection.Metadata.CustomAttributeNamedArgumentKind.Property);
+
+                    var itemType = ReadType();
+                    var itemName = state.Reader.ReadString();
+
+                    WriteType(itemType);
+                    writer.Write(itemName);
+                    CopyValue(itemType);
                 }
 
-                var customBuilder = new CustomAttributeBuilder(constructor.ConstructorInfo, arguments, namedProperties, propertyValues, namedFields, fieldValues);
-
-                setCustomAttribute(customBuilder);
+                setCustomAttribute(constructor.ConstructorInfo, buffer.ToArray());
             }
         }
 
@@ -1629,7 +1897,7 @@ namespace Ibasa.Pikala
                     {
                         ReadCustomAttributes(state, method.MethodBuilder.SetCustomAttribute);
                         var ilGenerator = method.MethodBuilder.GetILGenerator();
-                        DeserializeMethodBody(state, new DeserializationTypeContext(null, method.GenericParameters, null), method.Locals!, ilGenerator);
+                        DeserializeMethodBody(state, new DeserializationTypeContext(null, method.GenericParameters), method.Locals!, ilGenerator);
                     }
                 },
                 () => moduleBuilder.CreateGlobalFunctions(),
@@ -1662,7 +1930,7 @@ namespace Ibasa.Pikala
             }
             else
             {
-                var method = DeserializeMethodInfo(state, default);
+                var method = DeserializeMethodInfo(state);
                 genericParameter = method.GetGenericArgument(genericParameterPosition);
             }
             return state.SetMemo(position, true, genericParameter);
@@ -1883,7 +2151,7 @@ namespace Ibasa.Pikala
             throw new Exception($"Unexpected operation '{operation}' for Type");
         }
 
-        private PickledFieldInfo DeserializeFieldInfo(PicklerDeserializationState state, PickledTypeInfo? contextType)
+        private PickledFieldInfo DeserializeFieldInfo(PicklerDeserializationState state)
         {
             var objectOperation = (ObjectOperation)state.Reader.ReadByte();
             switch (objectOperation)
@@ -1901,10 +2169,10 @@ namespace Ibasa.Pikala
                     throw new Exception($"Unexpected operation '{objectOperation}' for FieldInfo");
             }
 
-            return DeserializeFieldRef(state, contextType);
+            return DeserializeFieldRef(state);
         }
 
-        private PickledPropertyInfo DeserializePropertyInfo(PicklerDeserializationState state, PickledTypeInfo? contextType)
+        private PickledPropertyInfo DeserializePropertyInfo(PicklerDeserializationState state)
         {
             var objectOperation = (ObjectOperation)state.Reader.ReadByte();
             switch (objectOperation)
@@ -1922,10 +2190,10 @@ namespace Ibasa.Pikala
                     throw new Exception($"Unexpected operation '{objectOperation}' for PropertyInfo");
             }
 
-            return DeserializePropertyRef(state, contextType);
+            return DeserializePropertyRef(state);
         }
 
-        private PickledConstructorInfo DeserializeConstructorInfo(PicklerDeserializationState state, PickledTypeInfo? contextType)
+        private PickledConstructorInfo DeserializeConstructorInfo(PicklerDeserializationState state)
         {
             var objectOperation = (ObjectOperation)state.Reader.ReadByte();
             switch (objectOperation)
@@ -1943,10 +2211,10 @@ namespace Ibasa.Pikala
                     throw new Exception($"Unexpected operation '{objectOperation}' for ConstructorInfo");
             }
 
-            return DeserializeConstructorRef(state, contextType);
+            return DeserializeConstructorRef(state);
         }
 
-        private PickledMethodInfo DeserializeMethodInfo(PicklerDeserializationState state, PickledTypeInfo? contextType)
+        private PickledMethodInfo DeserializeMethodInfo(PicklerDeserializationState state)
         {
             var objectOperation = (ObjectOperation)state.Reader.ReadByte();
             switch (objectOperation)
@@ -1964,10 +2232,10 @@ namespace Ibasa.Pikala
                     throw new Exception($"Unexpected operation '{objectOperation}' for MethodInfo");
             }
 
-            return DeserializeMethodRef(state, contextType);
+            return DeserializeMethodRef(state);
         }
 
-        private PickledMethodBase DeserializeMethodBase(PicklerDeserializationState state, PickledTypeInfo? contextType)
+        private PickledMethodBase DeserializeMethodBase(PicklerDeserializationState state)
         {
             var objectOperation = (ObjectOperation)state.Reader.ReadByte();
             switch (objectOperation)
@@ -1992,17 +2260,17 @@ namespace Ibasa.Pikala
 
             if (runtimeType == typeof(MethodInfo))
             {
-                return DeserializeMethodRef(state, contextType);
+                return DeserializeMethodRef(state);
             }
             else if (runtimeType == typeof(ConstructorInfo))
             {
-                return DeserializeConstructorRef(state, contextType);
+                return DeserializeConstructorRef(state);
             }
 
             throw new Exception($"Unexpected type '{runtimeType}' for MethodBase");
         }
 
-        private PickledMemberInfo DeserializeMemberInfo(PicklerDeserializationState state, PickledTypeInfo? contextType)
+        private PickledMemberInfo DeserializeMemberInfo(PicklerDeserializationState state)
         {
             var objectOperation = (ObjectOperation)state.Reader.ReadByte();
             switch (objectOperation)
@@ -2027,23 +2295,23 @@ namespace Ibasa.Pikala
 
             if (runtimeType == typeof(FieldInfo))
             {
-                return DeserializeFieldRef(state, contextType);
+                return DeserializeFieldRef(state);
             }
             else if (runtimeType == typeof(PropertyInfo))
             {
-                return DeserializePropertyRef(state, contextType);
+                return DeserializePropertyRef(state);
             }
             else if (runtimeType == typeof(EventInfo))
             {
-                return DeserializeEventRef(state, contextType);
+                return DeserializeEventRef(state);
             }
             else if (runtimeType == typeof(MethodInfo))
             {
-                return DeserializeMethodRef(state, contextType);
+                return DeserializeMethodRef(state);
             }
             else if (runtimeType == typeof(ConstructorInfo))
             {
-                return DeserializeConstructorRef(state, contextType);
+                return DeserializeConstructorRef(state);
             }
             else if (runtimeType == typeof(Type))
             {
@@ -2260,23 +2528,23 @@ namespace Ibasa.Pikala
 
             else if (runtimeType == typeof(FieldInfo))
             {
-                return DeserializeFieldRef(state, default).FieldInfo;
+                return DeserializeFieldRef(state).FieldInfo;
             }
             else if (runtimeType == typeof(PropertyInfo))
             {
-                return DeserializePropertyRef(state, default).PropertyInfo;
+                return DeserializePropertyRef(state).PropertyInfo;
             }
             else if (runtimeType == typeof(EventInfo))
             {
-                return DeserializeEventRef(state, default).EventInfo;
+                return DeserializeEventRef(state).EventInfo;
             }
             else if (runtimeType == typeof(MethodInfo))
             {
-                return DeserializeMethodRef(state, default).MethodInfo;
+                return DeserializeMethodRef(state).MethodInfo;
             }
             else if (runtimeType == typeof(ConstructorInfo))
             {
-                return DeserializeConstructorRef(state, default).ConstructorInfo;
+                return DeserializeConstructorRef(state).ConstructorInfo;
             }
 
             // TODO we want to do this via info flags eventually but due to the dumb way we handle arrays it easier to do this for now

@@ -571,7 +571,7 @@ namespace Ibasa.Pikala
                             var fieldToken = ilReader.ReadInt32();
                             var fieldInfo = methodModule.ResolveField(fieldToken, genericTypeParameters, genericMethodParameters);
                             if (fieldInfo == null) throw new Exception($"Could not look up field for metadata token: 0x{fieldToken:x}");
-                            SerializeFieldInfo(state, null, fieldInfo);
+                            SerializeFieldInfo(state, fieldInfo);
                             break;
                         }
 
@@ -1078,63 +1078,259 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void WriteCustomAttributeValue(PicklerSerializationState state, object? value, Type staticType)
-        {
-            // argument might be a ReadOnlyCollection[CustomAttributeTypedArgument] but we should write that as just an array of values
-            if (value is System.Collections.ObjectModel.ReadOnlyCollection<CustomAttributeTypedArgument> collection)
-            {
-                var result = new object?[collection.Count];
-                for (int i = 0; i < result.Length; ++i)
-                {
-                    result[i] = collection[i].Value;
-                }
-                // TODO Looking at this I'm not sure it's safe? How does deserialize tell if it was ReadOnlyCollection<CustomAttributeTypedArgument> or not?
-                Serialize(state, result, typeof(object?[]));
-            }
-            else
-            {
-                Serialize(state, value, staticType);
-            }
-        }
-
         private void WriteCustomAttributes(PicklerSerializationState state, CustomAttributeData[] attributes)
         {
+            void WriteType(Type type)
+            {
+                if (type.IsPrimitive)
+                {
+                    switch (Type.GetTypeCode(type))
+                    {
+                        case TypeCode.SByte:
+                            state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.SByte);
+                            break;
+                        case TypeCode.Byte:
+                            state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Byte);
+                            break;
+                        case TypeCode.Char:
+                            state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Char);
+                            break;
+                        case TypeCode.Boolean:
+                            state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Boolean);
+                            break;
+                        case TypeCode.Int16:
+                            state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Int16);
+                            break;
+                        case TypeCode.UInt16:
+                            state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.UInt16);
+                            break;
+                        case TypeCode.Int32:
+                            state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Int32);
+                            break;
+                        case TypeCode.UInt32:
+                            state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.UInt32);
+                            break;
+                        case TypeCode.Int64:
+                            state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Int64);
+                            break;
+                        case TypeCode.UInt64:
+                            state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.UInt64);
+                            break;
+                        case TypeCode.Single:
+                            state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Single);
+                            break;
+                        case TypeCode.Double:
+                            state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Double);
+                            break;
+                        default:
+                            throw new Exception("Invalid primitive type for attribute");
+                    }
+                }
+                else if (type.IsEnum)
+                {
+                    state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Enum);
+                    SerializeType(state, type, null, null);
+                }
+                else if (type == typeof(string))
+                {
+                    state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.String);
+                }
+                else if (type == typeof(Type))
+                {
+                    state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Type);
+                }
+                else if (type.IsArray)
+                {
+                    state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.SZArray);
+                    WriteType(type.GetElementType()!);
+                }
+                else
+                {
+                    state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.TaggedObject);
+                }
+            }
+
+
+            void WriteValue(Type type, object? value)
+            {
+                if (type.IsEnum)
+                {
+                    switch (Type.GetTypeCode(Enum.GetUnderlyingType(type)))
+                    {
+                        case TypeCode.SByte:
+                            state.Writer.Write((sbyte)value!);
+                            break;
+                        case TypeCode.Byte:
+                            state.Writer.Write((byte)value!);
+                            break;
+                        case TypeCode.Int16:
+                            state.Writer.Write((short)value!);
+                            break;
+                        case TypeCode.UInt16:
+                            state.Writer.Write((ushort)value!);
+                            break;
+                        case TypeCode.Int32:
+                            state.Writer.Write((int)value!);
+                            break;
+                        case TypeCode.UInt32:
+                            state.Writer.Write((uint)value!);
+                            break;
+                        case TypeCode.Int64:
+                            state.Writer.Write((long)value!);
+                            break;
+                        case TypeCode.UInt64:
+                            state.Writer.Write((ulong)value!);
+                            break;
+                        default:
+                            throw new Exception("Invalid base type for enum");
+                    }
+                }
+                else if (type == typeof(string))
+                {
+                    state.Writer.WriteNullableString(value as string);
+                }
+                else if (type == typeof(Type))
+                {
+                    if (value == null)
+                    {
+                        state.Writer.Write(false);
+                    }
+                    else
+                    {
+                        // SerializeType doesn't support null so we write a bool flag out first to tell if this is null or not
+                        state.Writer.Write(true);
+                        SerializeType(state, type, null, null);
+                    }
+                }
+                else if (type.IsArray)
+                {
+                    if (value == null)
+                    {
+                        state.Writer.Write7BitEncodedInt(-1);
+                    }
+                    else
+                    {
+                        Type elementType = type.GetElementType()!;
+
+                        // argument might be a ReadOnlyCollection[CustomAttributeTypedArgument] but we should write that as just an array of values
+                        if (value is System.Collections.ObjectModel.ReadOnlyCollection<CustomAttributeTypedArgument> collection)
+                        {
+                            state.Writer.Write7BitEncodedInt(collection.Count);
+                            for (int i = 0; i < collection.Count; ++i)
+                            {
+                                WriteValue(elementType, collection[i].Value);
+                            }
+                        }
+                        else if (value is Array arr)
+                        {
+                            state.Writer.Write7BitEncodedInt(arr.Length);
+                            for (int i = 0; i < arr.Length; ++i)
+                            {
+                                WriteValue(elementType, arr.GetValue(i));
+                            }
+                        }
+                        else
+                        {
+                            throw new Exception($"Unsupported array type for attrtibute value: {value.GetType()}");
+                        }
+                    }
+                }
+                else if (type.IsPrimitive)
+                {
+                    switch (Type.GetTypeCode(type))
+                    {
+                        case TypeCode.SByte:
+                            state.Writer.Write((sbyte)value!);
+                            break;
+                        case TypeCode.Byte:
+                            state.Writer.Write((byte)value!);
+                            break;
+                        case TypeCode.Char:
+                            state.Writer.Write((char)value!);
+                            break;
+                        case TypeCode.Boolean:
+                            state.Writer.Write((bool)value!);
+                            break;
+                        case TypeCode.Int16:
+                            state.Writer.Write((short)value!);
+                            break;
+                        case TypeCode.UInt16:
+                            state.Writer.Write((ushort)value!);
+                            break;
+                        case TypeCode.Int32:
+                            state.Writer.Write((int)value!);
+                            break;
+                        case TypeCode.UInt32:
+                            state.Writer.Write((uint)value!);
+                            break;
+                        case TypeCode.Int64:
+                            state.Writer.Write((long)value!);
+                            break;
+                        case TypeCode.UInt64:
+                            state.Writer.Write((ulong)value!);
+                            break;
+                        case TypeCode.Single:
+                            state.Writer.Write((float)value!);
+                            break;
+                        case TypeCode.Double:
+                            state.Writer.Write((double)value!);
+                            break;
+                        default:
+                            throw new Exception("Invalid primitive type for attribute");
+                    }
+                }
+                else if (type == typeof(object))
+                {
+                    // Tagged object case. Type instances aren't actually Type, they're some subclass (such as RuntimeType or
+                    // TypeBuilder), so we need to canonicalize this case back to Type. If we have a null value we follow the convention
+                    // used by C# and emit a null typed as a string (it doesn't really matter what type we pick as long as it's a
+                    // reference type).
+                    Type ot = value == null ? typeof(string) : value is Type ? typeof(Type) : value.GetType();
+
+                    WriteType(ot);
+                    WriteValue(ot, value);
+                }
+                else
+                {
+                    throw new Exception($"Unsupported type for attrtibute value: {type}");
+                }
+            }
+
             state.Writer.Write7BitEncodedInt(attributes.Length);
             foreach (var attribute in attributes)
             {
-                SerializeType(state, attribute.AttributeType, null, null);
+                SerializeConstructorInfo(state, attribute.Constructor);
 
-                SerializeConstructorInfo(state, attribute.AttributeType, attribute.Constructor);
-                state.Writer.Write7BitEncodedInt(attribute.ConstructorArguments.Count);
                 foreach (var argument in attribute.ConstructorArguments)
                 {
-                    WriteCustomAttributeValue(state, argument.Value, typeof(object));
+                    WriteValue(argument.ArgumentType, argument.Value);
                 }
 
                 var fieldCount = attribute.NamedArguments.Count(argument => argument.IsField);
                 var propertyCount = attribute.NamedArguments.Count - fieldCount;
 
-                state.Writer.Write7BitEncodedInt(propertyCount);
-                foreach (var argument in attribute.NamedArguments)
-                {
-                    if (!argument.IsField)
-                    {
-                        var property = (PropertyInfo)argument.MemberInfo;
-                        SerializePropertyInfo(state, attribute.AttributeType, property);
-                        var value = argument.TypedValue.Value;
-                        WriteCustomAttributeValue(state, value, property.PropertyType);
-                    }
-                }
-
                 state.Writer.Write7BitEncodedInt(fieldCount);
+                state.Writer.Write7BitEncodedInt(propertyCount);
+
                 foreach (var argument in attribute.NamedArguments)
                 {
                     if (argument.IsField)
                     {
-                        var field = (FieldInfo)argument.MemberInfo;
-                        SerializeFieldInfo(state, attribute.AttributeType, field);
-                        var value = argument.TypedValue.Value;
-                        WriteCustomAttributeValue(state, value, field.FieldType);
+                        var value = argument.TypedValue;
+                        WriteType(value.ArgumentType);
+                        state.Writer.Write(argument.MemberName);
+                        WriteValue(value.ArgumentType, value.Value);
+                    }
+                }
+
+                foreach (var argument in attribute.NamedArguments)
+                {
+                    if (!argument.IsField)
+                    {
+                        var value = argument.TypedValue;
+                        WriteType(value.ArgumentType);
+                        state.Writer.Write(argument.MemberName);
+                        WriteValue(value.ArgumentType, value.Value);
                     }
                 }
             }
@@ -1453,7 +1649,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeFieldInfo(PicklerSerializationState state, Type? contextType, FieldInfo field, bool skipHeader = false)
+        private void SerializeFieldInfo(PicklerSerializationState state, FieldInfo field, bool skipHeader = false)
         {
             if (Object.ReferenceEquals(field, null))
             {
@@ -1477,18 +1673,12 @@ namespace Ibasa.Pikala
 
             state.RunWithTrailers(() =>
             {
-                System.Diagnostics.Debug.Assert(contextType == null || contextType == field.ReflectedType);
-
                 state.Writer.Write(field.Name);
-
-                if (contextType == null)
-                {
-                    SerializeType(state, field.ReflectedType, null, null);
-                }
+                SerializeType(state, field.ReflectedType, null, null);
             });
         }
 
-        private void SerializePropertyInfo(PicklerSerializationState state, Type? contextType, PropertyInfo property, bool skipHeader = false)
+        private void SerializePropertyInfo(PicklerSerializationState state, PropertyInfo property, bool skipHeader = false)
         {
             if (Object.ReferenceEquals(property, null))
             {
@@ -1512,38 +1702,24 @@ namespace Ibasa.Pikala
 
             state.RunWithTrailers(() =>
             {
-                System.Diagnostics.Debug.Assert(contextType == null || contextType == property.ReflectedType);
-
                 SerializeSignature(state, Signature.GetSignature(property));
-
-                if (contextType == null)
-                {
-                    SerializeType(state, property.ReflectedType, null, null);
-                }
+                SerializeType(state, property.ReflectedType, null, null);
             });
         }
 
-        private void SerializeEventInfo(PicklerSerializationState state, Type? contextType, EventInfo evt)
+        private void SerializeEventInfo(PicklerSerializationState state, EventInfo evt)
         {
             state.RunWithTrailers(() =>
             {
-                System.Diagnostics.Debug.Assert(contextType == null || contextType == evt.ReflectedType);
-
                 state.Writer.Write(evt.Name);
-
-                if (contextType == null)
-                {
-                    SerializeType(state, evt.ReflectedType, null, null);
-                }
+                SerializeType(state, evt.ReflectedType, null, null);
             });
         }
 
-        private void SerializeMethodInfo(PicklerSerializationState state, Type? contextType, MethodInfo method)
+        private void SerializeMethodInfo(PicklerSerializationState state, MethodInfo method)
         {
             state.RunWithTrailers(() =>
             {
-                System.Diagnostics.Debug.Assert(contextType == null || contextType == method.ReflectedType);
-
                 if (method.IsConstructedGenericMethod)
                 {
                     var genericArguments = method.GetGenericArguments();
@@ -1560,14 +1736,11 @@ namespace Ibasa.Pikala
                     state.Writer.Write7BitEncodedInt(0);
                 }
 
-                if (contextType == null)
-                {
-                    SerializeType(state, method.ReflectedType, null, null);
-                }
+                SerializeType(state, method.ReflectedType, null, null);
             });
         }
 
-        private void SerializeConstructorInfo(PicklerSerializationState state, Type? contextType, ConstructorInfo constructor, bool skipHeader = false)
+        private void SerializeConstructorInfo(PicklerSerializationState state, ConstructorInfo constructor, bool skipHeader = false)
         {
             if (Object.ReferenceEquals(constructor, null))
             {
@@ -1591,14 +1764,8 @@ namespace Ibasa.Pikala
 
             state.RunWithTrailers(() =>
             {
-                System.Diagnostics.Debug.Assert(contextType == null || contextType == constructor.ReflectedType);
-
                 SerializeSignature(state, Signature.GetSignature(constructor));
-
-                if (contextType == null)
-                {
-                    SerializeType(state, constructor.ReflectedType, null, null);
-                }
+                SerializeType(state, constructor.ReflectedType, null, null);
             });
         }
 
@@ -2022,27 +2189,27 @@ namespace Ibasa.Pikala
 
             else if (obj is FieldInfo fieldInfo)
             {
-                SerializeFieldInfo(state, null, fieldInfo, true);
+                SerializeFieldInfo(state, fieldInfo, true);
                 return;
             }
             else if (obj is PropertyInfo propertyInfo)
             {
-                SerializePropertyInfo(state, null, propertyInfo, true);
+                SerializePropertyInfo(state, propertyInfo, true);
                 return;
             }
             else if (obj is EventInfo eventInfo)
             {
-                SerializeEventInfo(state, null, eventInfo);
+                SerializeEventInfo(state, eventInfo);
                 return;
             }
             else if (obj is MethodInfo methodInfo)
             {
-                SerializeMethodInfo(state, null, methodInfo);
+                SerializeMethodInfo(state, methodInfo);
                 return;
             }
             else if (obj is ConstructorInfo constructorInfo)
             {
-                SerializeConstructorInfo(state, null, constructorInfo, true);
+                SerializeConstructorInfo(state, constructorInfo, true);
                 return;
             }
 

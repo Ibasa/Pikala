@@ -971,6 +971,8 @@ namespace Ibasa.Pikala
         {
             ilGenerator.Emit(opCode, ConstructorInfo);
         }
+
+        public abstract Type[] GetParameters();
     }
 
     sealed class PickledConstructorInfoRef : PickledConstructorInfo
@@ -980,6 +982,17 @@ namespace Ibasa.Pikala
         public PickledConstructorInfoRef(ConstructorInfo constructorInfo)
         {
             ConstructorInfo = constructorInfo;
+        }
+
+        public override Type[] GetParameters()
+        {
+            var rawParameters = ConstructorInfo.GetParameters();
+            var refParameters = new Type[rawParameters.Length];
+            for (int i = 0; i < rawParameters.Length; ++i)
+            {
+                refParameters[i] = rawParameters[i].ParameterType;
+            }
+            return refParameters;
         }
     }
 
@@ -1015,6 +1028,12 @@ namespace Ibasa.Pikala
 
                 throw new Exception($"Could not load constructor '{signature}' from type '{ConstructingType.Type.Name}'");
             }
+        }
+
+        public override Type[] GetParameters()
+        {
+            if (ParameterTypes == null) return new Type[0];
+            return (Type[])ParameterTypes.Clone();
         }
 
         public Signature GetSignature()
