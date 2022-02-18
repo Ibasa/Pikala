@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Reflection;
-using System.Linq;
 using System.Text;
 
 namespace Ibasa.Pikala
@@ -85,9 +84,8 @@ namespace Ibasa.Pikala
             return result;
         }
 
-        public static SignatureElement[] FromParameters(ParameterInfo[]? parameters)
+        public static SignatureElement[] FromParameters(ParameterInfo[] parameters)
         {
-            if (parameters == null) { return new SignatureElement[0]; }
             var result = new SignatureElement[parameters.Length];
             for (int i = 0; i < parameters.Length; ++i)
             {
@@ -206,6 +204,7 @@ namespace Ibasa.Pikala
             System.Diagnostics.Debug.Assert(!type.IsGenericParameter);
             System.Diagnostics.Debug.Assert(!type.IsConstructedGenericType);
             System.Diagnostics.Debug.Assert(!type.HasElementType);
+            System.Diagnostics.Debug.Assert(type.FullName != null);
             Type = type;
         }
 
@@ -213,7 +212,11 @@ namespace Ibasa.Pikala
         {
             if (other is SignatureType st)
             {
-                return Type == st.Type;
+                // Check they have the same module
+                if (Type.Module != st.Type.Module) return false;
+                // Check the have the same name
+                // This is so that we match up TypeBuilders to their created types
+                return Type.FullName == st.Type.FullName;
             }
             return false;
         }
@@ -284,6 +287,7 @@ namespace Ibasa.Pikala
         public SignatureConstructedGenericType(Type genericTypeDefinition, SignatureElement[] genericArguments)
         {
             System.Diagnostics.Debug.Assert(genericTypeDefinition.IsGenericTypeDefinition);
+            System.Diagnostics.Debug.Assert(genericTypeDefinition.FullName != null);
             GenericTypeDefinition = genericTypeDefinition;
             GenericArguments = genericArguments;
         }
@@ -292,7 +296,11 @@ namespace Ibasa.Pikala
         {
             if (other is SignatureConstructedGenericType scgt)
             {
-                if (GenericTypeDefinition != scgt.GenericTypeDefinition)
+                if (GenericTypeDefinition.Module != scgt.GenericTypeDefinition.Module)
+                {
+                    return false;
+                }
+                if (GenericTypeDefinition.FullName != scgt.GenericTypeDefinition.FullName)
                 {
                     return false;
                 }

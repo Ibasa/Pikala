@@ -455,9 +455,10 @@ namespace Ibasa.Pikala
 
         public override (Type, bool) Resolve()
         {
-            if (DeclaringType.IsCreated)
+            var (resolvedType, isComplete) = DeclaringType.Resolve();
+            if (isComplete)
             {
-                var args = DeclaringType.Type.GetGenericArguments();
+                var args = resolvedType.GetGenericArguments();
                 return (args[Position], true);
             }
 
@@ -467,34 +468,56 @@ namespace Ibasa.Pikala
 
     sealed class PickledTypeInfoDef : PickledTypeInfo
     {
-        public PickledTypeInfoDef(TypeDef typeDef, TypeBuilder typeBuilder)
+        public PickledTypeInfoDef(TypeDef typeDef, TypeBuilder typeBuilder, PickledTypeInfoDef? parentType)
         {
             TypeDef = typeDef;
             TypeBuilder = typeBuilder;
+            _parentType = parentType;
         }
 
-        Type? _type = null;
-        public bool FullyDefined { get; set; }
+        PickledTypeInfoDef? _parentType;
 
-        public Type CreateType()
+        public bool FullyDefined 
         {
-            _type = TypeBuilder.CreateType();
-            if (_type == null)
-            {
-                throw new Exception($"CreateType for {TypeBuilder.Name} unexpectedly returned null");
-            }
-            return _type;
+            private get; set;
         }
-
-        public bool IsCreated { get { return _type != null; } }
 
         public TypeDef TypeDef { get; private set; }
 
         public override (Type, bool) Resolve()
         {
-            if (_type == null) return (TypeBuilder, false);
-            return (_type, true);
+            // Need to see if any base types are not resolved yet
+            bool allBaseTypesResolved = true;
+            if (BaseTypes != null)
+            {
+                foreach (var baseType in BaseTypes)
+                {
+                    var (_, isComplete) = baseType.Resolve();
+                    allBaseTypesResolved &= isComplete;
+                }
+            }
+
+            var parentTypeResolved = true;
+            if (_parentType != null)
+            {
+                var (_, isComplete) = _parentType.Resolve();
+                parentTypeResolved = isComplete;
+            }
+
+            if (parentTypeResolved && allBaseTypesResolved && FullyDefined)
+            {
+                var type = TypeBuilder.CreateType();
+                if (type == null)
+                {
+                    throw new Exception($"CreateType for {TypeBuilder.Name} unexpectedly returned null");
+                }
+                return (type, true);
+            }
+
+            return (TypeBuilder, false);
         }
+
+        public PickledTypeInfo[]? BaseTypes { get; set; }
 
         public TypeBuilder TypeBuilder { get; }
         public GenericTypeParameterBuilder[]? GenericParameters { get; set; }
@@ -662,13 +685,14 @@ namespace Ibasa.Pikala
         {
             get
             {
-                if (!DeclaringType.IsCreated)
+                var (resolvedType, isComplete) = DeclaringType.Resolve();
+                if (!isComplete)
                 {
                     return MethodBuilder;
                 }
 
                 var signature = GetSignature();
-                var methods = DeclaringType.Type.GetMethods(BindingsAll);
+                var methods = resolvedType.GetMethods(BindingsAll);
                 foreach (var method in methods)
                 {
                     if (Signature.GetSignature(method) == signature)
@@ -756,24 +780,16 @@ namespace Ibasa.Pikala
         public override (Type, bool) Resolve()
         {
             var genericArguments = new Type[GenericArguments.Length];
-            bool isComplete = true;
+            bool allArgumentsComplete = true;
             for (int i = 0; i < genericArguments.Length; ++i)
             {
                 var (argument, isCreated) = GenericArguments[i].Resolve();
-                isComplete &= isCreated;
+                allArgumentsComplete &= isCreated;
                 genericArguments[i] = argument;
             }
 
-            if (GenericType is PickledTypeInfoRef)
-            {
-                return (GenericType.Type.MakeGenericType(genericArguments), isComplete);
-            }
-            else
-            {
-                var constructingType = (PickledTypeInfoDef)GenericType;
-                var typeInfo = constructingType.Type;
-                return (typeInfo.MakeGenericType(genericArguments), isComplete & constructingType.IsCreated);
-            }
+            var (resolvedType, isComplete) = GenericType.Resolve();
+            return (resolvedType.MakeGenericType(genericArguments), isComplete & allArgumentsComplete);
         }
 
         public override PickledConstructorInfo GetConstructor(Signature signature)
@@ -1011,13 +1027,14 @@ namespace Ibasa.Pikala
         {
             get
             {
-                if (!ConstructingType.IsCreated)
+                var (resolvedType, isComplete) = ConstructingType.Resolve();
+                if (!isComplete)
                 {
                     return ConstructorBuilder;
                 }
 
                 var signature = GetSignature();
-                var constructors = ConstructingType.Type.GetConstructors(BindingsAll);
+                var constructors = resolvedType.GetConstructors(BindingsAll);
                 foreach (var constructor in constructors)
                 {
                     if (Signature.GetSignature(constructor) == signature)
@@ -1087,13 +1104,14 @@ namespace Ibasa.Pikala
         {
             get
             {
-                if (!DeclaringType.IsCreated)
+                var (resolvedType, isComplete) = DeclaringType.Resolve();
+                if (!isComplete)
                 {
                     return PropertyBuilder;
                 }
 
                 var signature = GetSignature();
-                var properties = DeclaringType.Type.GetProperties(BindingsAll);
+                var properties = resolvedType.GetProperties(BindingsAll);
                 foreach (var property in properties)
                 {
                     if (Signature.GetSignature(property) == signature)
@@ -1151,12 +1169,13 @@ namespace Ibasa.Pikala
         {
             get
             {
-                if (!DeclaringType.IsCreated)
+                var (resolvedType, isComplete) = DeclaringType.Resolve();
+                if (!isComplete)
                 {
                     throw new Exception("EventBuilder can't create an EventInfo until the type is created");
                 }
 
-                var result = DeclaringType.Type.GetEvent(Name, BindingsAll);
+                var result = resolvedType.GetEvent(Name, BindingsAll);
                 if (result == null)
                 {
                     throw new Exception($"GetField for {DeclaringType.Type.Name} unexpectedly returned null");
@@ -1228,12 +1247,13 @@ namespace Ibasa.Pikala
         {
             get
             {
-                if (!DeclaringType.IsCreated)
+                var (resolvedType, isComplete) = DeclaringType.Resolve();
+                if (!isComplete)
                 {
                     return FieldBuilder;
                 }
 
-                var result = DeclaringType.Type.GetField(FieldBuilder.Name, BindingsAll);
+                var result = resolvedType.GetField(FieldBuilder.Name, BindingsAll);
                 if (result == null)
                 {
                     throw new Exception($"GetField for {DeclaringType.Type.Name} unexpectedly returned null");

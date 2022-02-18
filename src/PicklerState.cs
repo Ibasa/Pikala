@@ -144,9 +144,9 @@ namespace Ibasa.Pikala
                 {
                     if (types.TryGetValue(args.Name, out var type))
                     {
-                        if (type.FullyDefined)
+                        var (_, isComplete) = type.Resolve();
+                        if (isComplete)
                         {
-                            type.CreateType();
                             return args.RequestingAssembly;
                         }
                         else
@@ -237,7 +237,7 @@ namespace Ibasa.Pikala
             return memocallback;
         }
 
-        Stack<(Action?, Action)> trailers = new Stack<(Action?, Action)>();
+        Stack<(Action?, Action?)> trailers = new Stack<(Action?, Action?)>();
         int trailerDepth = 0;
 
         public void CheckTrailers()
@@ -264,7 +264,10 @@ namespace Ibasa.Pikala
                     {
                         preTrailer();
                     }
-                    postTrailers.Add(postTrailer);
+                    if (postTrailer != null)
+                    {
+                        postTrailers.Add(postTrailer);
+                    }
                 }
 
                 foreach (var postTrailer in postTrailers)
@@ -277,7 +280,7 @@ namespace Ibasa.Pikala
             return result;
         }
 
-        public void PushTrailer(Action? trailer, Action footer, Action? staticField)
+        public void PushTrailer(Action? trailer, Action? footer, Action? staticField)
         {
             trailers.Push((trailer, footer));
             if (staticField != null)
