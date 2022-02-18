@@ -477,7 +477,7 @@ namespace Ibasa.Pikala
 
         PickledTypeInfoDef? _parentType;
 
-        public bool FullyDefined 
+        public bool FullyDefined
         {
             private get; set;
         }
