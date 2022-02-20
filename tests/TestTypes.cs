@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Runtime.Serialization;
 
 namespace Ibasa.Pikala.Tests
 {
@@ -53,36 +52,12 @@ namespace Ibasa.Pikala.Tests
             public SelfReferenceObject Myself;
         }
 
-        public sealed class SelfRefernceISerialisable : ISerializable
-        {
-            public int Foo;
-            public SelfRefernceISerialisable Myself;
-
-            public void GetObjectData(SerializationInfo info, StreamingContext context)
-            {
-                info.AddValue("Foo", Foo);
-                info.AddValue("Myself", Myself);
-            }
-
-            public SelfRefernceISerialisable()
-            {
-
-            }
-
-            private SelfRefernceISerialisable(SerializationInfo info, StreamingContext context)
-            {
-                Foo = info.GetInt32("Foo");
-                Myself = info.GetValue("Myself", typeof(SelfRefernceISerialisable)) as SelfRefernceISerialisable;
-            }
-        }
-
         public enum EnumurationType { Foo = 2, Bar = 3 }
 
         public delegate int DelegateType(int x, int y);
 
         public delegate int GenericDelegateType<T>(T x);
 
-        [Serializable]
         public struct StructureType : IStructuralEquatable
         {
             public int Foo;
@@ -113,7 +88,6 @@ namespace Ibasa.Pikala.Tests
             }
         }
 
-        [Serializable]
         public struct StructureTypeWithInterface : IDisposable
         {
             public int Foo;
@@ -130,7 +104,6 @@ namespace Ibasa.Pikala.Tests
             }
         }
 
-        [Serializable]
         public struct StructureTypeWithGeneric<T> : IEquatable<StructureTypeWithGeneric<T>>
         {
             public T Foo;
@@ -160,7 +133,6 @@ namespace Ibasa.Pikala.Tests
             }
         }
 
-        [Serializable]
         public class ClassType : IStructuralEquatable
         {
             public int Foo;

@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Reflection;
 
-namespace Ibasa.Pikala
+namespace Ibasa.Pikala.Reducers
 {
     public sealed class DictionaryReducer : IReducer
     {

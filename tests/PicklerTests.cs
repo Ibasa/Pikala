@@ -443,20 +443,6 @@ namespace Ibasa.Pikala.Tests
         }
 
         [Fact]
-        public void TestSelfReferentialISerialisable()
-        {
-            var pickler = new Pickler();
-
-            var value = new TestTypes.SelfRefernceISerialisable();
-            value.Foo = 124;
-            value.Myself = value;
-
-            var exc = Assert.Throws<MemoException>(() => RoundTrip.Do(pickler, value));
-
-            Assert.Equal("Tried to reference object from position 143 in the stream, but that object is not yet created.", exc.Message);
-        }
-
-        [Fact]
         public void TestCircularClasses()
         {
             var pickler = new Pickler();

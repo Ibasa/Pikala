@@ -246,7 +246,8 @@ namespace Ibasa.Pikala
             _reducers = new Dictionary<Type, IReducer>();
             _typeInfo = new Dictionary<Type, SerialisedObjectTypeInfo>();
 
-            RegisterReducer(new DictionaryReducer());
+            RegisterReducer(new Reducers.DictionaryReducer());
+            RegisterReducer(new Reducers.ListReducer());
         }
 
         public bool RegisterReducer(IReducer reducer)
@@ -258,7 +259,7 @@ namespace Ibasa.Pikala
         {
             var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             // Sort the fields by name so we serialise in deterministic order
-            return fields.Where(field => !field.IsLiteral && !field.IsNotSerialized).OrderBy(field => field.Name).ToArray();
+            return fields.Where(field => !field.IsLiteral).OrderBy(field => field.Name).ToArray();
         }
 
         private static bool IsTupleType(Type type)

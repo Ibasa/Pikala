@@ -1107,39 +1107,6 @@ namespace Ibasa.Pikala
             return tupleObject;
         }
 
-        private object DeserializeISerializable(PicklerDeserializationState state, Type type)
-        {
-            var memberCount = state.Reader.Read7BitEncodedInt();
-
-            var context = new System.Runtime.Serialization.StreamingContext(System.Runtime.Serialization.StreamingContextStates.All, this);
-            var info = new System.Runtime.Serialization.SerializationInfo(type, new System.Runtime.Serialization.FormatterConverter());
-
-            for (int i = 0; i < memberCount; ++i)
-            {
-                var name = state.Reader.ReadString();
-                var value = Deserialize(state, typeof(object));
-                info.AddValue(name, value);
-            }
-
-            var ctor = type.GetConstructor(
-                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, Type.DefaultBinder,
-                new[] { typeof(System.Runtime.Serialization.SerializationInfo), typeof(System.Runtime.Serialization.StreamingContext) }, null);
-
-            if (ctor == null)
-            {
-                throw new Exception($"Could not deserialize type '{type}' expected a constructor (SerializationInfo, StreamingContext)");
-            }
-
-            var result = ctor.Invoke(new object[] { info, context });
-
-            if (result is System.Runtime.Serialization.IDeserializationCallback deserializationCallback)
-            {
-                deserializationCallback.OnDeserialization(this);
-            }
-
-            return result;
-        }
-
         private object DeserializeReducer(PicklerDeserializationState state)
         {
             var method = DeserializeMethodBase(state);
@@ -1175,7 +1142,7 @@ namespace Ibasa.Pikala
 
         private object DeserializeObject(PicklerDeserializationState state, long position, bool shouldMemo, Type objectType, SerialisedObjectTypeInfo typeInfo)
         {
-            var uninitalizedObject = state.SetMemo(position, shouldMemo, System.Runtime.Serialization.FormatterServices.GetUninitializedObject(objectType));
+            var uninitalizedObject = state.SetMemo(position, shouldMemo, System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(objectType));
 
             System.Diagnostics.Debug.Assert(typeInfo.SerialisedFields != null, "Error was null, but so was Fields");
 
@@ -2679,11 +2646,6 @@ namespace Ibasa.Pikala
             else if (runtimeInfo.Mode == PickledTypeMode.IsReduced)
             {
                 return state.SetMemo(position, shouldMemo, DeserializeReducer(state));
-            }
-
-            else if (runtimeInfo.Mode == PickledTypeMode.IsISerializable)
-            {
-                return state.SetMemo(position, shouldMemo, DeserializeISerializable(state, runtimeType));
             }
 
             return DeserializeObject(state, position, shouldMemo, runtimeType, runtimeInfo);

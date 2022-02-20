@@ -20,7 +20,6 @@ namespace Ibasa.Pikala
         IsEnum = 0,
         IsDelegate = 1,
         IsReduced = 2,
-        IsISerializable = 3,
         IsAutoSerialisedObject = 4,
     }
 

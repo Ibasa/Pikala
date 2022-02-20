@@ -1836,22 +1836,6 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeISerializable(PicklerSerializationState state, System.Runtime.Serialization.ISerializable iserializable, Type runtimeType)
-        {
-            // ISerializable objects call into GetObjectData and will reconstruct with the (SerializationInfo, StreamingContext) constructor
-
-            var context = new System.Runtime.Serialization.StreamingContext(System.Runtime.Serialization.StreamingContextStates.All, this);
-            var serializationInfo = new System.Runtime.Serialization.SerializationInfo(runtimeType, new System.Runtime.Serialization.FormatterConverter());
-            iserializable.GetObjectData(serializationInfo, context);
-
-            state.Writer.Write7BitEncodedInt(serializationInfo.MemberCount);
-            foreach (var member in serializationInfo)
-            {
-                state.Writer.Write(member.Name);
-                Serialize(state, member.Value, typeof(object));
-            }
-        }
-
         private void SerializeObject(PicklerSerializationState state, object obj, (SerialisedObjectTypeInfo, FieldInfo)[] fields)
         {
             // Must be an object, try and dump all it's fields
@@ -1989,10 +1973,6 @@ namespace Ibasa.Pikala
                 {
                     info.Reducer = reducer;
                     info.Mode = PickledTypeMode.IsReduced;
-                }
-                else if (type.IsAssignableTo(typeof(System.Runtime.Serialization.ISerializable)))
-                {
-                    info.Mode = PickledTypeMode.IsISerializable;
                 }
 
                 else if (type.IsAssignableTo(typeof(MarshalByRefObject)))
@@ -2346,12 +2326,6 @@ namespace Ibasa.Pikala
             else if (typeInfo.Reducer != null)
             {
                 SerializeReducer(state, obj, typeInfo.Reducer, runtimeType);
-                return;
-            }
-
-            else if (typeInfo.Mode == PickledTypeMode.IsISerializable)
-            {
-                SerializeISerializable(state, (System.Runtime.Serialization.ISerializable)obj, runtimeType);
                 return;
             }
 
