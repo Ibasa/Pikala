@@ -615,12 +615,9 @@ namespace Ibasa.Pikala
 
             var typeContext = new DeserializationTypeContext(constructingType.GenericParameters, null);
 
-            var baseTypes = new List<PickledTypeInfo>();
-
             if (!isValueType && !isInterface)
             {
                 var baseType = DeserializeType(state, typeContext);
-                baseTypes.Add(baseType);
                 typeBuilder.SetParent(baseType.Type);
             }
 
@@ -629,7 +626,6 @@ namespace Ibasa.Pikala
             for (int i = 0; i < interfaceCount; ++i)
             {
                 var interfaceType = DeserializeType(state, typeContext);
-                baseTypes.Add(interfaceType);
                 typeBuilder.AddInterfaceImplementation(interfaceType.Type);
 
                 var mapCount = state.Reader.Read7BitEncodedInt();
@@ -641,8 +637,6 @@ namespace Ibasa.Pikala
                     interfaceMap.Add((interfaceMethod, targetMethodSignature));
                 }
             }
-
-            constructingType.BaseTypes = baseTypes.ToArray();
 
             var fieldCount = state.Reader.Read7BitEncodedInt();
             constructingType.Fields = new PickledFieldInfoDef[fieldCount];
@@ -815,7 +809,7 @@ namespace Ibasa.Pikala
                 constructingType.FullyDefined = true;
 
             },
-            null,
+            () => constructingType.CreateType(),
             () =>
             {
                 var type = constructingType.Type;
@@ -848,25 +842,25 @@ namespace Ibasa.Pikala
             });
         }
 
-        private PickledTypeInfoDef ConstructingTypeForTypeDef(TypeDef typeDef, string typeName, TypeAttributes typeAttributes, PickledTypeInfoDef? parent, Func<string, TypeAttributes, Type?, TypeBuilder> defineType)
+        private PickledTypeInfoDef ConstructingTypeForTypeDef(TypeDef typeDef, string typeName, TypeAttributes typeAttributes, Func<string, TypeAttributes, Type?, TypeBuilder> defineType)
         {
 
             switch (typeDef)
             {
                 case TypeDef.Enum:
-                    return new PickledTypeInfoDef(typeDef, defineType(typeName, typeAttributes, typeof(Enum)), parent);
+                    return new PickledTypeInfoDef(typeDef, defineType(typeName, typeAttributes, typeof(Enum)));
 
                 case TypeDef.Delegate:
-                    return new PickledTypeInfoDef(typeDef, defineType(typeName, typeAttributes, typeof(MulticastDelegate)), parent);
+                    return new PickledTypeInfoDef(typeDef, defineType(typeName, typeAttributes, typeof(MulticastDelegate)));
 
                 case TypeDef.Struct:
-                    return new PickledTypeInfoDef(typeDef, defineType(typeName, typeAttributes, typeof(ValueType)), parent);
+                    return new PickledTypeInfoDef(typeDef, defineType(typeName, typeAttributes, typeof(ValueType)));
 
                 case TypeDef.Class:
-                    return new PickledTypeInfoDef(typeDef, defineType(typeName, typeAttributes, null), parent);
+                    return new PickledTypeInfoDef(typeDef, defineType(typeName, typeAttributes, null));
 
                 case TypeDef.Interface:
-                    return new PickledTypeInfoDef(typeDef, defineType(typeName, typeAttributes, null), parent);
+                    return new PickledTypeInfoDef(typeDef, defineType(typeName, typeAttributes, null));
 
                 default:
                     throw new Exception($"Unrecgonized TypeDef: {typeDef}");
@@ -895,6 +889,8 @@ namespace Ibasa.Pikala
                 ReadCustomAttributes(state, typeBuilder.SetCustomAttribute);
 
                 constructingType.FullyDefined = true;
+
+                state.PushTrailer(null, () => constructingType.CreateType(), null);
             }
             else if (constructingType.TypeDef == TypeDef.Delegate)
             {
@@ -940,6 +936,8 @@ namespace Ibasa.Pikala
                 constructingType.Methods = new PickledMethodInfoDef[] { constructingMethod };
 
                 constructingType.FullyDefined = true;
+
+                state.PushTrailer(null, () => constructingType.CreateType(), null);
             }
             else
             {
@@ -1781,7 +1779,7 @@ namespace Ibasa.Pikala
                 state.PushTrailer(() =>
                 {
                     ReadCustomAttributes(state, assembly.SetCustomAttribute);
-                }, null, null);
+                }, () => { }, null);
 
                 return assembly;
             });
@@ -1968,7 +1966,7 @@ namespace Ibasa.Pikala
                 {
                     var callback = state.RegisterMemoCallback(position, (PickledTypeInfoDef declaringType) =>
                     {
-                        var result = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, declaringType, declaringType.TypeBuilder.DefineNestedType);
+                        var result = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, declaringType.TypeBuilder.DefineNestedType);
 
                         if (genericParameters != null)
                         {
@@ -1986,7 +1984,7 @@ namespace Ibasa.Pikala
 
                     var callback = state.RegisterMemoCallback(position, (ModuleBuilder module) =>
                     {
-                        var result = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, null, module.DefineType);
+                        var result = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, module.DefineType);
 
                         if (genericParameters != null)
                         {
@@ -2356,7 +2354,7 @@ namespace Ibasa.Pikala
                 for (int i = 0; i < writtenLength; ++i)
                 {
                     var fieldName = state.Reader.ReadString();
-                    var fieldType = DeserializeType(state, default).CompleteType;
+                    var fieldType = DeserializeType(state, default).Type;
                     var fieldInfo = GetOrReadSerialisedObjectTypeInfo(state, fieldType);
 
                     FieldInfo? toSet = null;
@@ -2640,7 +2638,7 @@ namespace Ibasa.Pikala
             }
             else if (runtimeType == typeof(Type))
             {
-                return DeserializeType(state, default).CompleteType;
+                return DeserializeType(state, default).Type;
             }
 
             else if (runtimeInfo.Mode == PickledTypeMode.IsReduced)
