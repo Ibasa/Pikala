@@ -647,5 +647,41 @@ namespace Ibasa.Pikala.Tests
             Assert.NotSame(resultInvocationList[0], resultInvocationList[1]);
             Assert.Same(resultInvocationList[1], resultInvocationList[2]);
         }
+
+        [Fact]
+        public void TestRecursiveDelegates()
+        {
+            var recursive = new TestTypes.RecursiveDelegate();
+            recursive.SelfDelegate = recursive.SomeMethod;
+
+            var pickler = new Pickler();
+            // The target of the delegate itself needs the delegate to construct
+            var result = RoundTrip.Do(pickler, recursive.SelfDelegate);
+
+            Assert.Equal(recursive.SelfDelegate(1), result(1));
+        }
+
+        [Fact]
+        public void TestRecursiveTuple()
+        {
+            var array = new Tuple<object, int>[2];
+            array[0] = Tuple.Create<object, int>(null, 2);
+
+            var recursive = Tuple.Create<object, int>(array, 4);
+            array[1] = recursive;
+
+            Assert.Same(recursive, ((Tuple<object, int>[])recursive.Item1)[1]);
+
+            var pickler = new Pickler();
+            // The first item of this tuple is the array, of which the second item is the tuple
+            var result = RoundTrip.Do(pickler, recursive);
+
+            // Check the int value is the same
+            Assert.Equal(recursive.Item2, result.Item2);
+            // Pull out the result array
+            var resultArray = (Tuple<object, int>[])result.Item1;
+            // Check the tuple objects are the same
+            Assert.Same(result, resultArray[1]);
+        }
     }
 }

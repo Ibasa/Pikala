@@ -619,5 +619,15 @@ namespace Ibasa.Pikala.Tests
                 return String.Join(":", results);
             }
         }
+
+        public sealed class RecursiveDelegate
+        {
+            public Func<int, int> SelfDelegate;
+
+            public int SomeMethod(int i)
+            {
+                return i + 1;
+            }
+        }
     }
 }

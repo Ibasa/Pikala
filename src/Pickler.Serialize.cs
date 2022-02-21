@@ -51,6 +51,15 @@ namespace Ibasa.Pikala
             return true;
         }
 
+        private void AddMemo(PicklerSerializationState state, bool isValueType, long position, object obj)
+        {
+            if (!isValueType)
+            {
+                System.Diagnostics.Debug.Assert(ShouldMemo(obj), "Tried to call AddMemo for an object that shouldn't be memoised");
+                state.AddMemo(position, obj);
+            }
+        }
+
         private bool PickleByValue(Assembly assembly)
         {
             // We never pickle mscorlib by value, don't even give the user a choice
@@ -650,11 +659,13 @@ namespace Ibasa.Pikala
             state.Writer.Write((byte)0xFF);
         }
 
-        private void SerializeModuleDef(PicklerSerializationState state, Module module)
+        private void SerializeModuleDef(PicklerSerializationState state, Module module, long position)
         {
             state.Writer.Write((byte)ModuleOperation.ModuleDef);
             state.Writer.Write(module.Name);
             SerializeAssembly(state, module.Assembly);
+
+            AddMemo(state, false, position, module);
 
             var fields = module.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             state.Writer.Write7BitEncodedInt(fields.Length);
@@ -921,7 +932,7 @@ namespace Ibasa.Pikala
             });
         }
 
-        private void SerializeArray(PicklerSerializationState state, Array obj, Type objType)
+        private void SerializeArray(PicklerSerializationState state, Array obj, long position, Type objType)
         {
             System.Diagnostics.Debug.Assert(obj.GetType() == objType, "GetType did not match passed in Type");
 
@@ -946,6 +957,9 @@ namespace Ibasa.Pikala
                     state.Writer.Write7BitEncodedInt(obj.GetLowerBound(dimension));
                 }
             }
+
+            AddMemo(state, false, position, obj);
+
             // If this is a primitive type just block copy it across to the stream
             if (elementType.IsPrimitive)
             {
@@ -1336,16 +1350,20 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeAssembly(PicklerSerializationState state, Assembly assembly, bool skipMemo = false)
+        private void SerializeAssembly(PicklerSerializationState state, Assembly assembly, long? position = null)
         {
             if (Object.ReferenceEquals(assembly, null))
             {
                 throw new ArgumentNullException(nameof(assembly));
             }
 
-            if (!skipMemo && ShouldMemo(assembly) && state.DoMemo(assembly, (byte)AssemblyOperation.Memo))
+            if (position == null)
             {
-                return;
+                if (ShouldMemo(assembly) && state.MaybeWriteMemo(assembly, (byte)AssemblyOperation.Memo))
+                {
+                    return;
+                }
+                position = state.Writer.BaseStream.Position;
             }
 
             // This is an assembly, we need to emit an assembly name so it can be reloaded
@@ -1363,6 +1381,7 @@ namespace Ibasa.Pikala
                     // Write out an assembly definition, we'll build a dynamic assembly for this on the other side
                     state.Writer.Write((byte)AssemblyOperation.AssemblyDef);
                     state.Writer.Write(assembly.FullName);
+                    AddMemo(state, false, position.Value, assembly);
                     state.PushTrailer(() =>
                     {
                         WriteCustomAttributes(state, assembly.CustomAttributes.ToArray());
@@ -1374,19 +1393,24 @@ namespace Ibasa.Pikala
                 // Just write out an assembly refernce
                 state.Writer.Write((byte)AssemblyOperation.AssemblyRef);
                 state.Writer.Write(assembly.FullName);
+                AddMemo(state, false, position.Value, assembly);
             }
         }
 
-        private void SerializeModule(PicklerSerializationState state, Module module, bool skipMemo = false)
+        private void SerializeModule(PicklerSerializationState state, Module module, long? position = null)
         {
             if (Object.ReferenceEquals(module, null))
             {
                 throw new ArgumentNullException(nameof(module));
             }
 
-            if (!skipMemo && ShouldMemo(module) && state.DoMemo(module, (byte)ModuleOperation.Memo))
+            if (position == null)
             {
-                return;
+                if (ShouldMemo(module) && state.MaybeWriteMemo(module, (byte)ModuleOperation.Memo))
+                {
+                    return;
+                }
+                position = state.Writer.BaseStream.Position;
             }
 
             // This is a module, we need to emit a reference to the assembly it's found in and it's name
@@ -1396,7 +1420,7 @@ namespace Ibasa.Pikala
             {
                 state.RunWithTrailers(() =>
                 {
-                    SerializeModuleDef(state, module);
+                    SerializeModuleDef(state, module, position.Value);
                 });
             }
             else
@@ -1418,19 +1442,24 @@ namespace Ibasa.Pikala
                     state.Writer.Write(module.Name);
                 }
                 SerializeAssembly(state, module.Assembly);
+                AddMemo(state, false, position.Value, module);
             }
         }
 
-        private void SerializeType(PicklerSerializationState state, Type type, Type[]? genericTypeParameters, Type[]? genericMethodParameters, bool skipMemo = false)
+        private void SerializeType(PicklerSerializationState state, Type type, Type[]? genericTypeParameters, Type[]? genericMethodParameters, long? position = null)
         {
             if (Object.ReferenceEquals(type, null))
             {
                 throw new ArgumentNullException(nameof(type));
             }
 
-            if (!skipMemo && ShouldMemo(type) && state.DoMemo(type, (byte)TypeOperation.Memo))
+            if (position == null)
             {
-                return;
+                if (ShouldMemo(type) && state.MaybeWriteMemo(type, (byte)TypeOperation.Memo))
+                {
+                    return;
+                }
+                position = state.Writer.BaseStream.Position;
             }
 
             // This is a type, we need to emit a TypeRef or Def so it can be reconstructed
@@ -1446,11 +1475,15 @@ namespace Ibasa.Pikala
                 {
                     SerializeType(state, arg, genericTypeParameters, genericMethodParameters);
                 }
+                AddMemo(state, false, position.Value, type);
             }
 
             // Arrays aren't simple generic types, we need to write out the rank and element type
             else if (type.IsArray)
             {
+                // This is wrong but we'll fix it as part of removing MemoCallbacks
+                AddMemo(state, false, position.Value, type);
+
                 state.Writer.Write((byte)TypeOperation.ArrayType);
                 if (type.IsSZArray)
                 {
@@ -1505,6 +1538,7 @@ namespace Ibasa.Pikala
                 {
                     throw new Exception($"'{type}' is a generic parameter but is not bound to a type or method");
                 }
+                AddMemo(state, false, position.Value, type);
             }
 
             // Is this assembly one we should save by value?
@@ -1514,6 +1548,9 @@ namespace Ibasa.Pikala
                 {
                     // This is an unreferanceable assembly so on the other side it will be a dynamic assembly and we need to rebuild types
                     state.Writer.Write((byte)TypeOperation.TypeDef);
+
+                    // This is wrong but we'll move it as part of removing MemoCallbacks
+                    AddMemo(state, false, position.Value, type);
 
                     if (type.DeclaringType != null)
                     {
@@ -1646,17 +1683,19 @@ namespace Ibasa.Pikala
                     }
                     SerializeModule(state, type.Module);
                 }
+
+                AddMemo(state, false, position.Value, type);
             }
         }
 
-        private void SerializeFieldInfo(PicklerSerializationState state, FieldInfo field, bool skipHeader = false)
+        private void SerializeFieldInfo(PicklerSerializationState state, FieldInfo field, long? position = null)
         {
             if (Object.ReferenceEquals(field, null))
             {
                 throw new ArgumentNullException(nameof(field));
             }
 
-            if (!skipHeader)
+            if (position == null)
             {
                 if (state.MaybeWriteMemo(field, (byte)ObjectOperation.Memo))
                 {
@@ -1665,27 +1704,25 @@ namespace Ibasa.Pikala
 
                 state.Writer.Write((byte)ObjectOperation.Object);
 
-                if (ShouldMemo(field))
-                {
-                    state.AddMemo(field);
-                }
+                position = state.Writer.BaseStream.Position;
             }
 
             state.RunWithTrailers(() =>
             {
                 state.Writer.Write(field.Name);
                 SerializeType(state, field.ReflectedType, null, null);
+                AddMemo(state, false, position.Value, field);
             });
         }
 
-        private void SerializePropertyInfo(PicklerSerializationState state, PropertyInfo property, bool skipHeader = false)
+        private void SerializePropertyInfo(PicklerSerializationState state, PropertyInfo property, long? position = null)
         {
             if (Object.ReferenceEquals(property, null))
             {
                 throw new ArgumentNullException(nameof(property));
             }
 
-            if (!skipHeader)
+            if (position == null)
             {
                 if (state.MaybeWriteMemo(property, (byte)ObjectOperation.Memo))
                 {
@@ -1694,32 +1731,34 @@ namespace Ibasa.Pikala
 
                 state.Writer.Write((byte)ObjectOperation.Object);
 
-                if (ShouldMemo(property))
-                {
-                    state.AddMemo(property);
-                }
+                position = state.Writer.BaseStream.Position;
             }
 
             state.RunWithTrailers(() =>
             {
                 SerializeSignature(state, Signature.GetSignature(property));
                 SerializeType(state, property.ReflectedType, null, null);
+                AddMemo(state, false, position.Value, property);
             });
         }
 
-        private void SerializeEventInfo(PicklerSerializationState state, EventInfo evt)
+        private void SerializeEventInfo(PicklerSerializationState state, EventInfo evt, long position)
         {
             state.RunWithTrailers(() =>
             {
                 state.Writer.Write(evt.Name);
                 SerializeType(state, evt.ReflectedType, null, null);
+                AddMemo(state, false, position, evt);
             });
         }
 
-        private void SerializeMethodInfo(PicklerSerializationState state, MethodInfo method)
+        private void SerializeMethodInfo(PicklerSerializationState state, MethodInfo method, long position)
         {
             state.RunWithTrailers(() =>
             {
+                // This is wrong but we'll fix it as part of removing MemoCallbacks
+                AddMemo(state, false, position, method);
+
                 if (method.IsConstructedGenericMethod)
                 {
                     var genericArguments = method.GetGenericArguments();
@@ -1740,14 +1779,14 @@ namespace Ibasa.Pikala
             });
         }
 
-        private void SerializeConstructorInfo(PicklerSerializationState state, ConstructorInfo constructor, bool skipHeader = false)
+        private void SerializeConstructorInfo(PicklerSerializationState state, ConstructorInfo constructor, long? position = null)
         {
             if (Object.ReferenceEquals(constructor, null))
             {
                 throw new ArgumentNullException(nameof(constructor));
             }
 
-            if (!skipHeader)
+            if (position == null)
             {
                 if (state.MaybeWriteMemo(constructor, (byte)ObjectOperation.Memo))
                 {
@@ -1756,20 +1795,20 @@ namespace Ibasa.Pikala
 
                 state.Writer.Write((byte)ObjectOperation.Object);
 
-                if (ShouldMemo(constructor))
-                {
-                    state.AddMemo(constructor);
-                }
+                position = state.Writer.BaseStream.Position;
             }
 
             state.RunWithTrailers(() =>
             {
+                // This is wrong but we'll fix it as part of removing MemoCallbacks
+                AddMemo(state, false, position.Value, constructor);
+
                 SerializeSignature(state, Signature.GetSignature(constructor));
                 SerializeType(state, constructor.ReflectedType, null, null);
             });
         }
 
-        private void SerializeMulticastDelegate(PicklerSerializationState state, MulticastDelegate multicastDelegate)
+        private void SerializeMulticastDelegate(PicklerSerializationState state, long position, MulticastDelegate multicastDelegate)
         {
             // Delegates are just a target and a method
             var invocationList = multicastDelegate.GetInvocationList();
@@ -1780,18 +1819,27 @@ namespace Ibasa.Pikala
             if (invocationList.Length == 1)
             {
                 Serialize(state, invocationList[0].Target, typeof(object));
+                // Serialise the sub-objects may recurse and serialise this delegate so early out if that's the case
+                if (state.MaybeWriteMemo(multicastDelegate, null)) return;
+                state.Writer.Write15BitEncodedLong(0);
+
                 Serialize(state, invocationList[0].Method, typeof(MethodInfo));
+                if (state.MaybeWriteMemo(multicastDelegate, null)) return;
+                state.Writer.Write15BitEncodedLong(0);
             }
             else
             {
                 foreach (var invocation in invocationList)
                 {
                     Serialize(state, invocation, typeof(Delegate));
+                    if (state.MaybeWriteMemo(multicastDelegate, null)) return;
+                    state.Writer.Write15BitEncodedLong(0);
                 }
             }
+            AddMemo(state, false, position, multicastDelegate);
         }
 
-        private void SerializeTuple(PicklerSerializationState state, System.Runtime.CompilerServices.ITuple tuple, Type[] genericArguments)
+        private void SerializeTuple(PicklerSerializationState state, bool isValueType, long position, System.Runtime.CompilerServices.ITuple tuple, Type[] genericArguments)
         {
             System.Diagnostics.Debug.Assert(genericArguments.Length == tuple.Length, "genericArguments length did not match tuple length");
 
@@ -1800,7 +1848,11 @@ namespace Ibasa.Pikala
             {
                 var item = tuple[i];
                 Serialize(state, item, genericArguments[i]);
+                // If this is a reference to a tuple (i.e. Tuple, or boxed ValueTuple) then serialising the fields may serialise the tuple itself.
+                if (!isValueType && state.MaybeWriteMemo(tuple, null)) return;
+                state.Writer.Write15BitEncodedLong(0);
             }
+            AddMemo(state, isValueType, position, tuple);
         }
 
         private void SerializeReducer(PicklerSerializationState state, object obj, IReducer reducer, Type runtimeType)
@@ -2144,11 +2196,6 @@ namespace Ibasa.Pikala
                 // This will be a no-op for most well known types but also sealed types which we will of written out for the static value
                 typeInfo = GetCachedTypeInfo(sanatizedType);
                 MaybeWriteTypeInfo(state, typeInfo);
-
-                if (ShouldMemo(obj))
-                {
-                    state.AddMemo(obj);
-                }
             }
             else
             {
@@ -2159,6 +2206,8 @@ namespace Ibasa.Pikala
 
             System.Diagnostics.Debug.Assert(obj != null, "Object was unexpectedly null");
 
+            var position = state.Writer.BaseStream.Position;
+
             if (typeInfo.Error != null)
             {
                 throw new Exception(typeInfo.Error);
@@ -2168,127 +2217,143 @@ namespace Ibasa.Pikala
             {
                 // typeCode for an enum will be something like Int32
                 WriteEnumerationValue(state.Writer, Type.GetTypeCode(runtimeType), obj);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
 
             else if (runtimeType.IsArray)
             {
-                SerializeArray(state, (Array)obj, runtimeType);
+                SerializeArray(state, (Array)obj, position, runtimeType);
                 return;
             }
 
             else if (obj is FieldInfo fieldInfo)
             {
-                SerializeFieldInfo(state, fieldInfo, true);
+                SerializeFieldInfo(state, fieldInfo, position);
                 return;
             }
             else if (obj is PropertyInfo propertyInfo)
             {
-                SerializePropertyInfo(state, propertyInfo, true);
+                SerializePropertyInfo(state, propertyInfo, position);
                 return;
             }
             else if (obj is EventInfo eventInfo)
             {
-                SerializeEventInfo(state, eventInfo);
+                SerializeEventInfo(state, eventInfo, position);
                 return;
             }
             else if (obj is MethodInfo methodInfo)
             {
-                SerializeMethodInfo(state, methodInfo);
+                SerializeMethodInfo(state, methodInfo, position);
                 return;
             }
             else if (obj is ConstructorInfo constructorInfo)
             {
-                SerializeConstructorInfo(state, constructorInfo, true);
+                SerializeConstructorInfo(state, constructorInfo, position);
                 return;
             }
 
             else if (obj is MulticastDelegate multicastDelegate)
             {
-                SerializeMulticastDelegate(state, multicastDelegate);
+                SerializeMulticastDelegate(state, position, multicastDelegate);
                 return;
             }
 
             else if (IsTupleType(runtimeType))
             {
                 // N.B This isn't for any ITuple there might be user defined types that inherit from Tuple and it's not safe to pass them in here.
-                SerializeTuple(state, (System.Runtime.CompilerServices.ITuple)obj, runtimeType.GetGenericArguments());
+                SerializeTuple(state, staticType.IsValueType, position, (System.Runtime.CompilerServices.ITuple)obj, runtimeType.GetGenericArguments());
                 return;
             }
 
             if (runtimeType == typeof(bool))
             {
                 state.Writer.Write((bool)obj);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
             else if (runtimeType == typeof(char))
             {
                 state.Writer.Write((char)obj);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
             else if (runtimeType == typeof(byte))
             {
                 state.Writer.Write((byte)obj);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
             else if (runtimeType == typeof(ushort))
             {
                 state.Writer.Write((ushort)obj);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
             else if (runtimeType == typeof(uint))
             {
                 state.Writer.Write((uint)obj);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
             else if (runtimeType == typeof(ulong))
             {
                 state.Writer.Write((ulong)obj);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
             else if (runtimeType == typeof(sbyte))
             {
                 state.Writer.Write((sbyte)obj);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
             else if (runtimeType == typeof(short))
             {
                 state.Writer.Write((short)obj);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
             else if (runtimeType == typeof(int))
             {
                 state.Writer.Write((int)obj);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
             else if (runtimeType == typeof(long))
             {
                 state.Writer.Write((long)obj);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
             else if (runtimeType == typeof(float))
             {
                 state.Writer.Write((float)obj);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
             else if (runtimeType == typeof(double))
             {
                 state.Writer.Write((double)obj);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
             else if (runtimeType == typeof(decimal))
             {
                 state.Writer.Write((decimal)obj);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
             else if (runtimeType == typeof(UIntPtr))
             {
                 state.Writer.Write(((UIntPtr)obj).ToUInt64());
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
             else if (runtimeType == typeof(IntPtr))
             {
                 state.Writer.Write(((IntPtr)obj).ToInt64());
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
             else if (runtimeType == typeof(DBNull))
@@ -2298,6 +2363,7 @@ namespace Ibasa.Pikala
             else if (runtimeType == typeof(string))
             {
                 state.Writer.Write((string)obj);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
 
@@ -2309,7 +2375,7 @@ namespace Ibasa.Pikala
                     throw new Exception("Assembly types should use type driven not operation driven serialization");
                 }
 
-                SerializeAssembly(state, assembly, true);
+                SerializeAssembly(state, assembly, position);
                 return;
             }
             else if (obj is Module module)
@@ -2319,7 +2385,7 @@ namespace Ibasa.Pikala
                     throw new Exception("Module types should use type driven not operation driven serialization");
                 }
 
-                SerializeModule(state, module, true);
+                SerializeModule(state, module, position);
                 return;
             }
             else if (obj is Type type)
@@ -2329,17 +2395,19 @@ namespace Ibasa.Pikala
                     throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from Type.");
                 }
 
-                SerializeType(state, type, null, null, true);
+                SerializeType(state, type, null, null, position);
                 return;
             }
 
             else if (typeInfo.Reducer != null)
             {
                 SerializeReducer(state, obj, typeInfo.Reducer, runtimeType);
+                AddMemo(state, staticType.IsValueType, position, obj);
                 return;
             }
 
             System.Diagnostics.Debug.Assert(typeInfo.SerialisedFields != null);
+            AddMemo(state, staticType.IsValueType, position, obj);
             SerializeObject(state, obj, typeInfo.SerialisedFields);
             return;
         }

@@ -176,6 +176,30 @@ namespace Ibasa.Pikala
             }
         }
 
+        public object DoMemo(long objectPosition, long memoPosition)
+        {
+            if (memo.TryGetValue(memoPosition, out var value))
+            {
+                if (memoCallbacks_byObjPosition.TryGetValue(objectPosition, out var callback))
+                {
+                    callback.SetValue(value);
+                    memoCallbacks_byObjPosition.Remove(objectPosition);
+                }
+
+                return value;
+            }
+            else if (memoCallbacks_byMemoPosition.TryGetValue(memoPosition, out var callback))
+            {
+                var result = callback.InvokeUntyped();
+                System.Diagnostics.Debug.Assert(!memoCallbacks_byMemoPosition.ContainsKey(memoPosition), "Invoked a memo callback but was still present in callback map after");
+                return result;
+            }
+            else
+            {
+                throw new MemoException(memoPosition);
+            }
+        }
+
         [return: NotNull]
         public T SetMemo<T>(long position, bool shouldMemo, [DisallowNull] T value)
         {
@@ -203,26 +227,8 @@ namespace Ibasa.Pikala
             var objectPosition = Reader.BaseStream.Position - 1;
 
             var position = Reader.Read15BitEncodedLong();
-            if (memo.TryGetValue(position, out var value))
-            {
-                if (memoCallbacks_byObjPosition.TryGetValue(objectPosition, out var callback))
-                {
-                    callback.SetValue(value);
-                    memoCallbacks_byObjPosition.Remove(objectPosition);
-                }
 
-                return value;
-            }
-            else if (memoCallbacks_byMemoPosition.TryGetValue(position, out var callback))
-            {
-                var result = callback.InvokeUntyped();
-                System.Diagnostics.Debug.Assert(!memoCallbacks_byMemoPosition.ContainsKey(position), "Invoked a memo callback but was still present in callback map after");
-                return result;
-            }
-            else
-            {
-                throw new MemoException(position);
-            }
+            return DoMemo(objectPosition, position);
         }
 
         public MemoCallback<T, R> RegisterMemoCallback<T, R>(long offset, Func<T, R> callback) where T : class where R : class
@@ -321,39 +327,30 @@ namespace Ibasa.Pikala
             memo = new Dictionary<object, long>(ReferenceEqualityComparer.Default);
             Writer = new BinaryWriter(new PickleStream(stream));
         }
-        public bool MaybeWriteMemo(object value, byte op)
+        public bool MaybeWriteMemo(object value, byte? op)
         {
             if (memo.TryGetValue(value, out var offset))
             {
-                Writer.Write(op);
+                if (op != null)
+                {
+                    Writer.Write(op.Value);
+                }
                 Writer.Write15BitEncodedLong(offset);
                 return true;
             }
             return false;
         }
 
-        public void AddMemo(object value)
+        public void AddMemo(long position, object value)
         {
             // Save it in the memo for any later (or self) references
-            memo.Add(value, Writer.BaseStream.Position);
+            memo.Add(value, position);
 #if DEBUG
             // In debug mode we do a sanity check that we haven't possibly screwed up memoisation by checking that every position stored in
             // memo is unique
             var set = new HashSet<long>(memo.Values);
             System.Diagnostics.Debug.Assert(set.Count == memo.Count, "Two distinct objects tried to memoise to the same position");
 #endif
-        }
-
-        public bool DoMemo(object value, byte op)
-        {
-            if (MaybeWriteMemo(value, op))
-            {
-                return true;
-            }
-
-            AddMemo(value);
-
-            return false;
         }
 
         Stack<Action> trailers = new Stack<Action>();
