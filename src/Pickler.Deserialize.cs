@@ -1233,14 +1233,22 @@ namespace Ibasa.Pikala
 
         private object DeserializeDelegate(PicklerDeserializationState state, long position, Type delegateType)
         {
-            var invocationList = new Delegate[state.Reader.Read7BitEncodedInt()];
-            for (int i = 0; i < invocationList.Length; ++i)
+            var invocationCount = state.Reader.Read7BitEncodedInt();
+            if (invocationCount == 1)
             {
                 var target = Deserialize(state, typeof(object));
                 var method = DeserializeMethodInfo(state);
-                invocationList[i] = Delegate.CreateDelegate(delegateType, target, method.MethodInfo);
+                return state.SetMemo(position, true, Delegate.CreateDelegate(delegateType, target, method.MethodInfo));
             }
-            return state.SetMemo(position, true, Delegate.Combine(invocationList)!);
+            else
+            {
+                var invocationList = new Delegate[invocationCount];
+                for (int i = 0; i < invocationList.Length; ++i)
+                {
+                    invocationList[i] = (Delegate)Deserialize(state, typeof(Delegate))!;
+                }
+                return state.SetMemo(position, true, Delegate.Combine(invocationList)!);
+            }
         }
 
         private Assembly DeserializeAsesmblyRef(PicklerDeserializationState state, long position)

@@ -623,5 +623,29 @@ namespace Ibasa.Pikala.Tests
 
             RoundTrip.Assert(pickler, Tuple.Create(typeof(Stream), typeof(Stream).Module, typeof(Stream).Assembly, typeof(Stream).GetMethods()[0]));
         }
+
+        [Fact]
+        public void TestDelegatesAreMemoised()
+        {
+            var pickler = new Pickler();
+            var memoryStream = new MemoryStream();
+            var function = new Func<int>(StaticFunction);
+            var anotherFunction = new Func<int>(() => 1);
+
+            Assert.NotSame(function, anotherFunction);
+            var combinedFunction = Delegate.Combine(function, anotherFunction, anotherFunction);
+
+            // The invocation list should have the same delegate for item 1 and 2
+            var invocationList = combinedFunction.GetInvocationList();
+            Assert.NotSame(invocationList[0], invocationList[1]);
+            Assert.Same(invocationList[1], invocationList[2]);
+
+            var result = RoundTrip.Do(pickler, combinedFunction);
+
+            // Check the invocationList has the same reference constraints
+            var resultInvocationList = result.GetInvocationList();
+            Assert.NotSame(resultInvocationList[0], resultInvocationList[1]);
+            Assert.Same(resultInvocationList[1], resultInvocationList[2]);
+        }
     }
 }

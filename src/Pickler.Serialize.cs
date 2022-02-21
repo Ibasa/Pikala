@@ -1774,10 +1774,20 @@ namespace Ibasa.Pikala
             // Delegates are just a target and a method
             var invocationList = multicastDelegate.GetInvocationList();
             state.Writer.Write7BitEncodedInt(invocationList.Length);
-            foreach (var invocation in invocationList)
+
+            // We need to memoise delegates correctly, if the invocation list has a single element we write out the target and method,
+            // but if the invocation list has multiple elements we need to recurse them through Serialize so they can be memoised correctly
+            if (invocationList.Length == 1)
             {
-                Serialize(state, invocation.Target, typeof(object));
-                Serialize(state, invocation.Method, typeof(MethodInfo));
+                Serialize(state, invocationList[0].Target, typeof(object));
+                Serialize(state, invocationList[0].Method, typeof(MethodInfo));
+            }
+            else
+            {
+                foreach (var invocation in invocationList)
+                {
+                    Serialize(state, invocation, typeof(Delegate));
+                }
             }
         }
 
