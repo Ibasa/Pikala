@@ -325,7 +325,7 @@ namespace Ibasa.Pikala
         public PicklerSerializationState(Stream stream)
         {
             memo = new Dictionary<object, long>(ReferenceEqualityComparer.Default);
-            Writer = new BinaryWriter(new PickleStream(stream));
+            Writer = new PickleWriter(new PickleStream(stream));
         }
         public bool MaybeWriteMemo(object value, byte? op)
         {

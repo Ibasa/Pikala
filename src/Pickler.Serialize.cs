@@ -1849,8 +1849,11 @@ namespace Ibasa.Pikala
                 var item = tuple[i];
                 Serialize(state, item, genericArguments[i]);
                 // If this is a reference to a tuple (i.e. Tuple, or boxed ValueTuple) then serialising the fields may serialise the tuple itself.
-                if (!isValueType && state.MaybeWriteMemo(tuple, null)) return;
-                state.Writer.Write15BitEncodedLong(0);
+                if (!isValueType)
+                {
+                    if (state.MaybeWriteMemo(tuple, null)) return;
+                    state.Writer.Write15BitEncodedLong(0);
+                }
             }
             AddMemo(state, isValueType, position, tuple);
         }
@@ -2200,8 +2203,8 @@ namespace Ibasa.Pikala
             else
             {
                 System.Diagnostics.Debug.Assert(obj != null, "Static type was a ValueType but obj was null");
-                runtimeType = obj.GetType();
-                System.Diagnostics.Debug.Assert(staticType == runtimeType, "Static type was a ValueType but didn't match runtime type");
+                System.Diagnostics.Debug.Assert(staticType == obj.GetType(), "Static type was a ValueType but didn't match runtime type");
+                runtimeType = staticType;
             }
 
             System.Diagnostics.Debug.Assert(obj != null, "Object was unexpectedly null");

@@ -1074,7 +1074,7 @@ namespace Ibasa.Pikala
             return array;
         }
 
-        private object DeserializeTuple(PicklerDeserializationState state, long position, Type runtimeType)
+        private object DeserializeTuple(PicklerDeserializationState state, bool shouldMemo, long position, Type runtimeType)
         {
             Type[] genericArguments = runtimeType.GetGenericArguments();
 
@@ -1085,19 +1085,23 @@ namespace Ibasa.Pikala
                 return new ValueTuple();
             }
 
-            var genericParameters = new Type[genericArguments.Length];
-            for (int i = 0; i < genericArguments.Length; ++i)
-            {
-                genericParameters[i] = Type.MakeGenericMethodParameter(i);
-            }
-
             var items = new object?[genericArguments.Length];
             for (int i = 0; i < genericArguments.Length; ++i)
             {
                 items[i] = Deserialize(state, genericArguments[i]);
 
-                var earlyResult = MaybeReadMemo(state, position);
-                if (earlyResult != null) return earlyResult;
+                // Don't want to spam memo lookups if this is a ValueType
+                if (shouldMemo)
+                {
+                    var earlyResult = MaybeReadMemo(state, position);
+                    if (earlyResult != null) return earlyResult;
+                }
+            }
+
+            var genericParameters = new Type[genericArguments.Length];
+            for (int i = 0; i < genericArguments.Length; ++i)
+            {
+                genericParameters[i] = Type.MakeGenericMethodParameter(i);
             }
 
             var tupleType = runtimeType.IsValueType ? typeof(System.ValueTuple) : typeof(System.Tuple);
@@ -2552,7 +2556,7 @@ namespace Ibasa.Pikala
 
             else if (IsTupleType(runtimeType))
             {
-                return state.SetMemo(position, shouldMemo, DeserializeTuple(state, position, runtimeType));
+                return state.SetMemo(position, shouldMemo, DeserializeTuple(state, shouldMemo, position, runtimeType));
             }
 
             else if (runtimeType == typeof(bool))
