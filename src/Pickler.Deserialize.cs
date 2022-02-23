@@ -2497,13 +2497,12 @@ namespace Ibasa.Pikala
 
                 var isSealed = rootElementType.Flags.HasFlag(PickledTypeFlags.IsSealed) || rootElementType.Flags.HasFlag(PickledTypeFlags.IsValueType);
 
-                if (!reflectionTypes.Contains(staticType) && !isSealed)
+                if (!reflectionTypes.Contains(rootElementType.Type) && !isSealed)
                 {
                     // TODO We'd like to use CompleteType elsewhere in this repo but ReadCustomAttributes currently relies on this method which means types might still be constructing.
                     runtimeType = DeserializeType(state, default).CompleteType;
+                    runtimeInfo = GetOrReadSerialisedObjectTypeInfo(state, runtimeType);
                 }
-
-                runtimeInfo = GetOrReadSerialisedObjectTypeInfo(state, runtimeType);
             }
 
             if (runtimeInfo.Error != null)

@@ -683,5 +683,25 @@ namespace Ibasa.Pikala.Tests
             // Check the tuple objects are the same
             Assert.Same(result, resultArray[1]);
         }
+
+        [Fact]
+        public void TestStaticArrayReflectionValues()
+        {
+            // This test checks that if we have static types for an array of reflection objects we can still handle them correctly.
+
+            var pickler = new Pickler();
+
+            RoundTrip.Assert(pickler, Tuple.Create<Type[]>(null));
+            RoundTrip.Assert(pickler, Tuple.Create<Type[]>(new Type[0]));
+            RoundTrip.Assert(pickler, Tuple.Create<Type[]>(new Type[] { typeof(Stream) }));
+
+            // Check that a static type of TypeBuilder[] throws
+            var exc = Assert.Throws<Exception>(() => RoundTrip.Assert(pickler, Tuple.Create<System.Reflection.Emit.TypeBuilder[]>(null)));
+            Assert.Equal("Type 'System.Reflection.Emit.TypeBuilder' is not automaticly serializable as it inherits from Type.", exc.Message);
+
+            // Check that a static type of AssemblyBuilder[] throws (We can serialise these objects but we can't have AssemblyBuilder as part of static type signatures)
+            exc = Assert.Throws<Exception>(() => RoundTrip.Assert(pickler, Tuple.Create<System.Reflection.Emit.AssemblyBuilder[]>(null)));
+            Assert.Equal("Pikala can not serialise type System.Reflection.Emit.AssemblyBuilder[], try System.Reflection.Assembly[]", exc.Message);
+        }
     }
 }

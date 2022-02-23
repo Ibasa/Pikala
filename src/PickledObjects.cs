@@ -21,6 +21,8 @@ namespace Ibasa.Pikala
         IsDelegate = 1,
         IsReduced = 2,
         IsAutoSerialisedObject = 4,
+
+        IsReflectionObject = 256,
     }
 
     sealed class SerialisedObjectTypeInfo

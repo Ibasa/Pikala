@@ -23,11 +23,103 @@ namespace Ibasa.Pikala
 
         private Type SanatizeType(Type type)
         {
-            // We do a sanitisation pass here for reflection types, so that we don't see things like RuntimeType, just Type.
-            foreach (var t in reflectionTypes)
+            if (type.IsArray)
             {
-                if (type.IsAssignableTo(t)) { type = t; break; }
+                // Sanatize the inner type
+                var elementType = SanatizeType(type.GetElementType()!);
+                if (type.IsSZArray)
+                {
+                    return elementType.MakeArrayType();
+                }
+                else
+                {
+                    return elementType.MakeArrayType(type.GetArrayRank());
+                }
             }
+
+            // We do a sanitisation pass here for reflection types, so that we don't see things like RuntimeType, just Type.
+            if (type.IsAssignableTo(typeof(Assembly)))
+            {
+                // We only support serialising the actual runtime assembly type (either a real runtime assembly, or an assemblybuilder)
+                if (!type.IsAssignableTo(runtimeAssemblyType) && type != runtimeAssemblyBuilderType && type != typeof(Assembly))
+                {
+                    throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from Assembly.");
+                }
+                return typeof(Assembly);
+            }
+            else if (type.IsAssignableTo(typeof(Module)))
+            {
+                if (!type.IsAssignableTo(runtimeModuleType) && type != runtimeModuleBuilderType && type != typeof(Module))
+                {
+                    throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from Module.");
+                }
+                return typeof(Module);
+            }
+            else if (type.IsAssignableTo(typeof(MemberInfo)))
+            {
+                if (type.IsAssignableTo(typeof(Type)))
+                {
+                    if (!type.IsAssignableTo(runtimeTypeType) && type != typeof(Type))
+                    {
+                        throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from Type.");
+                    }
+                    return typeof(Type);
+                }
+                else if (type.IsAssignableTo(typeof(FieldInfo)))
+                {
+                    if (!type.IsAssignableTo(runtimeFieldInfoType) && type != typeof(FieldInfo))
+                    {
+                        throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from FieldInfo.");
+                    }
+                    return typeof(FieldInfo);
+                }
+                else if (type.IsAssignableTo(typeof(PropertyInfo)))
+                {
+                    if (!type.IsAssignableTo(runtimePropertyInfoType) && type != typeof(PropertyInfo))
+                    {
+                        throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from PropertyInfo.");
+                    }
+                    return typeof(PropertyInfo);
+                }
+                else if (type.IsAssignableTo(typeof(EventInfo)))
+                {
+                    if (!type.IsAssignableTo(runtimeEventInfoType) && type != typeof(EventInfo))
+                    {
+                        throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from EventInfo.");
+                    }
+                    return typeof(EventInfo);
+                }
+                else if (type.IsAssignableTo(typeof(MethodBase)))
+                {
+                    if (type.IsAssignableTo(typeof(ConstructorInfo)) && type != typeof(ConstructorInfo))
+                    {
+                        if (!type.IsAssignableTo(runtimeConstructorInfoType))
+                        {
+                            throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from ConstructorInfo.");
+                        }
+                        return typeof(ConstructorInfo);
+                    }
+                    else if (type.IsAssignableTo(typeof(MethodInfo)))
+                    {
+                        if (!type.IsAssignableTo(runtimeMethodInfoType) && type != typeof(MethodInfo))
+                        {
+                            throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from MethodInfo.");
+                        }
+                        return typeof(MethodInfo);
+                    }
+                    else if (type != typeof(MethodBase))
+                    {
+                        throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from MethodBase.");
+                    }
+                    return typeof(MethodBase);
+                }
+                else if (type != typeof(MemberInfo))
+                {
+                    throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from MemberInfo.");
+                }
+                return typeof(MemberInfo);
+            }
+
             return type;
         }
 
@@ -1948,67 +2040,13 @@ namespace Ibasa.Pikala
                 // Reflection
                 else if (type.IsAssignableTo(typeof(Assembly)))
                 {
-                    // We only support serialising the actual runtime assembly type (either a real runtime assembly, or an assemblybuilder)
-                    if (!type.IsAssignableTo(runtimeAssemblyType) && type != runtimeAssemblyBuilderType)
-                    {
-                        info.Error = $"Type '{type}' is not automaticly serializable as it inherits from Assembly.";
-                    }
                 }
                 else if (type.IsAssignableTo(typeof(Module)))
                 {
-                    if (!type.IsAssignableTo(runtimeModuleType) && type != runtimeModuleBuilderType)
-                    {
-                        info.Error = $"Type '{type}' is not automaticly serializable as it inherits from Module.";
-                    }
                 }
                 else if (type.IsAssignableTo(typeof(MemberInfo)))
                 {
-                    if (type.IsAssignableTo(typeof(Type)))
-                    {
-                        if (!type.IsAssignableTo(runtimeTypeType))
-                        {
-                            info.Error = $"Type '{type}' is not automaticly serializable as it inherits from Type.";
-                        }
-                    }
-                    else if (type.IsAssignableTo(typeof(FieldInfo)))
-                    {
-                        if (!type.IsAssignableTo(runtimeFieldInfoType))
-                        {
-                            info.Error = $"Type '{type}' is not automaticly serializable as it inherits from FieldInfo.";
-                        }
-                    }
-                    else if (!type.IsAssignableTo(typeof(PropertyInfo)))
-                    {
-                        if (type.IsAssignableTo(runtimePropertyInfoType))
-                        {
-                            info.Error = $"Type '{type}' is not automaticly serializable as it inherits from PropertyInfo.";
-                        }
-                    }
-                    else if (type.IsAssignableTo(typeof(EventInfo)))
-                    {
-                        if (!type.IsAssignableTo(runtimeEventInfoType))
-                        {
-                            info.Error = $"Type '{type}' is not automaticly serializable as it inherits from EventInfo.";
-                        }
-                    }
-                    else if (type.IsAssignableTo(typeof(ConstructorInfo)))
-                    {
-                        if (!type.IsAssignableTo(runtimeConstructorInfoType))
-                        {
-                            info.Error = $"Type '{type}' is not automaticly serializable as it inherits from ConstructorInfo.";
-                        }
-                    }
-                    else if (type.IsAssignableTo(typeof(MethodInfo)))
-                    {
-                        if (!type.IsAssignableTo(runtimeMethodInfoType))
-                        {
-                            info.Error = $"Type '{type}' is not automaticly serializable as it inherits from MethodInfo.";
-                        }
-                    }
-                    else
-                    {
-                        info.Error = $"Type '{type}' is not automaticly serializable as it inherits from MemberInfo.";
-                    }
+
                 }
                 // End of reflection handlers
 
@@ -2132,12 +2170,15 @@ namespace Ibasa.Pikala
                 throw new Exception($"Pointer types are not serializable: '{staticType}'");
             }
 
-
-            var sanatizedStaticType = SanatizeType(staticType);
-            // Check that we don't have a static type for a derived reflection type
-            if (sanatizedStaticType != staticType)
             {
-                throw new Exception($"Pikala can not serialise types derived from {sanatizedStaticType}");
+                // In a block because nothing else should refer to sanatizedStaticType, if we get past this block it's equal to staticType.
+                var sanatizedStaticType = SanatizeType(staticType);
+                // Check that we don't have a static type for a derived reflection type. 
+                // For example if staticType is RuntimeAssembly we might need to emit an AssemblyBuilder which wouldn't match
+                if (sanatizedStaticType != staticType)
+                {
+                    throw new Exception($"Pikala can not serialise type {staticType}, try {sanatizedStaticType}");
+                }
             }
 
             var typeInfo = GetCachedTypeInfo(staticType);
@@ -2175,30 +2216,41 @@ namespace Ibasa.Pikala
 
                 state.Writer.Write((byte)ObjectOperation.Object);
 
-                runtimeType = obj.GetType();
-                var sanatizedType = SanatizeType(runtimeType);
-
                 // If the static type is a reflection type or sealed then we don't need to write out the runtime type
                 // All arrays are sealed but what actually matters for arrays is if the element type is sealed.
                 // e.g. object[] is sealed but we still need to write out the runtime type for, while string[] is 
                 // also sealed but so is string so we don't need to write the runtime type out for it. Likewise
-                // for int[].
+                // for int[]. This also applies to arrays of reflection objects, we don't need a type definition for 
+                // Type[].
+
                 var rootElementType = GetRootElementType(typeInfo);
 
-                var isSealed = rootElementType.Flags.HasFlag(PickledTypeFlags.IsSealed) || rootElementType.Flags.HasFlag(PickledTypeFlags.IsValueType);
-
-                if (!reflectionTypes.Contains(sanatizedStaticType) && !isSealed)
+                if (reflectionTypes.Contains(rootElementType.Type))
                 {
-                    SerializeType(state, sanatizedType, null, null);
+                    // Need to check that reflection types are the runtime reflection types, SanatizeType will throw if this is a non-runtime type.
+                    runtimeType = SanatizeType(obj.GetType());
                 }
                 else
                 {
-                    System.Diagnostics.Debug.Assert(sanatizedStaticType == sanatizedType, "Elided runtime type but it didn't match the static type");
-                }
+                    var isSealed = rootElementType.Flags.HasFlag(PickledTypeFlags.IsSealed) || rootElementType.Flags.HasFlag(PickledTypeFlags.IsValueType);
 
-                // This will be a no-op for most well known types but also sealed types which we will of written out for the static value
-                typeInfo = GetCachedTypeInfo(sanatizedType);
-                MaybeWriteTypeInfo(state, typeInfo);
+                    if (isSealed)
+                    {
+                        System.Diagnostics.Debug.Assert(staticType == obj.GetType(), "Elided runtime type but it didn't match the static type");
+
+                        runtimeType = staticType;
+                    }
+                    else
+                    {
+                        runtimeType = SanatizeType(obj.GetType());
+
+                        SerializeType(state, runtimeType, null, null);
+
+                        // This will be a no-op for most well known types but also sealed types which we will of written out for the static value
+                        typeInfo = GetCachedTypeInfo(runtimeType);
+                        MaybeWriteTypeInfo(state, typeInfo);
+                    }
+                }
             }
             else
             {
@@ -2224,9 +2276,9 @@ namespace Ibasa.Pikala
                 return;
             }
 
-            else if (runtimeType.IsArray)
+            else if (obj is Array arr)
             {
-                SerializeArray(state, (Array)obj, position, runtimeType);
+                SerializeArray(state, arr, position, runtimeType);
                 return;
             }
 
@@ -2372,32 +2424,16 @@ namespace Ibasa.Pikala
 
             else if (obj is Assembly assembly)
             {
-                // We only support serialising the actual runtime assembly type (either a real runtime assembly, or an assemblybuilder)
-                if (!runtimeType.IsAssignableTo(runtimeAssemblyType) && runtimeType != runtimeAssemblyBuilderType)
-                {
-                    throw new Exception("Assembly types should use type driven not operation driven serialization");
-                }
-
                 SerializeAssembly(state, assembly, position);
                 return;
             }
             else if (obj is Module module)
             {
-                if (!runtimeType.IsAssignableTo(runtimeModuleType) && runtimeType != runtimeModuleBuilderType)
-                {
-                    throw new Exception("Module types should use type driven not operation driven serialization");
-                }
-
                 SerializeModule(state, module, position);
                 return;
             }
             else if (obj is Type type)
             {
-                if (!runtimeType.IsAssignableTo(runtimeTypeType))
-                {
-                    throw new Exception($"Type '{runtimeType}' is not automaticly serializable as it inherits from Type.");
-                }
-
                 SerializeType(state, type, null, null, position);
                 return;
             }
