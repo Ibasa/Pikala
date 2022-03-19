@@ -380,7 +380,6 @@ namespace Ibasa.Pikala
 
             if (depth == 0)
             {
-                var postTrailers = new List<Action>();
                 while (trailers.Count > 0)
                 {
                     var trailer = trailers.Pop();

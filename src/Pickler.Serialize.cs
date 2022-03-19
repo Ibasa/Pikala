@@ -755,7 +755,7 @@ namespace Ibasa.Pikala
         {
             state.Writer.Write((byte)ModuleOperation.ModuleDef);
             state.Writer.Write(module.Name);
-            SerializeAssembly(state, module.Assembly);
+            var assemblyTrailer = SerializeAssembly(state, module.Assembly);
 
             AddMemo(state, false, position, module);
 
@@ -818,6 +818,8 @@ namespace Ibasa.Pikala
 
             state.PushTrailer(() =>
             {
+                InvokePhase(state, assemblyTrailer);
+
                 WriteCustomAttributes(state, module.CustomAttributes.ToArray());
 
                 foreach (var field in fields)
@@ -1442,7 +1444,21 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeAssembly(PicklerSerializationState state, Assembly assembly, long? position = null)
+        private Action<PicklerSerializationState>? InvokePhase(PicklerSerializationState state, Func<PicklerSerializationState, Action<PicklerSerializationState>?>? phase2)
+        {
+            if (phase2 == null) return null;
+            return phase2(state);
+        }
+
+        private void InvokePhase(PicklerSerializationState state, Action<PicklerSerializationState>? phase3)
+        {
+            if (phase3 != null)
+            {
+                phase3(state);
+            }
+        }
+
+        private Action<PicklerSerializationState>? SerializeAssembly(PicklerSerializationState state, Assembly assembly, long? position = null)
         {
             if (Object.ReferenceEquals(assembly, null))
             {
@@ -1453,7 +1469,7 @@ namespace Ibasa.Pikala
             {
                 if (ShouldMemo(assembly) && state.MaybeWriteMemo(assembly, (byte)AssemblyOperation.Memo))
                 {
-                    return;
+                    return null;
                 }
                 position = state.Writer.BaseStream.Position;
             }
@@ -1464,21 +1480,19 @@ namespace Ibasa.Pikala
             if (assembly == mscorlib)
             {
                 state.Writer.Write((byte)AssemblyOperation.MscorlibAssembly);
+                return null;
             }
             // Is this assembly one we should save by value?
             else if (PickleByValue(assembly))
             {
-                state.RunWithTrailers(() =>
+                // Write out an assembly definition, we'll build a dynamic assembly for this on the other side
+                state.Writer.Write((byte)AssemblyOperation.AssemblyDef);
+                state.Writer.Write(assembly.FullName);
+                AddMemo(state, false, position.Value, assembly);
+                return state =>
                 {
-                    // Write out an assembly definition, we'll build a dynamic assembly for this on the other side
-                    state.Writer.Write((byte)AssemblyOperation.AssemblyDef);
-                    state.Writer.Write(assembly.FullName);
-                    AddMemo(state, false, position.Value, assembly);
-                    state.PushTrailer(() =>
-                    {
-                        WriteCustomAttributes(state, assembly.CustomAttributes.ToArray());
-                    }, () => { });
-                });
+                    WriteCustomAttributes(state, assembly.CustomAttributes.ToArray());
+                };
             }
             else
             {
@@ -1486,6 +1500,7 @@ namespace Ibasa.Pikala
                 state.Writer.Write((byte)AssemblyOperation.AssemblyRef);
                 state.Writer.Write(assembly.FullName);
                 AddMemo(state, false, position.Value, assembly);
+                return null;
             }
         }
 
@@ -1533,7 +1548,8 @@ namespace Ibasa.Pikala
                     state.Writer.Write((byte)ModuleOperation.ModuleRef);
                     state.Writer.Write(module.Name);
                 }
-                SerializeAssembly(state, module.Assembly);
+                var assemblyTrailer = SerializeAssembly(state, module.Assembly);
+                System.Diagnostics.Debug.Assert(assemblyTrailer == null, "Expected assembly trailer to be null");
                 AddMemo(state, false, position.Value, module);
             }
         }
@@ -2424,7 +2440,8 @@ namespace Ibasa.Pikala
 
             else if (obj is Assembly assembly)
             {
-                SerializeAssembly(state, assembly, position);
+                var trailer = SerializeAssembly(state, assembly, position);
+                InvokePhase(state, trailer);
                 return;
             }
             else if (obj is Module module)
