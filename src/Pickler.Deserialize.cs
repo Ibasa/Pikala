@@ -1754,77 +1754,89 @@ namespace Ibasa.Pikala
             return alc.LoadFromStream(memoryStream);
         }
 
-        private Assembly DeserializeAsesmblyDef(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
+        private Action<PicklerDeserializationState>? InvokePhase(PicklerDeserializationState state, Func<PicklerDeserializationState, Action<PicklerDeserializationState>?>? phase2)
         {
-            return state.RunWithTrailers(() =>
-            {
-                var assemblyName = new AssemblyName(state.Reader.ReadString());
-                var access = AssemblyLoadContext.IsCollectible ? AssemblyBuilderAccess.RunAndCollect : AssemblyBuilderAccess.Run;
-                var currentContextualReflectionContextOrDefault =
-                    System.Runtime.Loader.AssemblyLoadContext.CurrentContextualReflectionContext ?? System.Runtime.Loader.AssemblyLoadContext.Default;
-                AssemblyBuilder assembly;
-                if (AssemblyLoadContext == currentContextualReflectionContextOrDefault)
-                {
-                    // If the assembly load context is the current contextual one then we can just call DefineDynamicAssembly.
-                    assembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, access);
+            if (phase2 == null) return null;
+            return phase2(state);
+        }
 
-                }
-                else if (Environment.Version.Major >= 6)
+        private void InvokePhase(PicklerDeserializationState state, Action<PicklerDeserializationState>? phase3)
+        {
+            if (phase3 != null)
+            {
+                phase3(state);
+            }
+        }
+
+        private (Assembly, Action<PicklerDeserializationState>) DeserializeAssemblyDef(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
+        {
+            var assemblyName = new AssemblyName(state.Reader.ReadString());
+            var access = AssemblyLoadContext.IsCollectible ? AssemblyBuilderAccess.RunAndCollect : AssemblyBuilderAccess.Run;
+            var currentContextualReflectionContextOrDefault =
+                System.Runtime.Loader.AssemblyLoadContext.CurrentContextualReflectionContext ?? System.Runtime.Loader.AssemblyLoadContext.Default;
+            AssemblyBuilder assembly;
+            if (AssemblyLoadContext == currentContextualReflectionContextOrDefault)
+            {
+                // If the assembly load context is the current contextual one then we can just call DefineDynamicAssembly.
+                assembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, access);
+
+            }
+            else if (Environment.Version.Major >= 6)
+            {
+                // Else for runtime 6.0 onwards we can set our AssemblyLoadContext as the current contextual context and then call DefineDynamicAssembly
+                using var scope = AssemblyLoadContext.EnterContextualReflection();
+                assembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, access);
+            }
+            else
+            {
+                // Else before net6 DefineDynamicAssembly did not check the contextual ALC, it instead used the callers ALC. So to get around this we do some "fun" here
+                // where we build a tiny assembly with one method to call AssemblyBuilder.DefineDynamicAssembly, load that into the ALC we want to use then invoke
+                // the method on it. We can reuse this method, so we cache it via a Func.
+                if (_defineDynamicAssembly == null)
                 {
-                    // Else for runtime 6.0 onwards we can set our AssemblyLoadContext as the current contextual context and then call DefineDynamicAssembly
-                    using var scope = AssemblyLoadContext.EnterContextualReflection();
-                    assembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, access);
-                }
-                else
-                {
-                    // Else before net6 DefineDynamicAssembly did not check the contextual ALC, it instead used the callers ALC. So to get around this we do some "fun" here
-                    // where we build a tiny assembly with one method to call AssemblyBuilder.DefineDynamicAssembly, load that into the ALC we want to use then invoke
-                    // the method on it. We can reuse this method, so we cache it via a Func.
-                    if (_defineDynamicAssembly == null)
+                    lock (_ddaLock)
                     {
-                        lock (_ddaLock)
+                        if (_defineDynamicAssembly == null)
                         {
-                            if (_defineDynamicAssembly == null)
-                            {
-                                var ddaAssembly = LookupWorkaroundAssembly(AssemblyLoadContext) ?? BuildAndLoadWorkaroundAssembly(AssemblyLoadContext);
-                                var context = System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(ddaAssembly);
-                                System.Diagnostics.Debug.Assert(context == AssemblyLoadContext, "Failed to load into defined ALC");
-                                var ddaMethod = ddaAssembly.ManifestModule.GetMethod("DefineDynamicAssembly");
-                                System.Diagnostics.Debug.Assert(ddaMethod != null, "Failed to GetMethod(\"DefineDynamicAssembly\")");
-                                var ddaDelegate = ddaMethod.CreateDelegate(typeof(Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>));
-                                _defineDynamicAssembly = (Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>)ddaDelegate;
-                            }
+                            var ddaAssembly = LookupWorkaroundAssembly(AssemblyLoadContext) ?? BuildAndLoadWorkaroundAssembly(AssemblyLoadContext);
+                            var context = System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(ddaAssembly);
+                            System.Diagnostics.Debug.Assert(context == AssemblyLoadContext, "Failed to load into defined ALC");
+                            var ddaMethod = ddaAssembly.ManifestModule.GetMethod("DefineDynamicAssembly");
+                            System.Diagnostics.Debug.Assert(ddaMethod != null, "Failed to GetMethod(\"DefineDynamicAssembly\")");
+                            var ddaDelegate = ddaMethod.CreateDelegate(typeof(Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>));
+                            _defineDynamicAssembly = (Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>)ddaDelegate;
                         }
                     }
-                    assembly = _defineDynamicAssembly(assemblyName, access);
                 }
+                assembly = _defineDynamicAssembly(assemblyName, access);
+            }
 
-                if (assembly == null)
-                {
-                    throw new Exception($"Could not define assembly '{assemblyName}'");
-                }
+            if (assembly == null)
+            {
+                throw new Exception($"Could not define assembly '{assemblyName}'");
+            }
 
-                state.SetMemo(position, true, assembly);
+            state.SetMemo(position, true, assembly);
 
-                state.PushTrailer(() =>
-                {
-                    ReadCustomAttributes(state, assembly.SetCustomAttribute);
-                }, null, null);
-
-                return assembly;
-            });
+            return (assembly, state =>
+            {
+                ReadCustomAttributes(state, assembly.SetCustomAttribute);
+            }
+            );
         }
 
         private Module DeserializeManifestModuleRef(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
         {
-            var assembly = DeserializeAssembly(state, typeContext);
+            var (assembly, assemblyTrailer) = DeserializeAssembly(state, typeContext);
+            System.Diagnostics.Debug.Assert(assemblyTrailer == null, "Expected assembly trailer to be null");
             return state.SetMemo(position, ShouldMemo(assembly), assembly.ManifestModule);
         }
 
         private Module DeserializeModuleRef(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
         {
             var name = state.Reader.ReadString();
-            var assembly = DeserializeAssembly(state, typeContext);
+            var (assembly, assemblyTrailer) = DeserializeAssembly(state, typeContext);
+            System.Diagnostics.Debug.Assert(assemblyTrailer == null, "Expected assembly trailer to be null");
             var module = assembly.GetModule(name);
             if (module == null)
             {
@@ -1838,17 +1850,16 @@ namespace Ibasa.Pikala
             return state.RunWithTrailers(() =>
             {
                 var name = state.Reader.ReadString();
-                var callback = state.RegisterMemoCallback(position, (AssemblyBuilder assembly) =>
+                var (assembly, assemblyTrailer) = DeserializeAssembly(state, typeContext);
+                System.Diagnostics.Debug.Assert(assembly is AssemblyBuilder, "Expected ModuleDef assembly to be an AssemblyBuilder");
+
+                var assemblyBuilder = (AssemblyBuilder)assembly;
+                var module = assemblyBuilder.DefineDynamicModule(name);
+                if (module == null)
                 {
-                    var module = assembly.DefineDynamicModule(name);
-                    if (module == null)
-                    {
-                        throw new Exception($"Could not create module '{name}' in assembly '{assembly}'");
-                    }
-                    return state.SetMemo(position, true, module);
-                });
-                var _ = DeserializeAssembly(state, typeContext);
-                var moduleBuilder = callback.Invoke();
+                    throw new Exception($"Could not create module '{name}' in assembly '{assembly}'");
+                }
+                var moduleBuilder = state.SetMemo(position, true, module);
 
                 var fieldCount = state.Reader.Read7BitEncodedInt();
                 var fields = new PickledFieldInfoDef[fieldCount];
@@ -1883,6 +1894,8 @@ namespace Ibasa.Pikala
 
                 state.PushTrailer(() =>
                 {
+                    InvokePhase(state, assemblyTrailer);
+
                     ReadCustomAttributes(state, moduleBuilder.SetCustomAttribute);
 
                     foreach (var field in fields)
@@ -2032,7 +2045,7 @@ namespace Ibasa.Pikala
             });
         }
 
-        private Assembly DeserializeAssembly(PicklerDeserializationState state, DeserializationTypeContext typeContext)
+        private (Assembly, Action<PicklerDeserializationState>?) DeserializeAssembly(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
             var position = state.Reader.BaseStream.Position;
             var operation = (AssemblyOperation)state.Reader.ReadByte();
@@ -2040,17 +2053,17 @@ namespace Ibasa.Pikala
             switch (operation)
             {
                 case AssemblyOperation.Memo:
-                    return (Assembly)state.DoMemo();
+                    return ((Assembly)state.DoMemo(), null);
 
                 case AssemblyOperation.MscorlibAssembly:
                     // We don't memo mscorlib, it's cheaper to just have the single byte token
-                    return mscorlib;
+                    return (mscorlib, null);
 
                 case AssemblyOperation.AssemblyRef:
-                    return DeserializeAsesmblyRef(state, position);
+                    return (DeserializeAsesmblyRef(state, position), null);
 
                 case AssemblyOperation.AssemblyDef:
-                    return DeserializeAsesmblyDef(state, position, typeContext);
+                    return DeserializeAssemblyDef(state, position, typeContext);
             }
 
             throw new Exception($"Unexpected operation '{operation}' for Assembly");
@@ -2663,7 +2676,9 @@ namespace Ibasa.Pikala
 
             else if (runtimeType == typeof(Assembly))
             {
-                return DeserializeAssembly(state, default);
+                var (assembly, assemblyTrailer) = DeserializeAssembly(state, default);
+                InvokePhase(state, assemblyTrailer);
+                return assembly;
             }
             else if (runtimeType == typeof(Module))
             {
