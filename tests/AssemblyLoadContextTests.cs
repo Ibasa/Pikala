@@ -10,6 +10,26 @@ namespace Ibasa.Pikala.Tests
     public class AssemblyLoadContextTests
     {
         [Fact]
+        public void TestDefineDynamicAssembly()
+        {
+            // Test that our dynamic assembly is loaded into the right ALC not the default one
+
+            var alc1 = new System.Runtime.Loader.AssemblyLoadContext("TestDefineDynamicAssembly1", true);
+            var assemblyBuilder1 = alc1.DefineDynamicAssembly(new AssemblyName("DynamicAssembly1"), AssemblyBuilderAccess.Run);
+
+            Assert.Contains(assemblyBuilder1, alc1.Assemblies);
+            Assert.DoesNotContain(assemblyBuilder1, System.Runtime.Loader.AssemblyLoadContext.Default.Assemblies);
+
+            // Check that a fresh new ALC also works
+            var alc2 = new System.Runtime.Loader.AssemblyLoadContext("TestDefineDynamicAssembly2", true);
+            var assemblyBuilder2 = alc2.DefineDynamicAssembly(new AssemblyName("DynamicAssembly2"), AssemblyBuilderAccess.Run);
+
+            Assert.Contains(assemblyBuilder2, alc2.Assemblies);
+            Assert.DoesNotContain(assemblyBuilder2, alc1.Assemblies);
+            Assert.DoesNotContain(assemblyBuilder2, System.Runtime.Loader.AssemblyLoadContext.Default.Assemblies);
+        }
+
+        [Fact]
         public void TestAssemblyLoadContext()
         {
             // Test that our dynamic assembly is loaded into the ALC passed to the pickler and not the default ALC.
