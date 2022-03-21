@@ -8,7 +8,9 @@ namespace Ibasa.Pikala
     public static class AssemblyLoadContextExtensions
     {
         private static Guid _ddaGuid = new Guid("75468177-0C74-489F-967D-AC6BAB6BA7A4");
-        private static object _ddaLock = new object();
+
+        private static System.Runtime.CompilerServices.ConditionalWeakTable<AssemblyLoadContext, Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>> _ddaMethods =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<AssemblyLoadContext, Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>>();
 
         private static Assembly? LookupWorkaroundAssembly(AssemblyLoadContext assemblyLoadContext)
         {
@@ -178,36 +180,44 @@ namespace Ibasa.Pikala
                 // Otherwise to get around this we do some "fun" here where we build a tiny assembly with one method to call
                 // AssemblyBuilder.DefineDynamicAssembly, load that into the ALC we want to use then invoke the method on it.
 
-                Assembly? ddaAssembly;
-                lock (_ddaLock)
+                if (!_ddaMethods.TryGetValue(assemblyLoadContext, out var ddaMethod))
                 {
-                    // Take the lock now because we want to ensure we only build this shim assembly once.
-                    // We lock around lookup as well because looking up the assembly requires a traversal over all loaded assemblies and we want to 
-                    // minimize the confussion of loading the DDA assembly at the same time as iterating over it (it may be the thing causing AccessViolations).
+                    lock (_ddaMethods)
+                    {
+                        // Take the lock now because we want to ensure we only build this shim assembly once.
+                        if (!_ddaMethods.TryGetValue(assemblyLoadContext, out ddaMethod))
+                        {
+                            // We lock around lookup as well because looking up the assembly requires a traversal over all loaded assemblies and we want to 
+                            // minimize the confussion of loading the DDA assembly at the same time as iterating over it (it may be the thing causing AccessViolations).
 
-                    ddaAssembly = LookupWorkaroundAssembly(assemblyLoadContext);
-                    if (ddaAssembly == null)
-                    {
-                        // We haven't created a ddaAssembly for this AssemblyLoadContext. 
-                        ddaAssembly = BuildAndLoadWorkaroundAssembly(assemblyLoadContext);
-                    }
+                            var ddaAssembly = LookupWorkaroundAssembly(assemblyLoadContext);
+                            if (ddaAssembly == null)
+                            {
+                                // We haven't created a ddaAssembly for this AssemblyLoadContext. 
+                                ddaAssembly = BuildAndLoadWorkaroundAssembly(assemblyLoadContext);
+                            }
 
-                    // Assert that the context of our shim assembly does match the ALC we're trying to define a new dynamic assembly on
-                    try
-                    {
-                        System.Diagnostics.Debug.Assert(AssemblyLoadContext.GetLoadContext(ddaAssembly) == assemblyLoadContext, "Failed to load into defined ALC");
-                    }
-                    catch
-                    {
-                        // We've seen GetLoadContext spuriously fail, so just ignore checking this assert if that happens
+                            // Assert that the context of our shim assembly does match the ALC we're trying to define a new dynamic assembly on
+                            try
+                            {
+                                System.Diagnostics.Debug.Assert(AssemblyLoadContext.GetLoadContext(ddaAssembly) == assemblyLoadContext, "Failed to load into defined ALC");
+                            }
+                            catch
+                            {
+                                // We've seen GetLoadContext spuriously fail, so just ignore checking this assert if that happens
+                            }
+
+                            // Use reflection to look up the shim DefineDynamicAssembly method and invoke it
+                            var ddaMethodInfo = ddaAssembly.ManifestModule.GetMethod("DefineDynamicAssembly");
+                            System.Diagnostics.Debug.Assert(ddaMethodInfo != null, "Failed to GetMethod(\"DefineDynamicAssembly\")");
+                            var ddaDelegate = ddaMethodInfo.CreateDelegate(typeof(Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>));
+                            ddaMethod = (Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>)ddaDelegate;
+                            _ddaMethods.Add(assemblyLoadContext, ddaMethod);
+                        }
                     }
                 }
 
-                // Use reflection to look up the shim DefineDynamicAssembly method and invoke it
-                var ddaMethod = ddaAssembly.ManifestModule.GetMethod("DefineDynamicAssembly");
-                System.Diagnostics.Debug.Assert(ddaMethod != null, "Failed to GetMethod(\"DefineDynamicAssembly\")");
-
-                return (AssemblyBuilder)ddaMethod.Invoke(null, new object[] { name, access })!;
+                return ddaMethod(name, access);
             }
         }
     }
