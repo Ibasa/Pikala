@@ -191,11 +191,17 @@ namespace Ibasa.Pikala
                         // We haven't created a ddaAssembly for this AssemblyLoadContext. 
                         ddaAssembly = BuildAndLoadWorkaroundAssembly(assemblyLoadContext);
                     }
-                }
 
-                // Assert that the context of our shim assembly does match the ALC we're trying to define a new dynamic assembly on
-                var ddaContext = AssemblyLoadContext.GetLoadContext(ddaAssembly);
-                System.Diagnostics.Debug.Assert(ddaContext == assemblyLoadContext, "Failed to load into defined ALC");
+                    // Assert that the context of our shim assembly does match the ALC we're trying to define a new dynamic assembly on
+                    try
+                    {
+                        System.Diagnostics.Debug.Assert(AssemblyLoadContext.GetLoadContext(ddaAssembly) == assemblyLoadContext, "Failed to load into defined ALC");
+                    }
+                    catch
+                    {
+                        // We've seen GetLoadContext spuriously fail, so just ignore checking this assert if that happens
+                    }
+                }
 
                 // Use reflection to look up the shim DefineDynamicAssembly method and invoke it
                 var ddaMethod = ddaAssembly.ManifestModule.GetMethod("DefineDynamicAssembly");
