@@ -12,7 +12,7 @@ namespace Ibasa.Pikala
 
         private static Assembly? LookupWorkaroundAssembly(AssemblyLoadContext assemblyLoadContext)
         {
-            // We need some hackery here. Assemblies.MoveNext can throw an AccessViolation :(
+            // We need some hackery here. Assemblies.MoveNext can throw :(
             Assembly[]? assemblies;
             do
             {
@@ -20,7 +20,7 @@ namespace Ibasa.Pikala
                 {
                     assemblies = System.Linq.Enumerable.ToArray(assemblyLoadContext.Assemblies);
                 }
-                catch (AccessViolationException)
+                catch
                 {
                     assemblies = null;
                 }
