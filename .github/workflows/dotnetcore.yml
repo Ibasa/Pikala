@@ -49,7 +49,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    # We need to install all versions of dotnet even though we're using --framework to only build and test one of them per job
+    # We need to install all versions of dotnet to build even though we're using --framework to only test one of them per job
     - name: Setup .NET Core 3.1
       uses: actions/setup-dotnet@v1
       with:
@@ -65,7 +65,7 @@ jobs:
 
 
     - name: Build with dotnet
-      run: dotnet build --configuration Release --framework ${{ matrix.dotnet.moniker }}
+      run: dotnet build --configuration Release
     - name: Test with dotnet
       run: dotnet test --configuration Release --no-build --framework ${{ matrix.dotnet.moniker }} --results-directory tests/TestResults --blame-hang --blame-hang-timeout 60m --diag tests/TestResults/diagnostics.txt
     - name: Archive test results
