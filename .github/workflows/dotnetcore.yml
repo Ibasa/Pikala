@@ -51,12 +51,12 @@ jobs:
     - name: Setup .NET Core
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: ${matrix.dotnet.version}.x
+        dotnet-version: ${{ matrix.dotnet.version }}.x
 
     - name: Build with dotnet
-      run: dotnet build --configuration Release --framework ${matrix.dotnet.moniker}
+      run: dotnet build --configuration Release --framework ${{ matrix.dotnet.moniker }}
     - name: Test with dotnet
-      run: dotnet test --configuration Release --no-build --framework ${matrix.dotnet.moniker} --results-directory tests/TestResults --blame-hang --blame-hang-timeout 60m --diag tests/TestResults/diagnostics.txt
+      run: dotnet test --configuration Release --no-build --framework ${{ matrix.dotnet.moniker }} --results-directory tests/TestResults --blame-hang --blame-hang-timeout 60m --diag tests/TestResults/diagnostics.txt
     - name: Archive test results
       if: ${{ ! cancelled() }}
       uses: actions/upload-artifact@v2
