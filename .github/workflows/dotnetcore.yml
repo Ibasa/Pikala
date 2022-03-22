@@ -79,9 +79,11 @@ jobs:
     
     runs-on: ubuntu-latest
 
-    needs: [build]
+    needs: [lint, build]
 
     steps:
+    - uses: actions/checkout@v2
+
     - name: Pack with dotnet
       run: dotnet pack --configuration Release --output output
     - name: Publish NuGet
