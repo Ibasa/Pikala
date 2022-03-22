@@ -27,10 +27,29 @@ jobs:
     # Build and test with all supported dotnet versions (see https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core for what we should support)
 
     runs-on: ubuntu-latest
+    name: "build (${{ matrix.dotnet.version }})"
+    
+    strategy:
+        matrix:
+            dotnet: [
+                {
+                    version: "3.1",
+                    moniker: "netcoreapp3.1"
+                }, 
+                {
+                    version: "5.0",
+                    moniker: "net5.0"
+                },
+                {
+                    version: "6.0",
+                    moniker: "net6.0"
+                }
+            ]
 
     steps:
     - uses: actions/checkout@v2
 
+    # We need to install all versions of dotnet to build even though we're using --framework to only test one of them per job
     - name: Setup .NET Core 3.1
       uses: actions/setup-dotnet@v1
       with:
@@ -44,16 +63,27 @@ jobs:
       with:
         dotnet-version: 6.0.x
 
+
     - name: Build with dotnet
       run: dotnet build --configuration Release
     - name: Test with dotnet
-      run: dotnet test --configuration Release --no-build --results-directory tests/TestResults --blame-hang --blame-hang-timeout 60m --diag tests/TestResults/diagnostics.txt
+      run: dotnet test --configuration Release --no-build --framework ${{ matrix.dotnet.moniker }} --results-directory tests/TestResults --blame-hang --blame-hang-timeout 60m --diag tests/TestResults/diagnostics.txt
     - name: Archive test results
       if: ${{ ! cancelled() }}
       uses: actions/upload-artifact@v2
       with:
         name: test-results
         path: tests/TestResults
+
+  pack:
+    
+    runs-on: ubuntu-latest
+
+    needs: [lint, build]
+
+    steps:
+    - uses: actions/checkout@v2
+
     - name: Pack with dotnet
       run: dotnet pack --configuration Release --output output
     - name: Publish NuGet
