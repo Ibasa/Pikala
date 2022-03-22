@@ -1622,39 +1622,51 @@ namespace Ibasa.Pikala
             }
         }
 
-        private Assembly DeserializeAsesmblyDef(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
+        private Action<PicklerDeserializationState>? InvokePhase(PicklerDeserializationState state, Func<PicklerDeserializationState, Action<PicklerDeserializationState>?>? phase2)
         {
-            return state.RunWithTrailers(() =>
+            if (phase2 == null) return null;
+            return phase2(state);
+        }
+
+        private void InvokePhase(PicklerDeserializationState state, Action<PicklerDeserializationState>? phase3)
+        {
+            if (phase3 != null)
             {
-                var assemblyName = new AssemblyName(state.Reader.ReadString());
-                var access = AssemblyLoadContext.IsCollectible ? AssemblyBuilderAccess.RunAndCollect : AssemblyBuilderAccess.Run;
-                var assembly = AssemblyLoadContext.DefineDynamicAssembly(assemblyName, access);
-                if (assembly == null)
-                {
-                    throw new Exception($"Could not define assembly '{assemblyName}'");
-                }
+                phase3(state);
+            }
+        }
 
-                state.SetMemo(position, true, assembly);
+        private (AssemblyBuilder, Action<PicklerDeserializationState>) DeserializeAssemblyDef(PicklerDeserializationState state, long position)
+        {
+            var assemblyName = new AssemblyName(state.Reader.ReadString());
+            var access = AssemblyLoadContext.IsCollectible ? AssemblyBuilderAccess.RunAndCollect : AssemblyBuilderAccess.Run;
+            var assembly = AssemblyLoadContext.DefineDynamicAssembly(assemblyName, access);
+            if (assembly == null)
+            {
+                throw new Exception($"Could not define assembly '{assemblyName}'");
+            }
 
-                state.PushTrailer(() =>
-                {
-                    ReadCustomAttributes(state, assembly.SetCustomAttribute);
-                }, null, null);
+            state.SetMemo(position, true, assembly);
 
-                return assembly;
-            });
+            return (assembly, state =>
+            {
+                ReadCustomAttributes(state, assembly.SetCustomAttribute);
+            }
+            );
         }
 
         private Module DeserializeManifestModuleRef(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
         {
-            var assembly = DeserializeAssembly(state, typeContext);
+            var (assembly, assemblyTrailer) = DeserializeAssembly(state, typeContext);
+            System.Diagnostics.Debug.Assert(assemblyTrailer == null, "Expected assembly trailer to be null");
             return state.SetMemo(position, ShouldMemo(assembly), assembly.ManifestModule);
         }
 
         private Module DeserializeModuleRef(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
         {
             var name = state.Reader.ReadString();
-            var assembly = DeserializeAssembly(state, typeContext);
+            var (assembly, assemblyTrailer) = DeserializeAssembly(state, typeContext);
+            System.Diagnostics.Debug.Assert(assemblyTrailer == null, "Expected assembly trailer to be null");
             var module = assembly.GetModule(name);
             if (module == null)
             {
@@ -1668,17 +1680,16 @@ namespace Ibasa.Pikala
             return state.RunWithTrailers(() =>
             {
                 var name = state.Reader.ReadString();
-                var callback = state.RegisterMemoCallback(position, (AssemblyBuilder assembly) =>
+                var (assembly, assemblyTrailer) = DeserializeAssembly(state, typeContext);
+                System.Diagnostics.Debug.Assert(assembly is AssemblyBuilder, "Expected ModuleDef assembly to be an AssemblyBuilder");
+
+                var assemblyBuilder = (AssemblyBuilder)assembly;
+                var module = assemblyBuilder.DefineDynamicModule(name);
+                if (module == null)
                 {
-                    var module = assembly.DefineDynamicModule(name);
-                    if (module == null)
-                    {
-                        throw new Exception($"Could not create module '{name}' in assembly '{assembly}'");
-                    }
-                    return state.SetMemo(position, true, module);
-                });
-                var _ = DeserializeAssembly(state, typeContext);
-                var moduleBuilder = callback.Invoke();
+                    throw new Exception($"Could not create module '{name}' in assembly '{assembly}'");
+                }
+                var moduleBuilder = state.SetMemo(position, true, module);
 
                 var fieldCount = state.Reader.Read7BitEncodedInt();
                 var fields = new PickledFieldInfoDef[fieldCount];
@@ -1713,6 +1724,8 @@ namespace Ibasa.Pikala
 
                 state.PushTrailer(() =>
                 {
+                    InvokePhase(state, assemblyTrailer);
+
                     ReadCustomAttributes(state, moduleBuilder.SetCustomAttribute);
 
                     foreach (var field in fields)
@@ -1862,7 +1875,7 @@ namespace Ibasa.Pikala
             });
         }
 
-        private Assembly DeserializeAssembly(PicklerDeserializationState state, DeserializationTypeContext typeContext)
+        private (Assembly, Action<PicklerDeserializationState>?) DeserializeAssembly(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
             var position = state.Reader.BaseStream.Position;
             var operation = (AssemblyOperation)state.Reader.ReadByte();
@@ -1870,17 +1883,17 @@ namespace Ibasa.Pikala
             switch (operation)
             {
                 case AssemblyOperation.Memo:
-                    return (Assembly)state.DoMemo();
+                    return ((Assembly)state.DoMemo(), null);
 
                 case AssemblyOperation.MscorlibAssembly:
                     // We don't memo mscorlib, it's cheaper to just have the single byte token
-                    return mscorlib;
+                    return (mscorlib, null);
 
                 case AssemblyOperation.AssemblyRef:
-                    return DeserializeAsesmblyRef(state, position);
+                    return (DeserializeAsesmblyRef(state, position), null);
 
                 case AssemblyOperation.AssemblyDef:
-                    return DeserializeAsesmblyDef(state, position, typeContext);
+                    return DeserializeAssemblyDef(state, position);
             }
 
             throw new Exception($"Unexpected operation '{operation}' for Assembly");
@@ -2493,7 +2506,9 @@ namespace Ibasa.Pikala
 
             else if (runtimeType == typeof(Assembly))
             {
-                return DeserializeAssembly(state, default);
+                var (assembly, assemblyTrailer) = DeserializeAssembly(state, default);
+                InvokePhase(state, assemblyTrailer);
+                return assembly;
             }
             else if (runtimeType == typeof(Module))
             {
