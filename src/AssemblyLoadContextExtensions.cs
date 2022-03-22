@@ -8,11 +8,27 @@ namespace Ibasa.Pikala
     public static class AssemblyLoadContextExtensions
     {
         private static Guid _ddaGuid = new Guid("75468177-0C74-489F-967D-AC6BAB6BA7A4");
-        private static object _ddaLock = new object();
+
+        private static System.Runtime.CompilerServices.ConditionalWeakTable<AssemblyLoadContext, Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>> _ddaMethods =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<AssemblyLoadContext, Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>>();
 
         private static Assembly? LookupWorkaroundAssembly(AssemblyLoadContext assemblyLoadContext)
         {
-            foreach (var assembly in assemblyLoadContext.Assemblies)
+            // We need some hackery here. Assemblies.MoveNext can throw :(
+            Assembly[]? assemblies;
+            do
+            {
+                try
+                {
+                    assemblies = System.Linq.Enumerable.ToArray(assemblyLoadContext.Assemblies);
+                }
+                catch
+                {
+                    assemblies = null;
+                }
+            } while (assemblies == null);
+
+            foreach (var assembly in assemblies)
             {
                 var name = assembly.GetName();
                 if (name.Name == "DefineDynamicAssembly" && assembly.ManifestModule.ModuleVersionId == _ddaGuid)
@@ -145,51 +161,63 @@ namespace Ibasa.Pikala
         /// <returns>An object that represents the new assembly.</returns>
         public static AssemblyBuilder DefineDynamicAssembly(this AssemblyLoadContext assemblyLoadContext, AssemblyName name, AssemblyBuilderAccess access)
         {
-            var currentContextualReflectionContextOrDefault = AssemblyLoadContext.CurrentContextualReflectionContext ?? AssemblyLoadContext.Default;
-
-            if (assemblyLoadContext == currentContextualReflectionContextOrDefault)
+            if (Environment.Version.Major >= 6)
             {
-                // If the assembly load context is the current contextual one then we can just call DefineDynamicAssembly.
-                return AssemblyBuilder.DefineDynamicAssembly(name, access);
-
-            }
-            else if (Environment.Version.Major >= 6)
-            {
-                // Else for runtime 6.0 onwards we can set our AssemblyLoadContext as the current contextual context and then call DefineDynamicAssembly
+                // For runtime 6.0 onwards we can set our AssemblyLoadContext as the current contextual context and then call DefineDynamicAssembly
                 using var scope = assemblyLoadContext.EnterContextualReflection();
                 return AssemblyBuilder.DefineDynamicAssembly(name, access);
             }
             else
             {
-                // Else before net6 DefineDynamicAssembly did not check the contextual ALC, it instead used the callers ALC. So to get around this we do some "fun" here
-                // where we build a tiny assembly with one method to call AssemblyBuilder.DefineDynamicAssembly, load that into the ALC we want to use then invoke
-                // the method on it.
+                // Else before net6 DefineDynamicAssembly did not check the contextual ALC, it instead used the callers ALC. 
 
-                var ddaAssembly = LookupWorkaroundAssembly(assemblyLoadContext);
-                if (ddaAssembly == null)
+                // If our ALC is the intended ALC we can just call DefineDynamicAssembly
+                if (assemblyLoadContext == AssemblyLoadContext.GetLoadContext(Assembly.GetExecutingAssembly()))
                 {
-                    // We haven't created a ddaAssembly for this AssemblyLoadContext. Take the lock now because we want to ensure we only build this shim assembly once.
-                    lock (_ddaLock)
+                    return AssemblyBuilder.DefineDynamicAssembly(name, access);
+                }
+
+                // Otherwise to get around this we do some "fun" here where we build a tiny assembly with one method to call
+                // AssemblyBuilder.DefineDynamicAssembly, load that into the ALC we want to use then invoke the method on it.
+
+                if (!_ddaMethods.TryGetValue(assemblyLoadContext, out var ddaMethod))
+                {
+                    lock (_ddaMethods)
                     {
-                        // Try the lookup again
-                        ddaAssembly = LookupWorkaroundAssembly(assemblyLoadContext);
-                        if (ddaAssembly == null)
+                        // Take the lock now because we want to ensure we only build this shim assembly once.
+                        if (!_ddaMethods.TryGetValue(assemblyLoadContext, out ddaMethod))
                         {
-                            // Still null, need to make it
-                            ddaAssembly = BuildAndLoadWorkaroundAssembly(assemblyLoadContext);
+                            // We lock around lookup as well because looking up the assembly requires a traversal over all loaded assemblies and we want to 
+                            // minimize the confussion of loading the DDA assembly at the same time as iterating over it (it may be the thing causing AccessViolations).
+
+                            var ddaAssembly = LookupWorkaroundAssembly(assemblyLoadContext);
+                            if (ddaAssembly == null)
+                            {
+                                // We haven't created a ddaAssembly for this AssemblyLoadContext. 
+                                ddaAssembly = BuildAndLoadWorkaroundAssembly(assemblyLoadContext);
+                            }
+
+                            // Assert that the context of our shim assembly does match the ALC we're trying to define a new dynamic assembly on
+                            try
+                            {
+                                System.Diagnostics.Debug.Assert(AssemblyLoadContext.GetLoadContext(ddaAssembly) == assemblyLoadContext, "Failed to load into defined ALC");
+                            }
+                            catch
+                            {
+                                // We've seen GetLoadContext spuriously fail, so just ignore checking this assert if that happens
+                            }
+
+                            // Use reflection to look up the shim DefineDynamicAssembly method and invoke it
+                            var ddaMethodInfo = ddaAssembly.ManifestModule.GetMethod("DefineDynamicAssembly");
+                            System.Diagnostics.Debug.Assert(ddaMethodInfo != null, "Failed to GetMethod(\"DefineDynamicAssembly\")");
+                            var ddaDelegate = ddaMethodInfo.CreateDelegate(typeof(Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>));
+                            ddaMethod = (Func<AssemblyName, AssemblyBuilderAccess, AssemblyBuilder>)ddaDelegate;
+                            _ddaMethods.Add(assemblyLoadContext, ddaMethod);
                         }
                     }
                 }
 
-                // Assert that the context of our shim assembly does match the ALC we're trying to define a new dynamic assembly on
-                var ddaContext = AssemblyLoadContext.GetLoadContext(ddaAssembly);
-                System.Diagnostics.Debug.Assert(ddaContext == assemblyLoadContext, "Failed to load into defined ALC");
-
-                // Use reflection to look up the shim DefineDynamicAssembly method and invoke it
-                var ddaMethod = ddaAssembly.ManifestModule.GetMethod("DefineDynamicAssembly");
-                System.Diagnostics.Debug.Assert(ddaMethod != null, "Failed to GetMethod(\"DefineDynamicAssembly\")");
-
-                return (AssemblyBuilder)ddaMethod.Invoke(null, new object[] { name, access })!;
+                return ddaMethod(name, access);
             }
         }
     }
