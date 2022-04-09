@@ -751,7 +751,7 @@ namespace Ibasa.Pikala
             state.Writer.Write((byte)0xFF);
         }
 
-        private void SerializeModuleDef(PicklerSerializationState state, Module module, long position)
+        private Action<PicklerSerializationState>? SerializeModuleDef(PicklerSerializationState state, Module module, long position)
         {
             state.Writer.Write((byte)ModuleOperation.ModuleDef);
             state.Writer.Write(module.Name);
@@ -759,65 +759,66 @@ namespace Ibasa.Pikala
 
             AddMemo(state, false, position, module);
 
-            var fields = module.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-            state.Writer.Write7BitEncodedInt(fields.Length);
-            foreach (var field in fields)
+            return state =>
             {
-                state.Writer.Write(field.Name);
-                state.Writer.Write((int)field.Attributes);
-
-                // We expect all module fields to be RVA fields
-                System.Diagnostics.Debug.Assert(field.Attributes.HasFlag(FieldAttributes.HasFieldRVA), "Module field was not an RVA field");
-                // with a StructLayoutAttribute
-                System.Diagnostics.Debug.Assert(field.FieldType.StructLayoutAttribute != null, "RVA field did not have struct layout attribute");
-
-                var size = field.FieldType.StructLayoutAttribute.Size;
-                var value = field.GetValue(null);
-
-                var pin = System.Runtime.InteropServices.GCHandle.Alloc(value, System.Runtime.InteropServices.GCHandleType.Pinned);
-                try
+                var fields = module.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                state.Writer.Write7BitEncodedInt(fields.Length);
+                foreach (var field in fields)
                 {
-                    var addr = pin.AddrOfPinnedObject();
-                    unsafe
-                    {
-                        var bytes = new ReadOnlySpan<byte>(addr.ToPointer(), size);
+                    state.Writer.Write(field.Name);
+                    state.Writer.Write((int)field.Attributes);
 
-                        var allZero = true;
-                        for (int i = 0; i < size; ++i)
+                    // We expect all module fields to be RVA fields
+                    System.Diagnostics.Debug.Assert(field.Attributes.HasFlag(FieldAttributes.HasFieldRVA), "Module field was not an RVA field");
+                    // with a StructLayoutAttribute
+                    System.Diagnostics.Debug.Assert(field.FieldType.StructLayoutAttribute != null, "RVA field did not have struct layout attribute");
+
+                    var size = field.FieldType.StructLayoutAttribute.Size;
+                    var value = field.GetValue(null);
+
+                    var pin = System.Runtime.InteropServices.GCHandle.Alloc(value, System.Runtime.InteropServices.GCHandleType.Pinned);
+                    try
+                    {
+                        var addr = pin.AddrOfPinnedObject();
+                        unsafe
                         {
-                            if (bytes[i] != 0)
+                            var bytes = new ReadOnlySpan<byte>(addr.ToPointer(), size);
+
+                            var allZero = true;
+                            for (int i = 0; i < size; ++i)
                             {
-                                allZero = false;
-                                break;
+                                if (bytes[i] != 0)
+                                {
+                                    allZero = false;
+                                    break;
+                                }
+                            }
+
+                            if (allZero)
+                            {
+                                state.Writer.Write(-size);
+                            }
+                            else
+                            {
+                                state.Writer.Write(size);
+                                state.Writer.Write(bytes);
                             }
                         }
-
-                        if (allZero)
-                        {
-                            state.Writer.Write(-size);
-                        }
-                        else
-                        {
-                            state.Writer.Write(size);
-                            state.Writer.Write(bytes);
-                        }
+                    }
+                    finally
+                    {
+                        pin.Free();
                     }
                 }
-                finally
+
+                var methods = module.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                state.Writer.Write7BitEncodedInt(methods.Length);
+                foreach (var method in methods)
                 {
-                    pin.Free();
+                    SerializeMethodHeader(state, null, method);
                 }
-            }
 
-            var methods = module.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-            state.Writer.Write7BitEncodedInt(methods.Length);
-            foreach (var method in methods)
-            {
-                SerializeMethodHeader(state, null, method);
-            }
-
-            state.PushTrailer(() =>
-            {
+                // TODO: It's likely this should actually be third stage work
                 InvokePhase(state, assemblyTrailer);
 
                 WriteCustomAttributes(state, module.CustomAttributes.ToArray());
@@ -832,11 +833,10 @@ namespace Ibasa.Pikala
                     WriteCustomAttributes(state, method.CustomAttributes.ToArray());
                     SerializeMethodBody(state, null, method.Module, method.GetGenericArguments(), method.GetMethodBody());
                 }
-            },
-            () => { });
+            };
         }
 
-        private void SerializeDef(PicklerSerializationState state, Type type, Type[]? genericParameters)
+        private void SerializeDef(PicklerSerializationState state, Type type, Type[]? genericParameters, Action<PicklerSerializationState>? parentTrailer)
         {
             if (type.IsValueType)
             {
@@ -982,6 +982,8 @@ namespace Ibasa.Pikala
 
             state.PushTrailer(() =>
             {
+                InvokePhase(state, parentTrailer);
+
                 // Custom attributes might be self referencing so make sure all ctors and things are setup first
                 WriteCustomAttributes(state, type.CustomAttributes.ToArray());
 
@@ -1504,7 +1506,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeModule(PicklerSerializationState state, Module module, long? position = null)
+        private Action<PicklerSerializationState>? SerializeModule(PicklerSerializationState state, Module module, long? position = null)
         {
             if (Object.ReferenceEquals(module, null))
             {
@@ -1515,7 +1517,7 @@ namespace Ibasa.Pikala
             {
                 if (ShouldMemo(module) && state.MaybeWriteMemo(module, (byte)ModuleOperation.Memo))
                 {
-                    return;
+                    return null;
                 }
                 position = state.Writer.BaseStream.Position;
             }
@@ -1525,17 +1527,14 @@ namespace Ibasa.Pikala
             // Is this assembly one we should save by value?
             if (PickleByValue(module.Assembly))
             {
-                state.RunWithTrailers(() =>
-                {
-                    SerializeModuleDef(state, module, position.Value);
-                });
+                return SerializeModuleDef(state, module, position.Value);
             }
             else
             {
                 if (module == mscorlib.ManifestModule)
                 {
                     state.Writer.Write((byte)ModuleOperation.MscorlibModule);
-                    return;
+                    return null;
                 }
                 // We can just write a ref here, lets check if this is the ONLY module on the assembly (i.e. the ManifestModule)
                 // because we can then write out a token instead of a name
@@ -1551,6 +1550,7 @@ namespace Ibasa.Pikala
                 var assemblyTrailer = SerializeAssembly(state, module.Assembly);
                 System.Diagnostics.Debug.Assert(assemblyTrailer == null, "Expected assembly trailer to be null");
                 AddMemo(state, false, position.Value, module);
+                return null;
             }
         }
 
@@ -1711,13 +1711,15 @@ namespace Ibasa.Pikala
                         }
                     }
 
+                    Action<PicklerSerializationState>? parentTrailer;
                     if (type.DeclaringType != null)
                     {
                         SerializeType(state, type.DeclaringType, genericTypeParameters, genericMethodParameters);
+                        parentTrailer = null;
                     }
                     else
                     {
-                        SerializeModule(state, type.Module);
+                        parentTrailer = SerializeModule(state, type.Module);
                     }
 
                     if (type.IsEnum)
@@ -1738,6 +1740,8 @@ namespace Ibasa.Pikala
                             WriteEnumerationValue(state.Writer, typeCode, value);
                         }
 
+                        InvokePhase(state, parentTrailer);
+
                         WriteCustomAttributes(state, type.CustomAttributes.ToArray());
                     }
                     else if (type.IsAssignableTo(typeof(Delegate)))
@@ -1754,10 +1758,12 @@ namespace Ibasa.Pikala
                             state.Writer.WriteNullableString(parameter.Name);
                             SerializeType(state, parameter.ParameterType, genericTypeParameters, genericMethodParameters);
                         }
+
+                        InvokePhase(state, parentTrailer);
                     }
                     else
                     {
-                        SerializeDef(state, type, genericParameters);
+                        SerializeDef(state, type, genericParameters, parentTrailer);
                     }
                 });
             }
@@ -1789,7 +1795,8 @@ namespace Ibasa.Pikala
                     {
                         state.Writer.Write(type.Namespace + "." + type.Name);
                     }
-                    SerializeModule(state, type.Module);
+                    var moduleTrailer = SerializeModule(state, type.Module);
+                    System.Diagnostics.Debug.Assert(moduleTrailer == null, "Expected module trailer to be null");
                 }
 
                 AddMemo(state, false, position.Value, type);
@@ -2446,7 +2453,8 @@ namespace Ibasa.Pikala
             }
             else if (obj is Module module)
             {
-                SerializeModule(state, module, position);
+                var trailer = SerializeModule(state, module, position);
+                InvokePhase(state, trailer);
                 return;
             }
             else if (obj is Type type)
