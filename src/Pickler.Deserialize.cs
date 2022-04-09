@@ -1695,7 +1695,8 @@ namespace Ibasa.Pikala
             }
             var moduleBuilder = state.SetMemo(position, true, module);
 
-            return (moduleBuilder, state => {
+            return (moduleBuilder, state =>
+            {
 
                 var fieldCount = state.Reader.Read7BitEncodedInt();
                 var fields = new PickledFieldInfoDef[fieldCount];
@@ -1745,7 +1746,8 @@ namespace Ibasa.Pikala
                 }
 
                 moduleBuilder.CreateGlobalFunctions();
-            });
+            }
+            );
         }
 
         private PickledGenericType DeserializeGenericInstantiation(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
