@@ -679,9 +679,9 @@ namespace Ibasa.Pikala
                     case OperandType.InlineMethod:
                         {
                             var methodToken = ilReader.ReadInt32();
-                            var methodInfo = methodModule.ResolveMethod(methodToken, genericTypeParameters, genericMethodParameters);
-                            if (methodInfo == null) throw new Exception($"Could not look up method for metadata token: 0x{methodToken:x}");
-                            Serialize(state, methodInfo, typeof(MethodBase));
+                            var methodBase = methodModule.ResolveMethod(methodToken, genericTypeParameters, genericMethodParameters);
+                            if (methodBase == null) throw new Exception($"Could not look up method for metadata token: 0x{methodToken:x}");
+                            SerializeMethodBase(state, methodBase);
                             break;
                         }
 
@@ -1620,7 +1620,9 @@ namespace Ibasa.Pikala
                     {
                         state.Writer.Write((byte)TypeOperation.GenericMethodParameter);
                         state.Writer.Write7BitEncodedInt(type.GenericParameterPosition);
-                        Serialize(state, type.DeclaringMethod, typeof(MethodInfo));
+                        // Generic constructors aren't supported so this must be a MethodInfo.
+                        var methodInfo = (MethodInfo)type.DeclaringMethod;
+                        SerializeMethodInfo(state, methodInfo);
                     }
                     else
                     {
@@ -1867,17 +1869,34 @@ namespace Ibasa.Pikala
             });
         }
 
-        private void SerializeMethodInfo(PicklerSerializationState state, MethodInfo method, long position)
+        private void SerializeMethodInfo(PicklerSerializationState state, MethodInfo methodInfo, long? position = null)
         {
+            if (Object.ReferenceEquals(methodInfo, null))
+            {
+                throw new ArgumentNullException(nameof(methodInfo));
+            }
+
+            if (position == null)
+            {
+                if (state.MaybeWriteMemo(methodInfo, (byte)ObjectOperation.Memo))
+                {
+                    return;
+                }
+
+                state.Writer.Write((byte)ObjectOperation.Object);
+
+                position = state.Writer.BaseStream.Position;
+            }
+
             state.RunWithTrailers(() =>
             {
                 // This is wrong but we'll fix it as part of removing MemoCallbacks
-                AddMemo(state, false, position, method);
+                AddMemo(state, false, position.Value, methodInfo);
 
-                if (method.IsConstructedGenericMethod)
+                if (methodInfo.IsConstructedGenericMethod)
                 {
-                    var genericArguments = method.GetGenericArguments();
-                    SerializeSignature(state, Signature.GetSignature(method.GetGenericMethodDefinition()));
+                    var genericArguments = methodInfo.GetGenericArguments();
+                    SerializeSignature(state, Signature.GetSignature(methodInfo.GetGenericMethodDefinition()));
                     state.Writer.Write7BitEncodedInt(genericArguments.Length);
                     foreach (var generic in genericArguments)
                     {
@@ -1886,12 +1905,47 @@ namespace Ibasa.Pikala
                 }
                 else
                 {
-                    SerializeSignature(state, Signature.GetSignature(method));
+                    SerializeSignature(state, Signature.GetSignature(methodInfo));
                     state.Writer.Write7BitEncodedInt(0);
                 }
 
-                SerializeType(state, method.ReflectedType, null, null);
+                SerializeType(state, methodInfo.ReflectedType, null, null);
             });
+        }
+
+        private void SerializeMethodBase(PicklerSerializationState state, MethodBase methodBase, long? position = null)
+        {
+            if (Object.ReferenceEquals(methodBase, null))
+            {
+                throw new ArgumentNullException(nameof(methodBase));
+            }
+
+            if (position == null)
+            {
+                if (state.MaybeWriteMemo(methodBase, (byte)ObjectOperation.Memo))
+                {
+                    return;
+                }
+
+                state.Writer.Write((byte)ObjectOperation.Object);
+            }
+
+            if (methodBase is MethodInfo methodInfo)
+            {
+                SerializeType(state, typeof(MethodInfo), null, null);
+                position = state.Writer.BaseStream.Position;
+                SerializeMethodInfo(state, methodInfo, position);
+            }
+            else if (methodBase is ConstructorInfo constructorInfo)
+            {
+                SerializeType(state, typeof(ConstructorInfo), null, null);
+                position = state.Writer.BaseStream.Position;
+                SerializeConstructorInfo(state, constructorInfo, position);
+            }
+            else
+            {
+                throw new Exception($"Unexpected type '{methodBase.GetType()}' for MethodBase");
+            }
         }
 
         private void SerializeConstructorInfo(PicklerSerializationState state, ConstructorInfo constructor, long? position = null)
@@ -1978,7 +2032,7 @@ namespace Ibasa.Pikala
             // We've got a reducer for the type (or its generic variant)
             var (method, target, args) = reducer.Reduce(runtimeType, obj);
 
-            Serialize(state, method, typeof(MethodBase));
+            SerializeMethodBase(state, method);
 
             // Assert properties of the reduction
             if (method is ConstructorInfo constructorInfo)
