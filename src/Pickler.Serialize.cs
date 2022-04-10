@@ -1620,7 +1620,9 @@ namespace Ibasa.Pikala
                     {
                         state.Writer.Write((byte)TypeOperation.GenericMethodParameter);
                         state.Writer.Write7BitEncodedInt(type.GenericParameterPosition);
-                        Serialize(state, type.DeclaringMethod, typeof(MethodInfo));
+                        // Generic constructors aren't supported so this must be a MethodInfo.
+                        var methodInfo = (MethodInfo)type.DeclaringMethod;
+                        SerializeMethodInfo(state, methodInfo);
                     }
                     else
                     {
@@ -1867,17 +1869,34 @@ namespace Ibasa.Pikala
             });
         }
 
-        private void SerializeMethodInfo(PicklerSerializationState state, MethodInfo method, long position)
+        private void SerializeMethodInfo(PicklerSerializationState state, MethodInfo methodInfo, long? position = null)
         {
+            if (Object.ReferenceEquals(methodInfo, null))
+            {
+                throw new ArgumentNullException(nameof(methodInfo));
+            }
+
+            if (position == null)
+            {
+                if (state.MaybeWriteMemo(methodInfo, (byte)ObjectOperation.Memo))
+                {
+                    return;
+                }
+
+                state.Writer.Write((byte)ObjectOperation.Object);
+
+                position = state.Writer.BaseStream.Position;
+            }
+
             state.RunWithTrailers(() =>
             {
                 // This is wrong but we'll fix it as part of removing MemoCallbacks
-                AddMemo(state, false, position, method);
+                AddMemo(state, false, position.Value, methodInfo);
 
-                if (method.IsConstructedGenericMethod)
+                if (methodInfo.IsConstructedGenericMethod)
                 {
-                    var genericArguments = method.GetGenericArguments();
-                    SerializeSignature(state, Signature.GetSignature(method.GetGenericMethodDefinition()));
+                    var genericArguments = methodInfo.GetGenericArguments();
+                    SerializeSignature(state, Signature.GetSignature(methodInfo.GetGenericMethodDefinition()));
                     state.Writer.Write7BitEncodedInt(genericArguments.Length);
                     foreach (var generic in genericArguments)
                     {
@@ -1886,11 +1905,11 @@ namespace Ibasa.Pikala
                 }
                 else
                 {
-                    SerializeSignature(state, Signature.GetSignature(method));
+                    SerializeSignature(state, Signature.GetSignature(methodInfo));
                     state.Writer.Write7BitEncodedInt(0);
                 }
 
-                SerializeType(state, method.ReflectedType, null, null);
+                SerializeType(state, methodInfo.ReflectedType, null, null);
             });
         }
 
