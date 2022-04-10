@@ -679,9 +679,9 @@ namespace Ibasa.Pikala
                     case OperandType.InlineMethod:
                         {
                             var methodToken = ilReader.ReadInt32();
-                            var methodInfo = methodModule.ResolveMethod(methodToken, genericTypeParameters, genericMethodParameters);
-                            if (methodInfo == null) throw new Exception($"Could not look up method for metadata token: 0x{methodToken:x}");
-                            Serialize(state, methodInfo, typeof(MethodBase));
+                            var methodBase = methodModule.ResolveMethod(methodToken, genericTypeParameters, genericMethodParameters);
+                            if (methodBase == null) throw new Exception($"Could not look up method for metadata token: 0x{methodToken:x}");
+                            SerializeMethodBase(state, methodBase);
                             break;
                         }
 
@@ -1913,6 +1913,41 @@ namespace Ibasa.Pikala
             });
         }
 
+        private void SerializeMethodBase(PicklerSerializationState state, MethodBase methodBase, long? position = null)
+        {
+            if (Object.ReferenceEquals(methodBase, null))
+            {
+                throw new ArgumentNullException(nameof(methodBase));
+            }
+
+            if (position == null)
+            {
+                if (state.MaybeWriteMemo(methodBase, (byte)ObjectOperation.Memo))
+                {
+                    return;
+                }
+
+                state.Writer.Write((byte)ObjectOperation.Object);
+            }
+
+            if (methodBase is MethodInfo methodInfo)
+            {
+                SerializeType(state, typeof(MethodInfo), null, null);
+                position = state.Writer.BaseStream.Position;
+                SerializeMethodInfo(state, methodInfo, position);
+            }
+            else if (methodBase is ConstructorInfo constructorInfo)
+            {
+                SerializeType(state, typeof(ConstructorInfo), null, null);
+                position = state.Writer.BaseStream.Position;
+                SerializeConstructorInfo(state, constructorInfo, position);
+            }
+            else
+            {
+                throw new Exception($"Unexpected type '{methodBase.GetType()}' for MethodBase");
+            }
+        }
+
         private void SerializeConstructorInfo(PicklerSerializationState state, ConstructorInfo constructor, long? position = null)
         {
             if (Object.ReferenceEquals(constructor, null))
@@ -1997,7 +2032,7 @@ namespace Ibasa.Pikala
             // We've got a reducer for the type (or its generic variant)
             var (method, target, args) = reducer.Reduce(runtimeType, obj);
 
-            Serialize(state, method, typeof(MethodBase));
+            SerializeMethodBase(state, method);
 
             // Assert properties of the reduction
             if (method is ConstructorInfo constructorInfo)
