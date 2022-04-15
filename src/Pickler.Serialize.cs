@@ -690,7 +690,7 @@ namespace Ibasa.Pikala
                             var memberToken = ilReader.ReadInt32();
                             var memberInfo = methodModule.ResolveMember(memberToken, genericTypeParameters, genericMethodParameters);
                             if (memberInfo == null) throw new Exception($"Could not look up member for metadata token: 0x{memberToken:x}");
-                            Serialize(state, memberInfo, typeof(MemberInfo));
+                            SerializeMemberInfo(state, memberInfo);
                             break;
                         }
 
@@ -1863,13 +1863,30 @@ namespace Ibasa.Pikala
             });
         }
 
-        private void SerializeEventInfo(PicklerSerializationState state, EventInfo evt, long position)
+        private void SerializeEventInfo(PicklerSerializationState state, EventInfo evt, long? position = null)
         {
+            if (Object.ReferenceEquals(evt, null))
+            {
+                throw new ArgumentNullException(nameof(evt));
+            }
+
+            if (position == null)
+            {
+                if (state.MaybeWriteMemo(evt, (byte)ObjectOperation.Memo))
+                {
+                    return;
+                }
+
+                state.Writer.Write((byte)ObjectOperation.Object);
+
+                position = state.Writer.BaseStream.Position;
+            }
+
             state.RunWithTrailers(() =>
             {
                 state.Writer.Write(evt.Name);
                 SerializeType(state, evt.ReflectedType, null, null);
-                AddMemo(state, false, position, evt);
+                AddMemo(state, false, position.Value, evt);
             });
         }
 
@@ -1932,6 +1949,8 @@ namespace Ibasa.Pikala
                 }
 
                 state.Writer.Write((byte)ObjectOperation.Object);
+
+                position = state.Writer.BaseStream.Position;
             }
 
             if (methodBase is MethodInfo methodInfo)
@@ -1949,6 +1968,64 @@ namespace Ibasa.Pikala
             else
             {
                 throw new Exception($"Unexpected type '{methodBase.GetType()}' for MethodBase");
+            }
+        }
+        private void SerializeMemberInfo(PicklerSerializationState state, MemberInfo memberInfo, long? position = null)
+        {
+            if (Object.ReferenceEquals(memberInfo, null))
+            {
+                throw new ArgumentNullException(nameof(memberInfo));
+            }
+
+            if (position == null)
+            {
+                if (state.MaybeWriteMemo(memberInfo, (byte)ObjectOperation.Memo))
+                {
+                    return;
+                }
+
+                state.Writer.Write((byte)ObjectOperation.Object);
+            }
+
+            if (memberInfo is MethodInfo methodInfo)
+            {
+                SerializeType(state, typeof(MethodInfo), null, null);
+                position = state.Writer.BaseStream.Position;
+                SerializeMethodInfo(state, methodInfo, position);
+            }
+            else if (memberInfo is ConstructorInfo constructorInfo)
+            {
+                SerializeType(state, typeof(ConstructorInfo), null, null);
+                position = state.Writer.BaseStream.Position;
+                SerializeConstructorInfo(state, constructorInfo, position);
+            }
+            else if (memberInfo is FieldInfo fieldInfo)
+            {
+                SerializeType(state, typeof(FieldInfo), null, null);
+                position = state.Writer.BaseStream.Position;
+                SerializeFieldInfo(state, fieldInfo, position);
+            }
+            else if (memberInfo is PropertyInfo propertyInfo)
+            {
+                SerializeType(state, typeof(PropertyInfo), null, null);
+                position = state.Writer.BaseStream.Position;
+                SerializePropertyInfo(state, propertyInfo, position);
+            }
+            else if (memberInfo is EventInfo eventInfo)
+            {
+                SerializeType(state, typeof(EventInfo), null, null);
+                position = state.Writer.BaseStream.Position;
+                SerializeEventInfo(state, eventInfo, position);
+            }
+            else if (memberInfo is Type type)
+            {
+                SerializeType(state, typeof(Type), null, null);
+                position = state.Writer.BaseStream.Position;
+                SerializeType(state, type, null, null, position);
+            }
+            else
+            {
+                throw new Exception($"Unexpected type '{memberInfo.GetType()}' for MemberInfo");
             }
         }
 
