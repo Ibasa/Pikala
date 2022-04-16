@@ -7,6 +7,9 @@ using System.Reflection.Emit;
 
 namespace Ibasa.Pikala
 {
+    using SerializationStage3 = Action<PicklerSerializationState>;
+    using SerializationStage2 = Func<PicklerSerializationState, Action<PicklerSerializationState>>;
+
     public sealed partial class Pickler
     {
         private static HashSet<Type> reflectionTypes = new HashSet<Type>()
@@ -751,12 +754,11 @@ namespace Ibasa.Pikala
             state.Writer.Write((byte)0xFF);
         }
 
-        private Func<PicklerSerializationState, Action<PicklerSerializationState>>? SerializeModuleDef(PicklerSerializationState state, Module module, long position)
+        private SerializationStage2? SerializeModuleDef(PicklerSerializationState state, Module module, long position)
         {
             state.Writer.Write((byte)ModuleOperation.ModuleDef);
             state.Writer.Write(module.Name);
-            var assemblyPhase3 = SerializeAssembly(state, module.Assembly);
-
+            var assemblyStage3 = SerializeAssembly(state, module.Assembly);
             AddMemo(state, false, position, module);
 
             return state =>
@@ -820,7 +822,7 @@ namespace Ibasa.Pikala
 
                 return state =>
                 {
-                    InvokePhase(state, assemblyPhase3);
+                    InvokePhase(state, assemblyStage3);
 
                     WriteCustomAttributes(state, module.CustomAttributes.ToArray());
 
@@ -838,7 +840,7 @@ namespace Ibasa.Pikala
             };
         }
 
-        private void SerializeDef(PicklerSerializationState state, Type type, Type[]? genericParameters, Func<PicklerSerializationState, Action<PicklerSerializationState>>? parentPhase2)
+        private void SerializeDef(PicklerSerializationState state, Type type, Type[]? genericParameters, SerializationStage2? parentStage2)
         {
             if (type.IsValueType)
             {
@@ -982,11 +984,11 @@ namespace Ibasa.Pikala
                 }
             }
 
-            var parentPhase3 = InvokePhase(state, parentPhase2);
+            var parentStage3 = InvokePhase(state, parentStage2);
 
             state.PushTrailer(() =>
             {
-                InvokePhase(state, parentPhase3);
+                InvokePhase(state, parentStage3);
 
                 // Custom attributes might be self referencing so make sure all ctors and things are setup first
                 WriteCustomAttributes(state, type.CustomAttributes.ToArray());
@@ -1370,21 +1372,22 @@ namespace Ibasa.Pikala
             }
         }
 
-        private Action<PicklerSerializationState>? InvokePhase(PicklerSerializationState state, Func<PicklerSerializationState, Action<PicklerSerializationState>?>? phase2)
+        [return: System.Diagnostics.CodeAnalysis.NotNullIfNotNull("stage2")]
+        private SerializationStage3? InvokePhase(PicklerSerializationState state, SerializationStage2? stage2)
         {
-            if (phase2 == null) return null;
-            return phase2(state);
+            if (stage2 == null) return null;
+            return stage2(state);
         }
 
-        private void InvokePhase(PicklerSerializationState state, Action<PicklerSerializationState>? phase3)
+        private void InvokePhase(PicklerSerializationState state, SerializationStage3? stage3)
         {
-            if (phase3 != null)
+            if (stage3 != null)
             {
-                phase3(state);
+                stage3(state);
             }
         }
 
-        private Action<PicklerSerializationState>? SerializeAssembly(PicklerSerializationState state, Assembly assembly, long? position = null)
+        private SerializationStage3? SerializeAssembly(PicklerSerializationState state, Assembly assembly, long? position = null)
         {
             if (Object.ReferenceEquals(assembly, null))
             {
@@ -1430,7 +1433,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private Func<PicklerSerializationState, Action<PicklerSerializationState>>? SerializeModule(PicklerSerializationState state, Module module, long? position = null)
+        private SerializationStage2? SerializeModule(PicklerSerializationState state, Module module, long? position = null)
         {
             if (Object.ReferenceEquals(module, null))
             {
@@ -1471,8 +1474,8 @@ namespace Ibasa.Pikala
                     state.Writer.Write((byte)ModuleOperation.ModuleRef);
                     state.Writer.Write(module.Name);
                 }
-                var assemblyPhase3 = SerializeAssembly(state, module.Assembly);
-                System.Diagnostics.Debug.Assert(assemblyPhase3 == null, "Expected assembly phase 3 to be null");
+                var assemblyStage3 = SerializeAssembly(state, module.Assembly);
+                System.Diagnostics.Debug.Assert(assemblyStage3 == null, "Expected assembly phase 3 to be null");
                 AddMemo(state, false, position.Value, module);
                 return null;
             }
@@ -1637,15 +1640,15 @@ namespace Ibasa.Pikala
                         }
                     }
 
-                    Func<PicklerSerializationState, Action<PicklerSerializationState>>? parentPhase2;
+                    Func<PicklerSerializationState, Action<PicklerSerializationState>>? parentStage2;
                     if (type.DeclaringType != null)
                     {
                         SerializeType(state, type.DeclaringType, genericTypeParameters, genericMethodParameters);
-                        parentPhase2 = null;
+                        parentStage2 = null;
                     }
                     else
                     {
-                        parentPhase2 = SerializeModule(state, type.Module);
+                        parentStage2 = SerializeModule(state, type.Module);
                     }
 
                     if (type.IsEnum)
@@ -1666,7 +1669,7 @@ namespace Ibasa.Pikala
                             WriteEnumerationValue(state.Writer, typeCode, value);
                         }
 
-                        InvokePhase(state, InvokePhase(state, parentPhase2));
+                        InvokePhase(state, InvokePhase(state, parentStage2));
 
                         WriteCustomAttributes(state, type.CustomAttributes.ToArray());
                     }
@@ -1685,11 +1688,11 @@ namespace Ibasa.Pikala
                             SerializeType(state, parameter.ParameterType, genericTypeParameters, genericMethodParameters);
                         }
 
-                        InvokePhase(state, InvokePhase(state, parentPhase2));
+                        InvokePhase(state, InvokePhase(state, parentStage2));
                     }
                     else
                     {
-                        SerializeDef(state, type, genericParameters, parentPhase2);
+                        SerializeDef(state, type, genericParameters, parentStage2);
                     }
                 });
             }
@@ -2567,14 +2570,14 @@ namespace Ibasa.Pikala
 
             else if (obj is Assembly assembly)
             {
-                var phase3 = SerializeAssembly(state, assembly, position);
-                InvokePhase(state, phase3);
+                var stage3 = SerializeAssembly(state, assembly, position);
+                InvokePhase(state, stage3);
                 return;
             }
             else if (obj is Module module)
             {
-                var phase2 = SerializeModule(state, module, position);
-                InvokePhase(state, InvokePhase(state, phase2));
+                var stage2 = SerializeModule(state, module, position);
+                InvokePhase(state, InvokePhase(state, stage2));
                 return;
             }
             else if (obj is Type type)

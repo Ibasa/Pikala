@@ -7,6 +7,9 @@ using System.Reflection.Emit;
 
 namespace Ibasa.Pikala
 {
+    using DeserializationStage3 = Action<PicklerDeserializationState>;
+    using DeserializationStage2 = Func<PicklerDeserializationState, Action<PicklerDeserializationState>>;
+
     struct DeserializationTypeContext
     {
         public readonly Type[]? GenericTypeParameters;
@@ -605,7 +608,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void DeserializeTypeDefComplex(PicklerDeserializationState state, PickledTypeInfoDef constructingType, Func<PicklerDeserializationState, Action<PicklerDeserializationState>>? parentPhase2)
+        private void DeserializeTypeDefComplex(PicklerDeserializationState state, PickledTypeInfoDef constructingType, Func<PicklerDeserializationState, Action<PicklerDeserializationState>>? parentStage2)
         {
             var isValueType = constructingType.TypeDef == TypeDef.Struct;
             var isInterface = constructingType.TypeDef == TypeDef.Interface;
@@ -771,11 +774,11 @@ namespace Ibasa.Pikala
                 }
             }
 
-            var parentPhase3 = InvokePhase(state, parentPhase2);
+            var parentStage3 = InvokePhase(state, parentStage2);
 
             state.PushTrailer(() =>
             {
-                InvokePhase(state, parentPhase3);
+                InvokePhase(state, parentStage3);
 
                 ReadCustomAttributes(state, constructingType.TypeBuilder.SetCustomAttribute);
 
@@ -875,7 +878,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void DeserializeTypeDef(PicklerDeserializationState state, PickledTypeInfoDef constructingType, Func<PicklerDeserializationState, Action<PicklerDeserializationState>>? parentPhase2)
+        private void DeserializeTypeDef(PicklerDeserializationState state, PickledTypeInfoDef constructingType, Func<PicklerDeserializationState, Action<PicklerDeserializationState>>? parentStage2)
         {
             if (constructingType.TypeDef == TypeDef.Enum)
             {
@@ -894,7 +897,7 @@ namespace Ibasa.Pikala
                     enumerationField.SetConstant(value);
                 }
 
-                InvokePhase(state, InvokePhase(state, parentPhase2));
+                InvokePhase(state, InvokePhase(state, parentStage2));
 
                 ReadCustomAttributes(state, typeBuilder.SetCustomAttribute);
 
@@ -943,13 +946,13 @@ namespace Ibasa.Pikala
                 }
                 constructingType.Methods = new PickledMethodInfoDef[] { constructingMethod };
 
-                InvokePhase(state, InvokePhase(state, parentPhase2));
+                InvokePhase(state, InvokePhase(state, parentStage2));
 
                 constructingType.FullyDefined = true;
             }
             else
             {
-                DeserializeTypeDefComplex(state, constructingType, parentPhase2);
+                DeserializeTypeDefComplex(state, constructingType, parentStage2);
             }
         }
 
@@ -1411,21 +1414,22 @@ namespace Ibasa.Pikala
             }
         }
 
-        private Action<PicklerDeserializationState>? InvokePhase(PicklerDeserializationState state, Func<PicklerDeserializationState, Action<PicklerDeserializationState>?>? phase2)
+        [return: System.Diagnostics.CodeAnalysis.NotNullIfNotNull("stage2")]
+        private DeserializationStage3? InvokePhase(PicklerDeserializationState state, DeserializationStage2? stage2)
         {
-            if (phase2 == null) return null;
-            return phase2(state);
+            if (stage2 == null) return null;
+            return stage2(state);
         }
 
-        private void InvokePhase(PicklerDeserializationState state, Action<PicklerDeserializationState>? phase3)
+        private void InvokePhase(PicklerDeserializationState state, DeserializationStage3? stage3)
         {
-            if (phase3 != null)
+            if (stage3 != null)
             {
-                phase3(state);
+                stage3(state);
             }
         }
 
-        private (AssemblyBuilder, Action<PicklerDeserializationState>) DeserializeAssemblyDef(PicklerDeserializationState state, long position)
+        private (AssemblyBuilder, DeserializationStage3) DeserializeAssemblyDef(PicklerDeserializationState state, long position)
         {
             var assemblyName = new AssemblyName(state.Reader.ReadString());
             var access = AssemblyLoadContext.IsCollectible ? AssemblyBuilderAccess.RunAndCollect : AssemblyBuilderAccess.Run;
@@ -1464,7 +1468,7 @@ namespace Ibasa.Pikala
             return state.SetMemo(position, true, module);
         }
 
-        private (ModuleBuilder, Func<PicklerDeserializationState, Action<PicklerDeserializationState>>?) DeserializeModuleDef(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
+        private (ModuleBuilder, DeserializationStage2?) DeserializeModuleDef(PicklerDeserializationState state, long position, DeserializationTypeContext typeContext)
         {
             var name = state.Reader.ReadString();
             var (assembly, assemblyTrailer) = DeserializeAssembly(state, typeContext);
@@ -1666,7 +1670,7 @@ namespace Ibasa.Pikala
             });
         }
 
-        private (Assembly, Action<PicklerDeserializationState>?) DeserializeAssembly(PicklerDeserializationState state, DeserializationTypeContext typeContext)
+        private (Assembly, DeserializationStage3?) DeserializeAssembly(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
             var position = state.Reader.BaseStream.Position;
             var operation = (AssemblyOperation)state.Reader.ReadByte();
@@ -1690,7 +1694,7 @@ namespace Ibasa.Pikala
             throw new Exception($"Unexpected operation '{operation}' for Assembly");
         }
 
-        private (Module, Func<PicklerDeserializationState, Action<PicklerDeserializationState>>?) DeserializeModule(PicklerDeserializationState state, DeserializationTypeContext typeContext)
+        private (Module, DeserializationStage2?) DeserializeModule(PicklerDeserializationState state, DeserializationTypeContext typeContext)
         {
             var position = state.Reader.BaseStream.Position;
             var operation = (ModuleOperation)state.Reader.ReadByte();
@@ -2515,14 +2519,14 @@ namespace Ibasa.Pikala
 
             else if (runtimeType == typeof(Assembly))
             {
-                var (assembly, assemblyPhase3) = DeserializeAssembly(state, default);
-                InvokePhase(state, assemblyPhase3);
+                var (assembly, assemblyStage3) = DeserializeAssembly(state, default);
+                InvokePhase(state, assemblyStage3);
                 return assembly;
             }
             else if (runtimeType == typeof(Module))
             {
-                var (module, modulePhase2) = DeserializeModule(state, default);
-                InvokePhase(state, InvokePhase(state, modulePhase2));
+                var (module, moduleStage2) = DeserializeModule(state, default);
+                InvokePhase(state, InvokePhase(state, moduleStage2));
                 return module;
             }
             else if (runtimeType == typeof(Type))
