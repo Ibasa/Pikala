@@ -465,22 +465,22 @@ namespace Ibasa.Pikala
             }
         }
 
-        private OpCode ReadOpCode(BinaryReader reader)
-        {
-            var opCodeByte = reader.ReadByte();
-            if (opCodeByte == 0xfe)
-            {
-                opCodeByte = reader.ReadByte();
-                return _twoByteOpCodes[opCodeByte];
-            }
-            else
-            {
-                return _oneByteOpCodes[opCodeByte];
-            }
-        }
-
         private HashSet<Type> CollectTypes(Type[]? genericTypeParameters, Module methodModule, Type[]? genericMethodParameters, MethodBody methodBody)
         {
+            OpCode ReadOpCode(BinaryReader reader)
+            {
+                var opCodeByte = reader.ReadByte();
+                if (opCodeByte == 0xfe)
+                {
+                    opCodeByte = reader.ReadByte();
+                    return _twoByteOpCodes[opCodeByte];
+                }
+                else
+                {
+                    return _oneByteOpCodes[opCodeByte];
+                }
+            }
+
             var types = new HashSet<Type>();
             var ilStream = new MemoryStream(methodBody.GetILAsByteArray());
             var ilReader = new BinaryReader(ilStream);
@@ -1030,86 +1030,6 @@ namespace Ibasa.Pikala
                     }
                 }
             });
-        }
-
-        private void SerializeArray(PicklerSerializationState state, Array obj, long position, Type objType)
-        {
-            System.Diagnostics.Debug.Assert(obj.GetType() == objType, "GetType did not match passed in Type");
-
-            // This is an array, write the type then loop over each item.
-            // Theres a performance optimisation we could do here with value types,
-            // we we fetch the handler only once.
-
-            var elementType = objType.GetElementType();
-            System.Diagnostics.Debug.Assert(elementType != null, "GetElementType returned null for an array type");
-
-            // Special case szarray (i.e. Rank 1, lower bound 0)
-            if (objType.IsSZArray)
-            {
-                state.Writer.Write7BitEncodedInt(obj.Length);
-            }
-            else
-            {
-                // This might just be rank 1 but with non-normal bounds
-                for (int dimension = 0; dimension < obj.Rank; ++dimension)
-                {
-                    state.Writer.Write7BitEncodedInt(obj.GetLength(dimension));
-                    state.Writer.Write7BitEncodedInt(obj.GetLowerBound(dimension));
-                }
-            }
-
-            AddMemo(state, false, position, obj);
-
-            // If this is a primitive type just block copy it across to the stream
-            if (elementType.IsPrimitive)
-            {
-                var arrayHandle = System.Runtime.InteropServices.GCHandle.Alloc(obj, System.Runtime.InteropServices.GCHandleType.Pinned);
-                try
-                {
-                    // TODO We should just use Unsafe.SizeOf here but that's a net5.0 addition
-                    long byteCount;
-                    if (elementType == typeof(bool))
-                    {
-                        byteCount = obj.LongLength;
-                    }
-                    else if (elementType == typeof(char))
-                    {
-                        byteCount = 2 * obj.LongLength;
-                    }
-                    else
-                    {
-                        byteCount = System.Runtime.InteropServices.Marshal.SizeOf(elementType) * obj.LongLength;
-                    }
-
-                    unsafe
-                    {
-                        var pin = (byte*)arrayHandle.AddrOfPinnedObject().ToPointer();
-                        while (byteCount > 0)
-                        {
-                            // Write upto 4k at a time
-                            var length = (int)Math.Min(byteCount, 4096);
-
-                            var span = new ReadOnlySpan<byte>(pin, length);
-                            state.Writer.Write(span);
-
-                            pin += length;
-                            byteCount -= length;
-                        }
-                    }
-                }
-                finally
-                {
-                    arrayHandle.Free();
-                }
-            }
-            else
-            {
-                foreach (var item in obj)
-                {
-                    // TODO If we know all items are the same type we can save calling MakeInfo on each one
-                    Serialize(state, item, elementType);
-                }
-            }
         }
 
         private void WriteConstant(PicklerSerializationState state, object? value, Type constantType)
@@ -1970,6 +1890,7 @@ namespace Ibasa.Pikala
                 throw new Exception($"Unexpected type '{methodBase.GetType()}' for MethodBase");
             }
         }
+
         private void SerializeMemberInfo(PicklerSerializationState state, MemberInfo memberInfo, long? position = null)
         {
             if (Object.ReferenceEquals(memberInfo, null))
@@ -2056,6 +1977,86 @@ namespace Ibasa.Pikala
                 SerializeSignature(state, Signature.GetSignature(constructor));
                 SerializeType(state, constructor.ReflectedType, null, null);
             });
+        }
+
+        private void SerializeArray(PicklerSerializationState state, Array obj, long position, Type objType)
+        {
+            System.Diagnostics.Debug.Assert(obj.GetType() == objType, "GetType did not match passed in Type");
+
+            // This is an array, write the type then loop over each item.
+            // Theres a performance optimisation we could do here with value types,
+            // we we fetch the handler only once.
+
+            var elementType = objType.GetElementType();
+            System.Diagnostics.Debug.Assert(elementType != null, "GetElementType returned null for an array type");
+
+            // Special case szarray (i.e. Rank 1, lower bound 0)
+            if (objType.IsSZArray)
+            {
+                state.Writer.Write7BitEncodedInt(obj.Length);
+            }
+            else
+            {
+                // This might just be rank 1 but with non-normal bounds
+                for (int dimension = 0; dimension < obj.Rank; ++dimension)
+                {
+                    state.Writer.Write7BitEncodedInt(obj.GetLength(dimension));
+                    state.Writer.Write7BitEncodedInt(obj.GetLowerBound(dimension));
+                }
+            }
+
+            AddMemo(state, false, position, obj);
+
+            // If this is a primitive type just block copy it across to the stream
+            if (elementType.IsPrimitive)
+            {
+                var arrayHandle = System.Runtime.InteropServices.GCHandle.Alloc(obj, System.Runtime.InteropServices.GCHandleType.Pinned);
+                try
+                {
+                    // TODO We should just use Unsafe.SizeOf here but that's a net5.0 addition
+                    long byteCount;
+                    if (elementType == typeof(bool))
+                    {
+                        byteCount = obj.LongLength;
+                    }
+                    else if (elementType == typeof(char))
+                    {
+                        byteCount = 2 * obj.LongLength;
+                    }
+                    else
+                    {
+                        byteCount = System.Runtime.InteropServices.Marshal.SizeOf(elementType) * obj.LongLength;
+                    }
+
+                    unsafe
+                    {
+                        var pin = (byte*)arrayHandle.AddrOfPinnedObject().ToPointer();
+                        while (byteCount > 0)
+                        {
+                            // Write upto 4k at a time
+                            var length = (int)Math.Min(byteCount, 4096);
+
+                            var span = new ReadOnlySpan<byte>(pin, length);
+                            state.Writer.Write(span);
+
+                            pin += length;
+                            byteCount -= length;
+                        }
+                    }
+                }
+                finally
+                {
+                    arrayHandle.Free();
+                }
+            }
+            else
+            {
+                foreach (var item in obj)
+                {
+                    // TODO If we know all items are the same type we can save calling MakeInfo on each one
+                    Serialize(state, item, elementType);
+                }
+            }
         }
 
         private void SerializeMulticastDelegate(PicklerSerializationState state, long position, MulticastDelegate multicastDelegate)

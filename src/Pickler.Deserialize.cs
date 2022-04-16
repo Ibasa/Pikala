@@ -137,7 +137,6 @@ namespace Ibasa.Pikala
             throw new NotImplementedException($"Unhandled SignatureElement: {operation}");
         }
 
-
         private Signature DeserializeSignature(PicklerDeserializationState state)
         {
             var name = state.Reader.ReadString();
@@ -952,224 +951,6 @@ namespace Ibasa.Pikala
             {
                 DeserializeTypeDefComplex(state, constructingType, parentPhase2);
             }
-        }
-
-        private Array DeserializeArray(PicklerDeserializationState state, long position, Type arrayType)
-        {
-            var elementType = arrayType.GetElementType();
-            System.Diagnostics.Debug.Assert(elementType != null, "GetElementType returned null for an array type");
-
-            Array array;
-            if (arrayType.IsSZArray)
-            {
-                var length = state.Reader.Read7BitEncodedInt();
-                array = Array.CreateInstance(elementType, length);
-                state.SetMemo(position, true, array);
-            }
-            else
-            {
-                var rank = arrayType.GetArrayRank();
-                var lengths = new int[rank];
-                var lowerBounds = new int[rank];
-                for (int dimension = 0; dimension < rank; ++dimension)
-                {
-                    lengths[dimension] = state.Reader.Read7BitEncodedInt();
-                    lowerBounds[dimension] = state.Reader.Read7BitEncodedInt();
-                }
-                array = Array.CreateInstance(elementType, lengths, lowerBounds);
-                state.SetMemo(position, true, array);
-            }
-
-            // If this is a primitive type just block copy it across to the stream, excepting endianness (Which dotnet
-            // currently only supports little endian anyway, and mono on big endian is probably a fringe use?) this is
-            // safe. We could extend this to also consider product types with static layout but:
-            // A) Currently I don't think any mscorlib types are defined with a strict layout so they would never hit this
-            // B) We wouldn't do this for user defined type because they might change layout been write and read
-            if (elementType.IsPrimitive)
-            {
-                // TODO We should just use Unsafe.SizeOf here but that's a net5.0 addition
-                long byteCount;
-                if (elementType == typeof(bool))
-                {
-                    byteCount = array.LongLength;
-                }
-                else if (elementType == typeof(char))
-                {
-                    byteCount = 2 * array.LongLength;
-                }
-                else
-                {
-                    byteCount = System.Runtime.InteropServices.Marshal.SizeOf(elementType) * array.LongLength;
-                }
-
-                var arrayHandle = System.Runtime.InteropServices.GCHandle.Alloc(array, System.Runtime.InteropServices.GCHandleType.Pinned);
-                try
-                {
-                    unsafe
-                    {
-                        var pin = (byte*)arrayHandle.AddrOfPinnedObject().ToPointer();
-                        while (byteCount > 0)
-                        {
-                            // Read upto 4k at a time
-                            var length = (int)Math.Min(byteCount, 4096);
-
-                            var span = new Span<byte>(pin, length);
-                            state.Reader.Read(span);
-
-                            pin += length;
-                            byteCount -= length;
-                        }
-                    }
-                }
-                finally
-                {
-                    arrayHandle.Free();
-
-                }
-            }
-            else
-            {
-                if (arrayType.IsSZArray)
-                {
-                    for (int index = 0; index < array.Length; ++index)
-                    {
-                        array.SetValue(Deserialize(state, elementType), index);
-                    }
-                }
-                else
-                {
-                    var indices = new int[array.Rank];
-                    bool isEmpty = false;
-                    for (int dimension = 0; dimension < array.Rank; ++dimension)
-                    {
-                        indices[dimension] = array.GetLowerBound(dimension);
-                        isEmpty |= array.GetLength(dimension) == 0;
-                    }
-
-                    // If the array is empty (any length == 0) no need to loop
-                    if (!isEmpty)
-                    {
-                        var didBreak = true;
-                        while (didBreak)
-                        {
-                            // The first time we call into Iterate we know the array is non-empty, and indices is equal to lowerBounds (i.e the first element)
-                            // If we reach the last element we don't call back into Iterate
-
-                            var item = Deserialize(state, elementType);
-                            array.SetValue(item, indices);
-
-                            // Increment indices to the next position, we work through the dimensions backwards because that matches the order that GetEnumerator returns when we serialise out the items
-                            didBreak = false;
-                            for (int dimension = array.Rank - 1; dimension >= 0; --dimension)
-                            {
-                                var next = indices[dimension] + 1;
-                                if (next < array.GetLowerBound(dimension) + array.GetLength(dimension))
-                                {
-                                    indices[dimension] = next;
-                                    didBreak = true;
-                                    break;
-                                }
-                                else
-                                {
-                                    indices[dimension] = array.GetLowerBound(dimension);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            return array;
-        }
-
-        private object DeserializeTuple(PicklerDeserializationState state, bool shouldMemo, long position, Type runtimeType)
-        {
-            Type[] genericArguments = runtimeType.GetGenericArguments();
-
-            // if length == null short circuit to just return a new ValueTuple
-            if (genericArguments.Length == 0)
-            {
-                System.Diagnostics.Debug.Assert(runtimeType == typeof(ValueTuple), "Tuple length was zero but it wasn't a value tuple");
-                return new ValueTuple();
-            }
-
-            var items = new object?[genericArguments.Length];
-            for (int i = 0; i < genericArguments.Length; ++i)
-            {
-                items[i] = Deserialize(state, genericArguments[i]);
-
-                // Don't want to spam memo lookups if this is a ValueType
-                if (shouldMemo)
-                {
-                    var earlyResult = MaybeReadMemo(state, position);
-                    if (earlyResult != null) return earlyResult;
-                }
-            }
-
-            var genericParameters = new Type[genericArguments.Length];
-            for (int i = 0; i < genericArguments.Length; ++i)
-            {
-                genericParameters[i] = Type.MakeGenericMethodParameter(i);
-            }
-
-            var tupleType = runtimeType.IsValueType ? typeof(System.ValueTuple) : typeof(System.Tuple);
-            var openCreateMethod = tupleType.GetMethod("Create", genericArguments.Length, genericParameters);
-            System.Diagnostics.Debug.Assert(openCreateMethod != null, "GetMethod for Tuple.Create returned null");
-            var closedCreateMethod = openCreateMethod.MakeGenericMethod(genericArguments);
-            var tupleObject = closedCreateMethod.Invoke(null, items);
-            System.Diagnostics.Debug.Assert(tupleObject != null, "Tuple.Create returned null");
-
-            return tupleObject;
-        }
-
-        private object DeserializeReducer(PicklerDeserializationState state)
-        {
-            var method = DeserializeMethodBase(state);
-
-            object? target;
-            if (method is PickledConstructorInfo)
-            {
-                target = null;
-            }
-            else if (method is PickledMethodInfo)
-            {
-                target = Deserialize(state, typeof(object));
-            }
-            else
-            {
-                throw new Exception($"Invalid reduction MethodBase was '{method}'.");
-            }
-
-            var args = new object?[state.Reader.Read7BitEncodedInt()];
-            for (int i = 0; i < args.Length; ++i)
-            {
-                var arg = Deserialize(state, typeof(object));
-                args[i] = arg;
-            }
-
-            var result = method.Invoke(target, args);
-            if (result == null)
-            {
-                throw new Exception($"Invalid reducer method, '{method}' returned null.");
-            }
-            return result;
-        }
-
-        private object DeserializeObject(PicklerDeserializationState state, long position, bool shouldMemo, Type objectType, SerialisedObjectTypeInfo typeInfo)
-        {
-            var uninitalizedObject = state.SetMemo(position, shouldMemo, System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(objectType));
-
-            System.Diagnostics.Debug.Assert(typeInfo.SerialisedFields != null, "Error was null, but so was Fields");
-
-            for (int i = 0; i < typeInfo.SerialisedFields.Length; ++i)
-            {
-                var (fieldType, toSet) = typeInfo.SerialisedFields[i];
-
-                object? value = Deserialize(state, fieldType.Type);
-
-                toSet.SetValue(uninitalizedObject, value);
-            }
-
-            return uninitalizedObject;
         }
 
         private PickledFieldInfo DeserializeFieldRef(PicklerDeserializationState state, long position)
@@ -2173,6 +1954,224 @@ namespace Ibasa.Pikala
             }
 
             throw new Exception($"Unexpected type '{runtimeType}' for MemberInfo");
+        }
+
+        private Array DeserializeArray(PicklerDeserializationState state, long position, Type arrayType)
+        {
+            var elementType = arrayType.GetElementType();
+            System.Diagnostics.Debug.Assert(elementType != null, "GetElementType returned null for an array type");
+
+            Array array;
+            if (arrayType.IsSZArray)
+            {
+                var length = state.Reader.Read7BitEncodedInt();
+                array = Array.CreateInstance(elementType, length);
+                state.SetMemo(position, true, array);
+            }
+            else
+            {
+                var rank = arrayType.GetArrayRank();
+                var lengths = new int[rank];
+                var lowerBounds = new int[rank];
+                for (int dimension = 0; dimension < rank; ++dimension)
+                {
+                    lengths[dimension] = state.Reader.Read7BitEncodedInt();
+                    lowerBounds[dimension] = state.Reader.Read7BitEncodedInt();
+                }
+                array = Array.CreateInstance(elementType, lengths, lowerBounds);
+                state.SetMemo(position, true, array);
+            }
+
+            // If this is a primitive type just block copy it across to the stream, excepting endianness (Which dotnet
+            // currently only supports little endian anyway, and mono on big endian is probably a fringe use?) this is
+            // safe. We could extend this to also consider product types with static layout but:
+            // A) Currently I don't think any mscorlib types are defined with a strict layout so they would never hit this
+            // B) We wouldn't do this for user defined type because they might change layout been write and read
+            if (elementType.IsPrimitive)
+            {
+                // TODO We should just use Unsafe.SizeOf here but that's a net5.0 addition
+                long byteCount;
+                if (elementType == typeof(bool))
+                {
+                    byteCount = array.LongLength;
+                }
+                else if (elementType == typeof(char))
+                {
+                    byteCount = 2 * array.LongLength;
+                }
+                else
+                {
+                    byteCount = System.Runtime.InteropServices.Marshal.SizeOf(elementType) * array.LongLength;
+                }
+
+                var arrayHandle = System.Runtime.InteropServices.GCHandle.Alloc(array, System.Runtime.InteropServices.GCHandleType.Pinned);
+                try
+                {
+                    unsafe
+                    {
+                        var pin = (byte*)arrayHandle.AddrOfPinnedObject().ToPointer();
+                        while (byteCount > 0)
+                        {
+                            // Read upto 4k at a time
+                            var length = (int)Math.Min(byteCount, 4096);
+
+                            var span = new Span<byte>(pin, length);
+                            state.Reader.Read(span);
+
+                            pin += length;
+                            byteCount -= length;
+                        }
+                    }
+                }
+                finally
+                {
+                    arrayHandle.Free();
+
+                }
+            }
+            else
+            {
+                if (arrayType.IsSZArray)
+                {
+                    for (int index = 0; index < array.Length; ++index)
+                    {
+                        array.SetValue(Deserialize(state, elementType), index);
+                    }
+                }
+                else
+                {
+                    var indices = new int[array.Rank];
+                    bool isEmpty = false;
+                    for (int dimension = 0; dimension < array.Rank; ++dimension)
+                    {
+                        indices[dimension] = array.GetLowerBound(dimension);
+                        isEmpty |= array.GetLength(dimension) == 0;
+                    }
+
+                    // If the array is empty (any length == 0) no need to loop
+                    if (!isEmpty)
+                    {
+                        var didBreak = true;
+                        while (didBreak)
+                        {
+                            // The first time we call into Iterate we know the array is non-empty, and indices is equal to lowerBounds (i.e the first element)
+                            // If we reach the last element we don't call back into Iterate
+
+                            var item = Deserialize(state, elementType);
+                            array.SetValue(item, indices);
+
+                            // Increment indices to the next position, we work through the dimensions backwards because that matches the order that GetEnumerator returns when we serialise out the items
+                            didBreak = false;
+                            for (int dimension = array.Rank - 1; dimension >= 0; --dimension)
+                            {
+                                var next = indices[dimension] + 1;
+                                if (next < array.GetLowerBound(dimension) + array.GetLength(dimension))
+                                {
+                                    indices[dimension] = next;
+                                    didBreak = true;
+                                    break;
+                                }
+                                else
+                                {
+                                    indices[dimension] = array.GetLowerBound(dimension);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return array;
+        }
+
+        private object DeserializeTuple(PicklerDeserializationState state, bool shouldMemo, long position, Type runtimeType)
+        {
+            Type[] genericArguments = runtimeType.GetGenericArguments();
+
+            // if length == null short circuit to just return a new ValueTuple
+            if (genericArguments.Length == 0)
+            {
+                System.Diagnostics.Debug.Assert(runtimeType == typeof(ValueTuple), "Tuple length was zero but it wasn't a value tuple");
+                return new ValueTuple();
+            }
+
+            var items = new object?[genericArguments.Length];
+            for (int i = 0; i < genericArguments.Length; ++i)
+            {
+                items[i] = Deserialize(state, genericArguments[i]);
+
+                // Don't want to spam memo lookups if this is a ValueType
+                if (shouldMemo)
+                {
+                    var earlyResult = MaybeReadMemo(state, position);
+                    if (earlyResult != null) return earlyResult;
+                }
+            }
+
+            var genericParameters = new Type[genericArguments.Length];
+            for (int i = 0; i < genericArguments.Length; ++i)
+            {
+                genericParameters[i] = Type.MakeGenericMethodParameter(i);
+            }
+
+            var tupleType = runtimeType.IsValueType ? typeof(System.ValueTuple) : typeof(System.Tuple);
+            var openCreateMethod = tupleType.GetMethod("Create", genericArguments.Length, genericParameters);
+            System.Diagnostics.Debug.Assert(openCreateMethod != null, "GetMethod for Tuple.Create returned null");
+            var closedCreateMethod = openCreateMethod.MakeGenericMethod(genericArguments);
+            var tupleObject = closedCreateMethod.Invoke(null, items);
+            System.Diagnostics.Debug.Assert(tupleObject != null, "Tuple.Create returned null");
+
+            return tupleObject;
+        }
+
+        private object DeserializeReducer(PicklerDeserializationState state)
+        {
+            var method = DeserializeMethodBase(state);
+
+            object? target;
+            if (method is PickledConstructorInfo)
+            {
+                target = null;
+            }
+            else if (method is PickledMethodInfo)
+            {
+                target = Deserialize(state, typeof(object));
+            }
+            else
+            {
+                throw new Exception($"Invalid reduction MethodBase was '{method}'.");
+            }
+
+            var args = new object?[state.Reader.Read7BitEncodedInt()];
+            for (int i = 0; i < args.Length; ++i)
+            {
+                var arg = Deserialize(state, typeof(object));
+                args[i] = arg;
+            }
+
+            var result = method.Invoke(target, args);
+            if (result == null)
+            {
+                throw new Exception($"Invalid reducer method, '{method}' returned null.");
+            }
+            return result;
+        }
+
+        private object DeserializeObject(PicklerDeserializationState state, long position, bool shouldMemo, Type objectType, SerialisedObjectTypeInfo typeInfo)
+        {
+            var uninitalizedObject = state.SetMemo(position, shouldMemo, System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(objectType));
+
+            System.Diagnostics.Debug.Assert(typeInfo.SerialisedFields != null, "Error was null, but so was Fields");
+
+            for (int i = 0; i < typeInfo.SerialisedFields.Length; ++i)
+            {
+                var (fieldType, toSet) = typeInfo.SerialisedFields[i];
+
+                object? value = Deserialize(state, fieldType.Type);
+
+                toSet.SetValue(uninitalizedObject, value);
+            }
+
+            return uninitalizedObject;
         }
 
         private SerialisedObjectTypeInfo GetOrReadSerialisedObjectTypeInfo(PicklerDeserializationState state, Type type)
