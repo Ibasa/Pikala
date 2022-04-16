@@ -1854,6 +1854,35 @@ namespace Ibasa.Pikala
             });
         }
 
+        private void SerializeConstructorInfo(PicklerSerializationState state, ConstructorInfo constructor, long? position = null)
+        {
+            if (Object.ReferenceEquals(constructor, null))
+            {
+                throw new ArgumentNullException(nameof(constructor));
+            }
+
+            if (position == null)
+            {
+                if (state.MaybeWriteMemo(constructor, (byte)ObjectOperation.Memo))
+                {
+                    return;
+                }
+
+                state.Writer.Write((byte)ObjectOperation.Object);
+
+                position = state.Writer.BaseStream.Position;
+            }
+
+            state.RunWithTrailers(() =>
+            {
+                // This is wrong but we'll fix it as part of removing MemoCallbacks
+                AddMemo(state, false, position.Value, constructor);
+
+                SerializeSignature(state, Signature.GetSignature(constructor));
+                SerializeType(state, constructor.ReflectedType, null, null);
+            });
+        }
+
         private void SerializeMethodBase(PicklerSerializationState state, MethodBase methodBase, long? position = null)
         {
             if (Object.ReferenceEquals(methodBase, null))
@@ -1948,35 +1977,6 @@ namespace Ibasa.Pikala
             {
                 throw new Exception($"Unexpected type '{memberInfo.GetType()}' for MemberInfo");
             }
-        }
-
-        private void SerializeConstructorInfo(PicklerSerializationState state, ConstructorInfo constructor, long? position = null)
-        {
-            if (Object.ReferenceEquals(constructor, null))
-            {
-                throw new ArgumentNullException(nameof(constructor));
-            }
-
-            if (position == null)
-            {
-                if (state.MaybeWriteMemo(constructor, (byte)ObjectOperation.Memo))
-                {
-                    return;
-                }
-
-                state.Writer.Write((byte)ObjectOperation.Object);
-
-                position = state.Writer.BaseStream.Position;
-            }
-
-            state.RunWithTrailers(() =>
-            {
-                // This is wrong but we'll fix it as part of removing MemoCallbacks
-                AddMemo(state, false, position.Value, constructor);
-
-                SerializeSignature(state, Signature.GetSignature(constructor));
-                SerializeType(state, constructor.ReflectedType, null, null);
-            });
         }
 
         private void SerializeArray(PicklerSerializationState state, Array obj, long position, Type objType)
