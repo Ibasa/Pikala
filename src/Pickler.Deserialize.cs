@@ -774,11 +774,11 @@ namespace Ibasa.Pikala
                 }
             }
 
-            var parentStage3 = InvokePhase(state, parentStage2);
+            var parentStage3 = InvokeStage(state, parentStage2);
 
             state.PushTrailer(() =>
             {
-                InvokePhase(state, parentStage3);
+                InvokeStage(state, parentStage3);
 
                 ReadCustomAttributes(state, constructingType.TypeBuilder.SetCustomAttribute);
 
@@ -897,7 +897,7 @@ namespace Ibasa.Pikala
                     enumerationField.SetConstant(value);
                 }
 
-                InvokePhase(state, InvokePhase(state, parentStage2));
+                InvokeStage(state, InvokeStage(state, parentStage2));
 
                 ReadCustomAttributes(state, typeBuilder.SetCustomAttribute);
 
@@ -946,7 +946,7 @@ namespace Ibasa.Pikala
                 }
                 constructingType.Methods = new PickledMethodInfoDef[] { constructingMethod };
 
-                InvokePhase(state, InvokePhase(state, parentStage2));
+                InvokeStage(state, InvokeStage(state, parentStage2));
 
                 constructingType.FullyDefined = true;
             }
@@ -1415,13 +1415,13 @@ namespace Ibasa.Pikala
         }
 
         [return: System.Diagnostics.CodeAnalysis.NotNullIfNotNull("stage2")]
-        private DeserializationStage3? InvokePhase(PicklerDeserializationState state, DeserializationStage2? stage2)
+        private DeserializationStage3? InvokeStage(PicklerDeserializationState state, DeserializationStage2? stage2)
         {
             if (stage2 == null) return null;
             return stage2(state);
         }
 
-        private void InvokePhase(PicklerDeserializationState state, DeserializationStage3? stage3)
+        private void InvokeStage(PicklerDeserializationState state, DeserializationStage3? stage3)
         {
             if (stage3 != null)
             {
@@ -1518,7 +1518,7 @@ namespace Ibasa.Pikala
 
                 return state =>
                 {
-                    InvokePhase(state, assemblyTrailer);
+                    InvokeStage(state, assemblyTrailer);
 
                     ReadCustomAttributes(state, moduleBuilder.SetCustomAttribute);
 
@@ -2520,13 +2520,13 @@ namespace Ibasa.Pikala
             else if (runtimeType == typeof(Assembly))
             {
                 var (assembly, assemblyStage3) = DeserializeAssembly(state, default);
-                InvokePhase(state, assemblyStage3);
+                InvokeStage(state, assemblyStage3);
                 return assembly;
             }
             else if (runtimeType == typeof(Module))
             {
                 var (module, moduleStage2) = DeserializeModule(state, default);
-                InvokePhase(state, InvokePhase(state, moduleStage2));
+                InvokeStage(state, InvokeStage(state, moduleStage2));
                 return module;
             }
             else if (runtimeType == typeof(Type))
