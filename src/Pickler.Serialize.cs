@@ -333,24 +333,6 @@ namespace Ibasa.Pikala
                     WriteConstant(state, parameter.DefaultValue, parameter.ParameterType);
                 }
             }
-
-            var methodBody = constructor.GetMethodBody();
-            System.Diagnostics.Debug.Assert(methodBody != null, "GetMethodBody returned null for a constructor");
-
-            state.Writer.Write(methodBody.InitLocals);
-
-            state.Writer.Write7BitEncodedInt(methodBody.LocalVariables.Count);
-            foreach (var local in methodBody.LocalVariables)
-            {
-                SerializeType(state, local.LocalType, genericTypeParameters, null);
-            }
-
-            var collectedTypes = CollectTypes(genericTypeParameters, constructor.Module, null, methodBody);
-            state.Writer.Write7BitEncodedInt(collectedTypes.Count);
-            foreach (var type in collectedTypes)
-            {
-                SerializeType(state, type, genericTypeParameters, null);
-            }
         }
 
         private void SerializeMethodHeader(PicklerSerializationState state, Type[]? genericTypeParameters, MethodInfo method)
@@ -440,181 +422,18 @@ namespace Ibasa.Pikala
                     WriteConstant(state, parameter.DefaultValue, parameter.ParameterType);
                 }
             }
-
-            if (method.Attributes.HasFlag(MethodAttributes.PinvokeImpl) || method.Attributes.HasFlag(MethodAttributes.UnmanagedExport) || method.Attributes.HasFlag(MethodAttributes.Abstract))
-            {
-                var methodBody = method.GetMethodBody();
-                System.Diagnostics.Debug.Assert(methodBody == null, "GetMethodBody returned non-null unexpectedly");
-            }
-            else
-            {
-                var methodBody = method.GetMethodBody();
-                System.Diagnostics.Debug.Assert(methodBody != null, "GetMethodBody returned null unexpectedly");
-
-                state.Writer.Write(methodBody.InitLocals);
-
-                state.Writer.Write7BitEncodedInt(methodBody.LocalVariables.Count);
-                foreach (var local in methodBody.LocalVariables)
-                {
-                    SerializeType(state, local.LocalType, genericTypeParameters, genericMethodParameters);
-                }
-
-                var collectedTypes = CollectTypes(genericTypeParameters, method.Module, genericMethodParameters, methodBody);
-                state.Writer.Write7BitEncodedInt(collectedTypes.Count);
-                foreach (var type in collectedTypes)
-                {
-                    SerializeType(state, type, genericTypeParameters, genericMethodParameters);
-                }
-            }
-        }
-
-        private HashSet<Type> CollectTypes(Type[]? genericTypeParameters, Module methodModule, Type[]? genericMethodParameters, MethodBody methodBody)
-        {
-            OpCode ReadOpCode(BinaryReader reader)
-            {
-                var opCodeByte = reader.ReadByte();
-                if (opCodeByte == 0xfe)
-                {
-                    opCodeByte = reader.ReadByte();
-                    return _twoByteOpCodes[opCodeByte];
-                }
-                else
-                {
-                    return _oneByteOpCodes[opCodeByte];
-                }
-            }
-
-            var types = new HashSet<Type>();
-            var ilStream = new MemoryStream(methodBody.GetILAsByteArray());
-            var ilReader = new BinaryReader(ilStream);
-            while (ilStream.Position < ilStream.Length)
-            {
-                var opCode = ReadOpCode(ilReader);
-
-                // Write the operaand in a way that can be deserialized on the other side
-                switch (opCode.OperandType)
-                {
-                    case OperandType.InlineNone:
-                        break;
-
-                    case OperandType.InlineSwitch:
-                        {
-                            int length = ilReader.ReadInt32();
-                            for (int i = 0; i < length; ++i)
-                            {
-                                ilReader.ReadInt32();
-                            }
-                            break;
-                        }
-
-                    case OperandType.InlineString:
-                        {
-                            ilReader.ReadInt32();
-                            break;
-                        }
-
-                    case OperandType.InlineType:
-                        {
-                            var typeToken = ilReader.ReadInt32();
-                            var typeInfo = methodModule.ResolveType(typeToken, genericTypeParameters, genericMethodParameters);
-                            types.Add(typeInfo);
-                            break;
-                        }
-
-                    case OperandType.InlineField:
-                        {
-                            var fieldToken = ilReader.ReadInt32();
-                            var fieldInfo = methodModule.ResolveField(fieldToken, genericTypeParameters, genericMethodParameters);
-                            System.Diagnostics.Debug.Assert(fieldInfo != null, "ResolveField unexpectedly returned null");
-                            if (fieldInfo.DeclaringType != null)
-                            {
-                                types.Add(fieldInfo.DeclaringType);
-                            }
-                            break;
-                        }
-
-                    case OperandType.InlineMethod:
-                        {
-                            var methodToken = ilReader.ReadInt32();
-                            var methodInfo = methodModule.ResolveMethod(methodToken, genericTypeParameters, genericMethodParameters);
-                            System.Diagnostics.Debug.Assert(methodInfo != null, "ResolveMethod unexpectedly returned null");
-                            if (methodInfo.DeclaringType != null)
-                            {
-                                types.Add(methodInfo.DeclaringType);
-                            }
-                            break;
-                        }
-
-                    case OperandType.InlineTok:
-                        {
-                            var memberToken = ilReader.ReadInt32();
-                            var memberInfo = methodModule.ResolveMember(memberToken, genericTypeParameters, genericMethodParameters);
-                            System.Diagnostics.Debug.Assert(memberInfo != null, "ResolveMember unexpectedly returned null");
-                            if (memberInfo.DeclaringType != null)
-                            {
-                                types.Add(memberInfo.DeclaringType);
-                            }
-                            break;
-                        }
-
-                    case OperandType.ShortInlineI:
-                        {
-                            ilReader.ReadByte();
-                            break;
-                        }
-
-                    case OperandType.InlineI:
-                        {
-                            ilReader.ReadInt32();
-                            break;
-                        }
-
-                    case OperandType.ShortInlineR:
-                        {
-                            ilReader.ReadSingle();
-                            break;
-                        }
-
-                    case OperandType.InlineR:
-                        {
-                            ilReader.ReadDouble();
-                            break;
-                        }
-
-                    case OperandType.ShortInlineVar:
-                        {
-                            ilReader.ReadByte();
-                            break;
-                        }
-
-                    case OperandType.InlineVar:
-                        {
-                            ilReader.ReadInt16();
-                            break;
-                        }
-
-                    case OperandType.ShortInlineBrTarget:
-                        {
-                            ilReader.ReadByte();
-                            break;
-                        }
-
-                    case OperandType.InlineBrTarget:
-                        {
-                            ilReader.ReadInt32();
-                            break;
-                        }
-
-                    default:
-                        throw new NotImplementedException($"Unknown Opcode.OperandType {opCode.OperandType}");
-                }
-            }
-
-            return types;
         }
 
         private void SerializeMethodBody(PicklerSerializationState state, Type[]? genericTypeParameters, Module methodModule, Type[]? genericMethodParameters, MethodBody methodBody)
         {
+            state.Writer.Write(methodBody.InitLocals);
+
+            state.Writer.Write7BitEncodedInt(methodBody.LocalVariables.Count);
+            foreach (var local in methodBody.LocalVariables)
+            {
+                SerializeType(state, local.LocalType, genericTypeParameters, genericMethodParameters);
+            }
+
             var ilStream = new MemoryStream(methodBody.GetILAsByteArray());
             var ilReader = new BinaryReader(ilStream);
 

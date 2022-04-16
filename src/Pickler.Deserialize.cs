@@ -222,23 +222,7 @@ namespace Ibasa.Pikala
                 }
             }
 
-            constructorBuilder.InitLocals = state.Reader.ReadBoolean();
-
-            var locals = new PickledTypeInfo[state.Reader.Read7BitEncodedInt()];
-            for (int j = 0; j < locals.Length; ++j)
-            {
-                // We can't actually DECLARE locals here, so store them on the ConstructingMethod till construction time
-                locals[j] = DeserializeType(state, typeContext);
-            }
-
-            constructingConstructor = new PickledConstructorInfoDef(constructingType, constructorBuilder, parameters, parameterTypes, locals);
-
-            var usedTypes = state.Reader.Read7BitEncodedInt();
-            for (int j = 0; j < usedTypes; ++j)
-            {
-                // We can just discared the type here, we just need it in the stream before the method body is done
-                DeserializeType(state, typeContext);
-            }
+            constructingConstructor = new PickledConstructorInfoDef(constructingType, constructorBuilder, parameters, parameterTypes);
         }
 
         private void DeserializeMethodHeader(PicklerDeserializationState state, Type[]? genericTypeParameters, PickledTypeInfoDef constructingType, ref PickledMethodInfoDef constructingMethod)
@@ -347,37 +331,31 @@ namespace Ibasa.Pikala
             }
 
             methodBuilder.SetImplementationFlags(methodImplAttributes);
-
-            if (methodAttributes.HasFlag(MethodAttributes.PinvokeImpl) || methodAttributes.HasFlag(MethodAttributes.UnmanagedExport) || methodAttributes.HasFlag(MethodAttributes.Abstract))
-            {
-
-            }
-            else
-            {
-                methodBuilder.InitLocals = state.Reader.ReadBoolean();
-
-                constructingMethod.Locals = new PickledTypeInfo[state.Reader.Read7BitEncodedInt()];
-                for (int j = 0; j < constructingMethod.Locals.Length; ++j)
-                {
-                    // We can't actually DECLARE locals here, so store them on the ConstructingMethod till construction time
-                    constructingMethod.Locals[j] = DeserializeType(state, typeContext);
-                }
-
-                var usedTypes = state.Reader.Read7BitEncodedInt();
-                for (int j = 0; j < usedTypes; ++j)
-                {
-                    // We can just discared the type here, we just need it in the stream before the method body is done
-                    DeserializeType(state, typeContext);
-                }
-            }
         }
 
-        private void DeserializeMethodBody(PicklerDeserializationState state, DeserializationTypeContext typeContext, PickledTypeInfo[] locals, ILGenerator ilGenerator)
+        private void DeserializeMethodBody(PicklerDeserializationState state, DeserializationTypeContext typeContext, ConstructorBuilder constructorBuilder)
         {
-            // Now it should be safe to declare locals
-            foreach (var local in locals)
+            var ilGenerator = constructorBuilder.GetILGenerator();
+            System.Diagnostics.Debug.Assert(ilGenerator != null, "Expected non-null ILGenerator for constructor");
+            DeserializeMethodBody(state, typeContext, ilGenerator, b => constructorBuilder.InitLocals = b);
+        }
+
+        private void DeserializeMethodBody(PicklerDeserializationState state, DeserializationTypeContext typeContext, MethodBuilder methodBuilder)
+        {
+            var ilGenerator = methodBuilder.GetILGenerator();
+            System.Diagnostics.Debug.Assert(ilGenerator != null, "Expected non-null ILGenerator for method");
+            DeserializeMethodBody(state, typeContext, ilGenerator, b => methodBuilder.InitLocals = b);
+        }
+
+        private void DeserializeMethodBody(PicklerDeserializationState state, DeserializationTypeContext typeContext, ILGenerator ilGenerator, Action<bool> setInitLocals)
+        {
+            setInitLocals(state.Reader.ReadBoolean());
+
+            var locals = new PickledTypeInfo[state.Reader.Read7BitEncodedInt()];
+            for (int j = 0; j < locals.Length; ++j)
             {
-                ilGenerator.DeclareLocal(local.Type);
+                var localType = DeserializeType(state, typeContext);
+                ilGenerator.DeclareLocal(localType.Type);
             }
 
             var ilLabels = new Dictionary<int, Label>();
@@ -792,7 +770,7 @@ namespace Ibasa.Pikala
                     ReadCustomAttributes(state, constructorBuilder.SetCustomAttribute);
 
                     var ilGenerator = constructorBuilder.GetILGenerator();
-                    DeserializeMethodBody(state, new DeserializationTypeContext(typeContext.GenericTypeParameters, null), constructor.Locals!, ilGenerator);
+                    DeserializeMethodBody(state, new DeserializationTypeContext(typeContext.GenericTypeParameters, null), constructorBuilder);
                 }
                 foreach (var method in constructingType.Methods)
                 {
@@ -804,8 +782,7 @@ namespace Ibasa.Pikala
                     }
                     else
                     {
-                        var ilGenerator = methodBuilder.GetILGenerator();
-                        DeserializeMethodBody(state, new DeserializationTypeContext(typeContext.GenericTypeParameters, method.GenericParameters), method.Locals!, ilGenerator);
+                        DeserializeMethodBody(state, new DeserializationTypeContext(typeContext.GenericTypeParameters, method.GenericParameters), methodBuilder);
                     }
                 }
                 foreach (var property in constructingType.Properties)
@@ -919,7 +896,7 @@ namespace Ibasa.Pikala
 
                 var typeContext = new DeserializationTypeContext(constructingType.GenericParameters, null);
 
-                var constructingConstructor = new PickledConstructorInfoDef(constructingType, constructorBuilder, parameters, constructorParameters, null);
+                var constructingConstructor = new PickledConstructorInfoDef(constructingType, constructorBuilder, parameters, constructorParameters);
                 constructingType.Constructors = new PickledConstructorInfoDef[] { constructingConstructor };
 
                 var returnType = DeserializeType(state, typeContext);
@@ -1530,8 +1507,7 @@ namespace Ibasa.Pikala
                     foreach (var method in methods)
                     {
                         ReadCustomAttributes(state, method.MethodBuilder.SetCustomAttribute);
-                        var ilGenerator = method.MethodBuilder.GetILGenerator();
-                        DeserializeMethodBody(state, new DeserializationTypeContext(null, method.GenericParameters), method.Locals!, ilGenerator);
+                        DeserializeMethodBody(state, new DeserializationTypeContext(null, method.GenericParameters), method.MethodBuilder);
                     }
 
                     moduleBuilder.CreateGlobalFunctions();
