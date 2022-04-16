@@ -214,7 +214,7 @@ namespace Ibasa.Pikala
 
                     if (parameterAttributes.HasFlag(ParameterAttributes.HasDefault))
                     {
-                        var defaultValue = Deserialize(state, parameterTypes[j]);
+                        var defaultValue = ReadConstant(state, parameterTypes[j]);
                         parameters[j].SetConstant(defaultValue);
                     }
                 }
@@ -339,7 +339,7 @@ namespace Ibasa.Pikala
 
                 if (parameterAttributes.HasFlag(ParameterAttributes.HasDefault))
                 {
-                    var defaultValue = Deserialize(state, constructingMethod.ParameterTypes[j]);
+                    var defaultValue = ReadConstant(state, constructingMethod.ParameterTypes[j]);
                     constructingMethod.Parameters[j].SetConstant(defaultValue);
                 }
             }

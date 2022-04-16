@@ -327,7 +327,7 @@ namespace Ibasa.Pikala
 
                 if (parameter.Attributes.HasFlag(ParameterAttributes.HasDefault))
                 {
-                    Serialize(state, parameter.DefaultValue, parameter.ParameterType);
+                    WriteConstant(state, parameter.DefaultValue, parameter.ParameterType);
                 }
             }
 
@@ -434,7 +434,7 @@ namespace Ibasa.Pikala
 
                 if (parameter.Attributes.HasFlag(ParameterAttributes.HasDefault))
                 {
-                    Serialize(state, parameter.DefaultValue, parameter.ParameterType);
+                    WriteConstant(state, parameter.DefaultValue, parameter.ParameterType);
                 }
             }
 
