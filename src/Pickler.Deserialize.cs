@@ -608,7 +608,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void DeserializeTypeDefComplex(PicklerDeserializationState state, PickledTypeInfoDef constructingType, Func<PicklerDeserializationState, Action<PicklerDeserializationState>>? parentStage2)
+        private void DeserializeTypeDefComplex(PicklerDeserializationState state, PickledTypeInfoDef constructingType, DeserializationStage2? parentStage2)
         {
             var isValueType = constructingType.TypeDef == TypeDef.Struct;
             var isInterface = constructingType.TypeDef == TypeDef.Interface;
@@ -878,7 +878,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void DeserializeTypeDef(PicklerDeserializationState state, PickledTypeInfoDef constructingType, Func<PicklerDeserializationState, Action<PicklerDeserializationState>>? parentStage2)
+        private void DeserializeTypeDef(PicklerDeserializationState state, PickledTypeInfoDef constructingType, DeserializationStage2? parentStage2)
         {
             if (constructingType.TypeDef == TypeDef.Enum)
             {
@@ -1630,7 +1630,7 @@ namespace Ibasa.Pikala
                 }
 
                 PickledTypeInfoDef constructingType;
-                Func<PicklerDeserializationState, Action<PicklerDeserializationState>>? parentTrailer;
+                DeserializationStage2? parentTrailer;
                 if (isNested)
                 {
                     var callback = state.RegisterMemoCallback(position, (PickledTypeInfoDef declaringType) =>
