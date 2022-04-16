@@ -1883,36 +1883,29 @@ namespace Ibasa.Pikala
             });
         }
 
-        private void SerializeMethodBase(PicklerSerializationState state, MethodBase methodBase, long? position = null)
+        private void SerializeMethodBase(PicklerSerializationState state, MethodBase methodBase)
         {
             if (Object.ReferenceEquals(methodBase, null))
             {
                 throw new ArgumentNullException(nameof(methodBase));
             }
 
-            if (position == null)
+            if (state.MaybeWriteMemo(methodBase, (byte)ObjectOperation.Memo))
             {
-                if (state.MaybeWriteMemo(methodBase, (byte)ObjectOperation.Memo))
-                {
-                    return;
-                }
-
-                state.Writer.Write((byte)ObjectOperation.Object);
-
-                position = state.Writer.BaseStream.Position;
+                return;
             }
+
+            state.Writer.Write((byte)ObjectOperation.Object);
 
             if (methodBase is MethodInfo methodInfo)
             {
                 SerializeType(state, typeof(MethodInfo), null, null);
-                position = state.Writer.BaseStream.Position;
-                SerializeMethodInfo(state, methodInfo, position);
+                SerializeMethodInfo(state, methodInfo, state.Writer.BaseStream.Position);
             }
             else if (methodBase is ConstructorInfo constructorInfo)
             {
                 SerializeType(state, typeof(ConstructorInfo), null, null);
-                position = state.Writer.BaseStream.Position;
-                SerializeConstructorInfo(state, constructorInfo, position);
+                SerializeConstructorInfo(state, constructorInfo, state.Writer.BaseStream.Position);
             }
             else
             {
@@ -1920,58 +1913,49 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeMemberInfo(PicklerSerializationState state, MemberInfo memberInfo, long? position = null)
+        private void SerializeMemberInfo(PicklerSerializationState state, MemberInfo memberInfo)
         {
             if (Object.ReferenceEquals(memberInfo, null))
             {
                 throw new ArgumentNullException(nameof(memberInfo));
             }
 
-            if (position == null)
+            if (state.MaybeWriteMemo(memberInfo, (byte)ObjectOperation.Memo))
             {
-                if (state.MaybeWriteMemo(memberInfo, (byte)ObjectOperation.Memo))
-                {
-                    return;
-                }
-
-                state.Writer.Write((byte)ObjectOperation.Object);
+                return;
             }
+
+            state.Writer.Write((byte)ObjectOperation.Object);
 
             if (memberInfo is MethodInfo methodInfo)
             {
                 SerializeType(state, typeof(MethodInfo), null, null);
-                position = state.Writer.BaseStream.Position;
-                SerializeMethodInfo(state, methodInfo, position);
+                SerializeMethodInfo(state, methodInfo, state.Writer.BaseStream.Position);
             }
             else if (memberInfo is ConstructorInfo constructorInfo)
             {
                 SerializeType(state, typeof(ConstructorInfo), null, null);
-                position = state.Writer.BaseStream.Position;
-                SerializeConstructorInfo(state, constructorInfo, position);
+                SerializeConstructorInfo(state, constructorInfo, state.Writer.BaseStream.Position);
             }
             else if (memberInfo is FieldInfo fieldInfo)
             {
                 SerializeType(state, typeof(FieldInfo), null, null);
-                position = state.Writer.BaseStream.Position;
-                SerializeFieldInfo(state, fieldInfo, position);
+                SerializeFieldInfo(state, fieldInfo, state.Writer.BaseStream.Position);
             }
             else if (memberInfo is PropertyInfo propertyInfo)
             {
                 SerializeType(state, typeof(PropertyInfo), null, null);
-                position = state.Writer.BaseStream.Position;
-                SerializePropertyInfo(state, propertyInfo, position);
+                SerializePropertyInfo(state, propertyInfo, state.Writer.BaseStream.Position);
             }
             else if (memberInfo is EventInfo eventInfo)
             {
                 SerializeType(state, typeof(EventInfo), null, null);
-                position = state.Writer.BaseStream.Position;
-                SerializeEventInfo(state, eventInfo, position);
+                SerializeEventInfo(state, eventInfo, state.Writer.BaseStream.Position);
             }
             else if (memberInfo is Type type)
             {
                 SerializeType(state, typeof(Type), null, null);
-                position = state.Writer.BaseStream.Position;
-                SerializeType(state, type, null, null, position);
+                SerializeType(state, type, null, null, state.Writer.BaseStream.Position);
             }
             else
             {
