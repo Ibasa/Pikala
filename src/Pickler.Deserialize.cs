@@ -1557,10 +1557,10 @@ namespace Ibasa.Pikala
                 var (module, moduleTrailer) = DeserializeModule(state, typeContext);
                 System.Diagnostics.Debug.Assert(moduleTrailer == null, "Expected module trailer to be null");
 
-                var type = module.GetType(typeName);
+                var type = module.Module.GetType(typeName);
                 if (type == null)
                 {
-                    throw new Exception($"Could not load type '{typeName}' from module '{module.FullyQualifiedName}'");
+                    throw new Exception($"Could not load type '{typeName}' from module '{module.Module.FullyQualifiedName}'");
                 }
 
                 result = new PickledTypeInfoRef(type);
@@ -1620,7 +1620,7 @@ namespace Ibasa.Pikala
                 {
                     var (module, moduleTrailer) = DeserializeModule(state, typeContext);
                     var moduleDef = (PickledModuleDef)module;
-                    constructingType = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, null, moduleBulder.ModuleBuilder.DefineType);
+                    constructingType = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, null, moduleDef.ModuleBuilder.DefineType);
 
                     if (genericParameters != null)
                     {
@@ -2493,7 +2493,7 @@ namespace Ibasa.Pikala
             {
                 var (module, moduleStage2) = DeserializeModule(state, default);
                 InvokeStage(state, InvokeStage(state, moduleStage2));
-                return module;
+                return module.Module;
             }
             else if (runtimeType == typeof(Type))
             {
