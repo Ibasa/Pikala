@@ -165,8 +165,6 @@ namespace Ibasa.Pikala
         {
             ilGenerator.Emit(opCode, Type);
         }
-
-        public abstract PickledTypeInfo Reify(PickledTypeInfo[] genericArguments);
     }
 
     sealed class PickledTypeInfoRef : PickledTypeInfo
@@ -260,11 +258,6 @@ namespace Ibasa.Pikala
         public override PickledTypeInfo GetGenericArgument(int position)
         {
             return new PickledGenericParameterRef(Type.GetGenericArguments()[position]);
-        }
-
-        public override PickledTypeInfo Reify(PickledTypeInfo[] genericArguments)
-        {
-            return this;
         }
     }
 
@@ -368,12 +361,6 @@ namespace Ibasa.Pikala
         {
             return new PickledGenericParameterRef(Type.GetGenericArguments()[position]);
         }
-
-        public override PickledTypeInfo Reify(PickledTypeInfo[] genericArguments)
-        {
-            var elementType = ElementType.Reify(genericArguments);
-            return new PickledArrayType(elementType, Rank);
-        }
     }
 
     sealed class PickledGenericParameterRef : PickledTypeInfo
@@ -424,11 +411,6 @@ namespace Ibasa.Pikala
         {
             throw new NotImplementedException();
         }
-
-        public override PickledTypeInfo Reify(PickledTypeInfo[] genericArguments)
-        {
-            return genericArguments[Type.GenericParameterPosition];
-        }
     }
 
     sealed class PickledGenericParameterDef : PickledTypeInfo
@@ -475,11 +457,6 @@ namespace Ibasa.Pikala
         public override IEnumerable<PickledFieldInfo> GetFields()
         {
             throw new NotImplementedException();
-        }
-
-        public override PickledTypeInfo Reify(PickledTypeInfo[] genericArguments)
-        {
-            return genericArguments[Position];
         }
 
         public override (Type, Resolved) Resolve(HashSet<PickledTypeInfoDef> assumeIsComplete)
@@ -674,11 +651,6 @@ namespace Ibasa.Pikala
                     yield return field;
                 }
             }
-        }
-
-        public override PickledTypeInfo Reify(PickledTypeInfo[] genericArguments)
-        {
-            return this;
         }
     }
 
@@ -964,11 +936,6 @@ namespace Ibasa.Pikala
         public override PickledTypeInfo GetGenericArgument(int position)
         {
             return GenericArguments[position];
-        }
-
-        public override PickledTypeInfo Reify(PickledTypeInfo[] genericArguments)
-        {
-            return this;
         }
     }
 
