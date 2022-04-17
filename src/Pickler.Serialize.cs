@@ -278,83 +278,35 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeConstructorHeader(PicklerSerializationState state, Type[]? genericTypeParameters, ConstructorInfo constructor)
+        private void SerializeMethodBaseHeader(PicklerSerializationState state, Type[]? genericTypeParameters, MethodBase method)
         {
-            state.Writer.Write((int)constructor.Attributes);
-            state.Writer.Write((int)constructor.CallingConvention);
-
-            var constructorParameters = constructor.GetParameters();
-
-            bool hasmodifiers = false;
-            foreach (var parameter in constructorParameters)
+            var isMethodInfo = method is MethodInfo;
+            if (isMethodInfo)
             {
-                if (parameter.GetRequiredCustomModifiers().Length > 0 || parameter.GetOptionalCustomModifiers().Length > 0)
-                {
-                    hasmodifiers = true;
-                    break;
-                }
+                // Can't define constructors names or implementation flags so don't both writing them out.
+                state.Writer.Write(method.Name);
+                state.Writer.Write((int)method.MethodImplementationFlags);
             }
 
-            state.Writer.Write7BitEncodedInt((constructorParameters.Length << 1) | (hasmodifiers ? 1 : 0));
-
-            foreach (var parameter in constructorParameters)
-            {
-                SerializeType(state, parameter.ParameterType, genericTypeParameters, null);
-
-                if (hasmodifiers)
-                {
-                    // Combine the count of required and optional parameters and write that out
-                    var reqmods = parameter.GetRequiredCustomModifiers();
-                    var optmods = parameter.GetOptionalCustomModifiers();
-
-                    if (reqmods.Length > 7) { throw new NotSupportedException("Pikala does not support more than 7 required modifiers"); }
-                    if (optmods.Length > 7) { throw new NotSupportedException("Pikala does not support more than 7 optional modifiers"); }
-
-                    var interleave = (reqmods.Length << 4) | optmods.Length;
-
-                    state.Writer.Write((byte)interleave);
-                    foreach (var reqmod in reqmods)
-                    {
-                        SerializeType(state, reqmod, genericTypeParameters, null);
-                    }
-                    foreach (var optmod in optmods)
-                    {
-                        SerializeType(state, optmod, genericTypeParameters, null);
-                    }
-                }
-            }
-            foreach (var parameter in constructorParameters)
-            {
-                state.Writer.WriteNullableString(parameter.Name);
-                state.Writer.Write((int)parameter.Attributes);
-
-                if (parameter.Attributes.HasFlag(ParameterAttributes.HasDefault))
-                {
-                    WriteConstant(state, parameter.DefaultValue, parameter.ParameterType);
-                }
-            }
-        }
-
-        private void SerializeMethodHeader(PicklerSerializationState state, Type[]? genericTypeParameters, MethodInfo method)
-        {
-            state.Writer.Write(method.Name);
             state.Writer.Write((int)method.Attributes);
-            state.Writer.Write((int)method.MethodImplementationFlags);
             state.Writer.Write((int)method.CallingConvention);
 
-            var genericMethodParameters = method.GetGenericArguments();
-            state.Writer.Write7BitEncodedInt(genericMethodParameters.Length);
-            foreach (var parameter in genericMethodParameters)
+            Type[]? genericMethodParameters = null;
+            if (isMethodInfo)
             {
-                state.Writer.Write(parameter.Name);
-            }
+                genericMethodParameters = method.GetGenericArguments();
+                state.Writer.Write7BitEncodedInt(genericMethodParameters.Length);
+                foreach (var parameter in genericMethodParameters)
+                {
+                    state.Writer.Write(parameter.Name);
+                }
 
-            {
-                SerializeType(state, method.ReturnType, genericTypeParameters, genericMethodParameters);
+                var returnParameter = (method as MethodInfo).ReturnParameter;
+                SerializeType(state, returnParameter.ParameterType, genericTypeParameters, genericMethodParameters);
 
                 // Combine the count of required and optional parameters and write that out
-                var reqmods = method.ReturnParameter.GetRequiredCustomModifiers();
-                var optmods = method.ReturnParameter.GetOptionalCustomModifiers();
+                var reqmods = returnParameter.GetRequiredCustomModifiers();
+                var optmods = returnParameter.GetOptionalCustomModifiers();
 
                 if (reqmods.Length > 7) { throw new NotSupportedException("Pikala does not support more than 7 required modifiers"); }
                 if (optmods.Length > 7) { throw new NotSupportedException("Pikala does not support more than 7 optional modifiers"); }
@@ -636,7 +588,7 @@ namespace Ibasa.Pikala
                 state.Writer.Write7BitEncodedInt(methods.Length);
                 foreach (var method in methods)
                 {
-                    SerializeMethodHeader(state, null, method);
+                    SerializeMethodBaseHeader(state, null, method);
                 }
 
                 return state =>
@@ -730,14 +682,14 @@ namespace Ibasa.Pikala
             state.Writer.Write7BitEncodedInt(constructors.Length);
             foreach (var constructor in constructors)
             {
-                SerializeConstructorHeader(state, genericParameters, constructor);
+                SerializeMethodBaseHeader(state, genericParameters, constructor);
             }
 
             var methods = type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             state.Writer.Write7BitEncodedInt(methods.Length);
             foreach (var method in methods)
             {
-                SerializeMethodHeader(state, genericParameters, method);
+                SerializeMethodBaseHeader(state, genericParameters, method);
             }
 
             var properties = type.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
