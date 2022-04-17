@@ -1413,14 +1413,14 @@ namespace Ibasa.Pikala
             );
         }
 
-        private Module DeserializeManifestModuleRef(PicklerDeserializationState state, long position, GenericTypeContext typeContext)
+        private PickledModuleRef DeserializeManifestModuleRef(PicklerDeserializationState state, long position, GenericTypeContext typeContext)
         {
             var (assembly, assemblyTrailer) = DeserializeAssembly(state, typeContext);
             System.Diagnostics.Debug.Assert(assemblyTrailer == null, "Expected assembly trailer to be null");
-            return state.SetMemo(position, ShouldMemo(assembly), assembly.ManifestModule);
+            return state.SetMemo(position, ShouldMemo(assembly), new PickledModuleRef(assembly.ManifestModule));
         }
 
-        private Module DeserializeModuleRef(PicklerDeserializationState state, long position, GenericTypeContext typeContext)
+        private PickledModuleRef DeserializeModuleRef(PicklerDeserializationState state, long position, GenericTypeContext typeContext)
         {
             var name = state.Reader.ReadString();
             var (assembly, assemblyTrailer) = DeserializeAssembly(state, typeContext);
@@ -1430,10 +1430,10 @@ namespace Ibasa.Pikala
             {
                 throw new Exception($"Could not load module '{name}' from assembly '{assembly}'");
             }
-            return state.SetMemo(position, true, module);
+            return state.SetMemo(position, true, new PickledModuleRef(module));
         }
 
-        private (ModuleBuilder, DeserializationStage2?) DeserializeModuleDef(PicklerDeserializationState state, long position, GenericTypeContext typeContext)
+        private (PickledModuleDef, DeserializationStage2?) DeserializeModuleDef(PicklerDeserializationState state, long position, GenericTypeContext typeContext)
         {
             var name = state.Reader.ReadString();
             var (assembly, assemblyTrailer) = DeserializeAssembly(state, typeContext);
@@ -1445,9 +1445,10 @@ namespace Ibasa.Pikala
             {
                 throw new Exception($"Could not create module '{name}' in assembly '{assembly}'");
             }
-            var moduleBuilder = state.SetMemo(position, true, module);
+            var moduleDef = new PickledModuleDef(module);
+            state.SetMemo(position, true, moduleDef);
 
-            return (moduleBuilder, state =>
+            return (moduleDef, state =>
             {
                 var fieldCount = state.Reader.Read7BitEncodedInt();
                 var fields = new PickledFieldInfoDef[fieldCount];
@@ -1459,12 +1460,12 @@ namespace Ibasa.Pikala
                     FieldBuilder fieldBuilder;
                     if (fieldSize < 0)
                     {
-                        fieldBuilder = moduleBuilder.DefineUninitializedData(fieldName, -fieldSize, fieldAttributes);
+                        fieldBuilder = moduleDef.ModuleBuilder.DefineUninitializedData(fieldName, -fieldSize, fieldAttributes);
                     }
                     else
                     {
                         var data = state.Reader.ReadBytes(fieldSize);
-                        fieldBuilder = moduleBuilder.DefineInitializedData(fieldName, data, fieldAttributes);
+                        fieldBuilder = moduleDef.ModuleBuilder.DefineInitializedData(fieldName, data, fieldAttributes);
                     }
 
                     // TODO This isn't right, FieldInfo needs to handle that it might be on a module
@@ -1485,7 +1486,7 @@ namespace Ibasa.Pikala
                 {
                     InvokeStage(state, assemblyTrailer);
 
-                    ReadCustomAttributes(state, moduleBuilder.SetCustomAttribute);
+                    ReadCustomAttributes(state, moduleDef.ModuleBuilder.SetCustomAttribute);
 
                     foreach (var field in fields)
                     {
@@ -1499,7 +1500,7 @@ namespace Ibasa.Pikala
                         DeserializeMethodBody(state, new GenericTypeContext(null, method.GenericParameters), method.MethodBuilder);
                     }
 
-                    moduleBuilder.CreateGlobalFunctions();
+                    moduleDef.ModuleBuilder.CreateGlobalFunctions();
                 };
             }
             );
@@ -1618,8 +1619,8 @@ namespace Ibasa.Pikala
                 else
                 {
                     var (module, moduleTrailer) = DeserializeModule(state, typeContext);
-                    var moduleBulder = (ModuleBuilder)module;
-                    constructingType = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, null, moduleBulder.DefineType);
+                    var moduleDef = (PickledModuleDef)module;
+                    constructingType = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, null, moduleBulder.ModuleBuilder.DefineType);
 
                     if (genericParameters != null)
                     {
@@ -1659,7 +1660,7 @@ namespace Ibasa.Pikala
             throw new Exception($"Unexpected operation '{operation}' for Assembly");
         }
 
-        private (Module, DeserializationStage2?) DeserializeModule(PicklerDeserializationState state, GenericTypeContext typeContext)
+        private (PickledModule, DeserializationStage2?) DeserializeModule(PicklerDeserializationState state, GenericTypeContext typeContext)
         {
             var position = state.Reader.BaseStream.Position;
             var operation = (ModuleOperation)state.Reader.ReadByte();
@@ -1667,11 +1668,11 @@ namespace Ibasa.Pikala
             switch (operation)
             {
                 case ModuleOperation.Memo:
-                    return ((Module)state.DoMemo(), null);
+                    return ((PickledModule)state.DoMemo(), null);
 
                 case ModuleOperation.MscorlibModule:
                     // We don't memo mscorlib, it's cheaper to just have the single byte token
-                    return (mscorlib.ManifestModule, null);
+                    return (new PickledModuleRef(mscorlib.ManifestModule), null);
 
                 case ModuleOperation.ManifestModuleRef:
                     return (DeserializeManifestModuleRef(state, position, typeContext), null);

@@ -982,6 +982,39 @@ namespace Ibasa.Pikala
         }
     }
 
+    abstract class PickledModule : PickledObject
+    {
+        public override object Get()
+        {
+            return Module;
+        }
+
+        public abstract Module Module { get; }
+    }
+
+    sealed class PickledModuleRef : PickledModule
+    {
+        private readonly Module _module;
+        public override Module Module => _module;
+
+        public PickledModuleRef(Module module)
+        {
+            _module = module;
+        }
+    }
+
+    sealed class PickledModuleDef : PickledModule
+    {
+        private readonly ModuleBuilder _moduleBuilder;
+        public override Module Module => _moduleBuilder;
+        public ModuleBuilder ModuleBuilder => _moduleBuilder;
+
+        public PickledModuleDef(ModuleBuilder moduleBuilder)
+        {
+            _moduleBuilder = moduleBuilder;
+        }
+    }
+
     abstract class PickledMemberInfo : PickledObject
     {
         public override object Get()
