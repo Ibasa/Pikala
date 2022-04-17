@@ -216,8 +216,8 @@ namespace Ibasa.Pikala
         private void DeserializeMethodHeader(PicklerDeserializationState state, Type[]? genericTypeParameters, PickledTypeInfoDef constructingType, ref PickledMethodInfoDef constructingMethod)
         {
             var methodName = state.Reader.ReadString();
-            var methodAttributes = (MethodAttributes)state.Reader.ReadInt32();
             var methodImplAttributes = (MethodImplAttributes)state.Reader.ReadInt32();
+            var methodAttributes = (MethodAttributes)state.Reader.ReadInt32();
             var callingConventions = (CallingConventions)state.Reader.ReadInt32();
             var typeBuilder = constructingType.TypeBuilder;
 
