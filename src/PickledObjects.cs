@@ -25,6 +25,24 @@ namespace Ibasa.Pikala
         IsReflectionObject = 256,
     }
 
+    struct GenericTypeContext
+    {
+        public readonly Type[]? GenericTypeParameters;
+        public readonly Type[]? GenericMethodParameters;
+
+        public GenericTypeContext(Type[]? genericTypeParameters, Type[]? genericMethodParameters)
+        {
+            GenericTypeParameters = genericTypeParameters;
+            GenericMethodParameters = genericMethodParameters;
+        }
+
+        public GenericTypeContext(Type[]? genericTypeParameters)
+        {
+            GenericTypeParameters = genericTypeParameters;
+            GenericMethodParameters = null;
+        }
+    }
+
     sealed class SerialisedObjectTypeInfo
     {
         public readonly Type Type;
