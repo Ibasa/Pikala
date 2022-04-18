@@ -982,6 +982,45 @@ namespace Ibasa.Pikala
         }
     }
 
+    #region Assembly
+
+    abstract class PickledAssembly : PickledObject
+    {
+        public override object Get()
+        {
+            return Assembly;
+        }
+
+        public abstract Assembly Assembly { get; }
+    }
+
+    sealed class PickledAssemblyRef : PickledAssembly
+    {
+        private readonly Assembly _assembly;
+        public override Assembly Assembly => _assembly;
+
+        public PickledAssemblyRef(Assembly assembly)
+        {
+            _assembly = assembly;
+        }
+    }
+
+    sealed class PickledAssemblyDef : PickledAssembly
+    {
+        private readonly AssemblyBuilder _assemblyBuilder;
+        public override Assembly Assembly => _assemblyBuilder;
+        public AssemblyBuilder AssemblyBuilder => _assemblyBuilder;
+
+        public PickledAssemblyDef(AssemblyBuilder assemblyBuilder)
+        {
+            _assemblyBuilder = assemblyBuilder;
+        }
+    }
+
+    #endregion
+
+    #region Module
+
     abstract class PickledModule : PickledObject
     {
         public override object Get()
@@ -1014,6 +1053,8 @@ namespace Ibasa.Pikala
             _moduleBuilder = moduleBuilder;
         }
     }
+
+    #endregion
 
     abstract class PickledMemberInfo : PickledObject
     {

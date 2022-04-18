@@ -1027,7 +1027,7 @@ namespace Ibasa.Pikala
             }
         }
 
-        private Assembly DeserializeAsesmblyRef(PicklerDeserializationState state, long position)
+        private PickledAssemblyRef DeserializeAsesmblyRef(PicklerDeserializationState state, long position)
         {
             var assemblyName = new AssemblyName(state.Reader.ReadString());
             // Check to see if its already in our loaded assembly set
@@ -1048,7 +1048,7 @@ namespace Ibasa.Pikala
             {
                 assembly = AssemblyLoadContext.LoadFromAssemblyName(assemblyName);
             }
-            return state.SetMemo(position, ShouldMemo(assembly), assembly);
+            return state.SetMemo(position, ShouldMemo(assembly), new PickledAssemblyRef(assembly));
         }
 
         private void ReadCustomAttributes(PicklerDeserializationState state, Action<ConstructorInfo, byte[]> setCustomAttribute)
@@ -1394,21 +1394,21 @@ namespace Ibasa.Pikala
             }
         }
 
-        private (AssemblyBuilder, DeserializationStage3) DeserializeAssemblyDef(PicklerDeserializationState state, long position)
+        private (PickledAssemblyDef, DeserializationStage3) DeserializeAssemblyDef(PicklerDeserializationState state, long position)
         {
             var assemblyName = new AssemblyName(state.Reader.ReadString());
             var access = AssemblyLoadContext.IsCollectible ? AssemblyBuilderAccess.RunAndCollect : AssemblyBuilderAccess.Run;
-            var assembly = AssemblyLoadContext.DefineDynamicAssembly(assemblyName, access);
-            if (assembly == null)
+            var assemblyBuilder = AssemblyLoadContext.DefineDynamicAssembly(assemblyName, access);
+            if (assemblyBuilder == null)
             {
                 throw new Exception($"Could not define assembly '{assemblyName}'");
             }
 
-            state.SetMemo(position, true, assembly);
+            var assemblyDef = state.SetMemo(position, true, new PickledAssemblyDef(assemblyBuilder));
 
-            return (assembly, state =>
+            return (assemblyDef, state =>
             {
-                ReadCustomAttributes(state, assembly.SetCustomAttribute);
+                ReadCustomAttributes(state, assemblyDef.AssemblyBuilder.SetCustomAttribute);
             }
             );
         }
@@ -1417,7 +1417,7 @@ namespace Ibasa.Pikala
         {
             var (assembly, assemblyTrailer) = DeserializeAssembly(state, typeContext);
             System.Diagnostics.Debug.Assert(assemblyTrailer == null, "Expected assembly trailer to be null");
-            return state.SetMemo(position, ShouldMemo(assembly), new PickledModuleRef(assembly.ManifestModule));
+            return state.SetMemo(position, ShouldMemo(assembly), new PickledModuleRef(assembly.Assembly.ManifestModule));
         }
 
         private PickledModuleRef DeserializeModuleRef(PicklerDeserializationState state, long position, GenericTypeContext typeContext)
@@ -1425,7 +1425,7 @@ namespace Ibasa.Pikala
             var name = state.Reader.ReadString();
             var (assembly, assemblyTrailer) = DeserializeAssembly(state, typeContext);
             System.Diagnostics.Debug.Assert(assemblyTrailer == null, "Expected assembly trailer to be null");
-            var module = assembly.GetModule(name);
+            var module = assembly.Assembly.GetModule(name);
             if (module == null)
             {
                 throw new Exception($"Could not load module '{name}' from assembly '{assembly}'");
@@ -1437,9 +1437,10 @@ namespace Ibasa.Pikala
         {
             var name = state.Reader.ReadString();
             var (assembly, assemblyTrailer) = DeserializeAssembly(state, typeContext);
-            System.Diagnostics.Debug.Assert(assembly is AssemblyBuilder, "Expected ModuleDef assembly to be an AssemblyBuilder");
+            System.Diagnostics.Debug.Assert(assembly is PickledAssemblyDef, "Expected ModuleDef assembly to be an AssemblyBuilder");
 
-            var assemblyBuilder = (AssemblyBuilder)assembly;
+            var assemblyDef = (PickledAssemblyDef)assembly;
+            var assemblyBuilder = assemblyDef.AssemblyBuilder;
             var module = assemblyBuilder.DefineDynamicModule(name);
             if (module == null)
             {
@@ -1636,7 +1637,7 @@ namespace Ibasa.Pikala
             });
         }
 
-        private (Assembly, DeserializationStage3?) DeserializeAssembly(PicklerDeserializationState state, GenericTypeContext typeContext)
+        private (PickledAssembly, DeserializationStage3?) DeserializeAssembly(PicklerDeserializationState state, GenericTypeContext typeContext)
         {
             var position = state.Reader.BaseStream.Position;
             var operation = (AssemblyOperation)state.Reader.ReadByte();
@@ -1644,11 +1645,11 @@ namespace Ibasa.Pikala
             switch (operation)
             {
                 case AssemblyOperation.Memo:
-                    return ((Assembly)state.DoMemo(), null);
+                    return ((PickledAssembly)state.DoMemo(), null);
 
                 case AssemblyOperation.MscorlibAssembly:
                     // We don't memo mscorlib, it's cheaper to just have the single byte token
-                    return (mscorlib, null);
+                    return (new PickledAssemblyRef(mscorlib), null);
 
                 case AssemblyOperation.AssemblyRef:
                     return (DeserializeAsesmblyRef(state, position), null);
@@ -1772,28 +1773,6 @@ namespace Ibasa.Pikala
 
             var position = state.Reader.BaseStream.Position;
             return DeserializeFieldRef(state, position);
-        }
-
-        private PickledPropertyInfo DeserializePropertyInfo(PicklerDeserializationState state)
-        {
-            var objectOperation = (ObjectOperation)state.Reader.ReadByte();
-            switch (objectOperation)
-            {
-                case ObjectOperation.Null:
-                    throw new Exception($"Unexpected null for PropertyInfo");
-
-                case ObjectOperation.Memo:
-                    return (PickledPropertyInfo)state.DoMemo();
-
-                case ObjectOperation.Object:
-                    break;
-
-                default:
-                    throw new Exception($"Unexpected operation '{objectOperation}' for PropertyInfo");
-            }
-
-            var position = state.Reader.BaseStream.Position;
-            return DeserializePropertyRef(state, position);
         }
 
         private PickledConstructorInfo DeserializeConstructorInfo(PicklerDeserializationState state)
@@ -2487,7 +2466,7 @@ namespace Ibasa.Pikala
             {
                 var (assembly, assemblyStage3) = DeserializeAssembly(state, default);
                 InvokeStage(state, assemblyStage3);
-                return assembly;
+                return assembly.Assembly;
             }
             else if (runtimeType == typeof(Module))
             {
