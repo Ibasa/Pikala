@@ -1340,7 +1340,10 @@ namespace Ibasa.Pikala
             var attributeCount = state.Reader.Read7BitEncodedInt();
             for (int i = 0; i < attributeCount; ++i)
             {
-                var constructor = DeserializeConstructorInfo(state);
+                var attributeType = DeserializeType(state, default);
+                var constructorSignature = DeserializeSignature(state);
+
+                var constructor = attributeType.GetConstructor(constructorSignature);
 
                 // We need to build the attribute binary manually because using CustomAttributeBuilder invokes type loads for verification checks we don't need.
                 buffer.SetLength(0);
@@ -1367,6 +1370,13 @@ namespace Ibasa.Pikala
 
                     var itemType = ReadType();
                     var itemName = state.Reader.ReadString();
+
+                    // Check we have a field of this name and type
+                    var fieldInfo = attributeType.GetField(itemName);
+                    if (fieldInfo.FieldInfo.FieldType != itemType)
+                    {
+                        throw new InvalidOperationException($"Expected attribute field {attributeType}.{itemName} to have type {itemType} but was {fieldInfo.FieldInfo.FieldType}");
+                    }
 
                     WriteType(itemType);
                     writer.Write(itemName);

@@ -1101,7 +1101,8 @@ namespace Ibasa.Pikala
             state.Writer.Write7BitEncodedInt(attributes.Length);
             foreach (var attribute in attributes)
             {
-                SerializeConstructorInfo(state, attribute.Constructor);
+                SerializeType(state, attribute.AttributeType, null, null);
+                SerializeSignature(state, Signature.GetSignature(attribute.Constructor));
 
                 foreach (var argument in attribute.ConstructorArguments)
                 {

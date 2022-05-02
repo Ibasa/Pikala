@@ -15,7 +15,7 @@ namespace Ibasa.Pikala.Tests
         {
             var pickler = Utils.CreateIsolatedPickler();
 
-            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestModuleData"), AssemblyBuilderAccess.Run);
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestModuleData"), AssemblyBuilderAccess.RunAndCollect);
             var module = assembly.DefineDynamicModule("main");
             var undata = module.DefineUninitializedData("uninit", 128, FieldAttributes.Public);
             var indata = module.DefineInitializedData("init", new byte[] { 1, 2 }, FieldAttributes.Private);
@@ -56,7 +56,7 @@ namespace Ibasa.Pikala.Tests
         {
             var pickler = Utils.CreateIsolatedPickler();
 
-            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestPropertyOther"), AssemblyBuilderAccess.Run);
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestPropertyOther"), AssemblyBuilderAccess.RunAndCollect);
             var module = assembly.DefineDynamicModule("main");
             var type = module.DefineType("type");
             var property = type.DefineProperty("prop", PropertyAttributes.None, typeof(int), null);
@@ -135,7 +135,7 @@ namespace Ibasa.Pikala.Tests
         {
             var pickler = new Pickler(_ => AssemblyPickleMode.PickleByReference);
 
-            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestPropertyOverloadByReturnType"), AssemblyBuilderAccess.Run);
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestPropertyOverloadByReturnType"), AssemblyBuilderAccess.RunAndCollect);
             var module = assembly.DefineDynamicModule("main");
             var type = module.DefineType("test");
             var intProp = DefineAutomaticProperty(type, "Prop", PropertyAttributes.None, typeof(int));
@@ -167,7 +167,7 @@ namespace Ibasa.Pikala.Tests
         {
             var pickler = new Pickler(_ => AssemblyPickleMode.PickleByReference);
 
-            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestMethodOverloadByReturnType"), AssemblyBuilderAccess.Run);
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestMethodOverloadByReturnType"), AssemblyBuilderAccess.RunAndCollect);
             var module = assembly.DefineDynamicModule("main");
             var type = module.DefineType("test");
             var intMethod = DefineBasicMethod(type, "Method", MethodAttributes.Public, typeof(int));
@@ -196,7 +196,7 @@ namespace Ibasa.Pikala.Tests
         {
             var pickler = Utils.CreateIsolatedPickler();
 
-            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestModuleAttributes"), AssemblyBuilderAccess.Run);
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestModuleAttributes"), AssemblyBuilderAccess.RunAndCollect);
             var module = assembly.DefineDynamicModule("main");
 
             var customAttributeTypeBuilder = module.DefineType("MyAttribute", TypeAttributes.Class, typeof(System.Attribute));
@@ -239,6 +239,76 @@ namespace Ibasa.Pikala.Tests
             {
                 RoundTrip.Assert(pickler, prop);
             }
+        }
+
+        [Fact]
+        public void TestChangeOfAttributeTypeErrorsCorrectly()
+        {
+            // Test that if we serialise an attribute, then try to read it back in a new 
+            // context where it's underlying type has changed we get an error. This is a tricky test to write because
+            // we need a TypeDef for the type using the attribute, but a TypeRef for the type that defines the attribute so we can
+            // change it (if it was also a TypeDef it's part of the pikala stream and so can't change).
+
+            var pickler = Utils.CreateIsolatedPickler(assembly =>
+            {
+                if (assembly.FullName.Contains("TestChangeOfAttribute_Attr"))
+                {
+                    return AssemblyPickleMode.PickleByReference;
+                }
+                return AssemblyPickleMode.Default;
+            });
+
+            // Create an assembly with our attribute type (this needs to be in the ALC)
+            var attributeAssemblyV1 = pickler.AssemblyLoadContext.DefineDynamicAssembly(new AssemblyName("TestChangeOfAttribute_Attr"), AssemblyBuilderAccess.RunAndCollect);
+            Type customAttributeType;
+            {
+                var module = attributeAssemblyV1.DefineDynamicModule("main");
+
+                var customAttributeTypeBuilder = module.DefineType("MyAttribute", TypeAttributes.Class, typeof(System.Attribute));
+                customAttributeTypeBuilder.DefineField("Tag", typeof(int), FieldAttributes.Public);
+                DefineDefaultCtor(customAttributeTypeBuilder);
+                customAttributeType = customAttributeTypeBuilder.CreateType();
+            }
+
+            // Create another assembly using MyAttribute
+            var typeAssembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestChangeOfAttribute_Type"), AssemblyBuilderAccess.RunAndCollect);
+            {
+                typeAssembly.SetCustomAttribute(new CustomAttributeBuilder(
+                    customAttributeType.GetConstructor(Type.EmptyTypes),
+                    new object[0],
+                    new FieldInfo[] { customAttributeType.GetField("Tag") },
+                    new object[] { 1 }));
+            }
+
+            // Check we roundtrip this with the attr assembly done by reference
+            var rebuiltAssembly = RoundTrip.Do<Assembly>(pickler, typeAssembly);
+            var rebuiltAttr = Assert.Single(rebuiltAssembly.CustomAttributes);
+            Assert.Equal(1, (int)rebuiltAttr.NamedArguments[0].TypedValue.Value);
+
+            // Now recreate the ALC and try to deserialise the pikala stream with a different attribute
+            pickler = Utils.CreateIsolatedPickler(assembly =>
+            {
+                if (assembly.FullName.Contains("TestChangeOfAttribute_Attr"))
+                {
+                    return AssemblyPickleMode.PickleByReference;
+                }
+                return AssemblyPickleMode.Default;
+            });
+
+            // Create an assembly with our attribute type (this needs to be in the ALC)
+            var attributeAssemblyV2 = pickler.AssemblyLoadContext.DefineDynamicAssembly(new AssemblyName("TestChangeOfAttribute_Attr"), AssemblyBuilderAccess.RunAndCollect);
+            {
+                var module = attributeAssemblyV2.DefineDynamicModule("main");
+
+                var customAttributeTypeBuilder = module.DefineType("MyAttribute", TypeAttributes.Class, typeof(System.Attribute));
+                // No Tag field!
+                DefineDefaultCtor(customAttributeTypeBuilder);
+                customAttributeTypeBuilder.CreateType();
+            }
+
+            // This should fail
+            var exc = Assert.Throws<Exception>(() => RoundTrip.Do<Assembly>(pickler, typeAssembly));
+            Assert.Contains("Could not load field 'Tag' from type 'MyAttribute'", exc.Message);
         }
     }
 }

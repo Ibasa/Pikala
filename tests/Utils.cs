@@ -9,7 +9,7 @@ namespace Ibasa.Pikala.Tests
     {
         public static Pickler CreateIsolatedPickler(Func<System.Reflection.Assembly, AssemblyPickleMode> assemblyPickleMode = null)
         {
-            var alc = new System.Runtime.Loader.AssemblyLoadContext("Pikala.Tests");
+            var alc = new System.Runtime.Loader.AssemblyLoadContext("Pikala.Tests", true);
             return new Pickler(assemblyPickleMode, alc);
         }
 
