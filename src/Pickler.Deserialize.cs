@@ -145,7 +145,7 @@ namespace Ibasa.Pikala
         {
             var typeContext = new GenericTypeContext(genericTypeParameters);
             var methodAttributes = (MethodAttributes)state.Reader.ReadInt32();
-            var callingConvention = (CallingConventions)state.Reader.ReadInt32();
+            var callingConvention = (CallingConventions)state.Reader.ReadByte();
 
             var parameterCount = state.Reader.Read7BitEncodedInt();
             var hasModifiers = (parameterCount & 0x1) != 0;
@@ -218,7 +218,7 @@ namespace Ibasa.Pikala
             var methodName = state.Reader.ReadString();
             var methodImplAttributes = (MethodImplAttributes)state.Reader.ReadInt32();
             var methodAttributes = (MethodAttributes)state.Reader.ReadInt32();
-            var callingConventions = (CallingConventions)state.Reader.ReadInt32();
+            var callingConventions = (CallingConventions)state.Reader.ReadByte();
             var typeBuilder = constructingType.TypeBuilder;
 
             var methodBuilder = typeBuilder.DefineMethod(methodName, methodAttributes, callingConventions);
@@ -681,6 +681,7 @@ namespace Ibasa.Pikala
             {
                 var propertyName = state.Reader.ReadString();
                 var propertyAttributes = (PropertyAttributes)state.Reader.ReadInt32();
+                var propertyCallingConvention = (CallingConventions)state.Reader.ReadByte();
                 var propertyType = DeserializeType(state, typeContext);
                 var propertyParametersCount = state.Reader.Read7BitEncodedInt();
                 var propertyParameters = new Type[propertyParametersCount];
@@ -689,7 +690,7 @@ namespace Ibasa.Pikala
                     propertyParameters[j] = DeserializeType(state, typeContext).Type;
                 }
 
-                var propertyBuilder = typeBuilder.DefineProperty(propertyName, propertyAttributes, propertyType.Type, propertyParameters);
+                var propertyBuilder = typeBuilder.DefineProperty(propertyName, propertyAttributes, propertyCallingConvention, propertyType.Type, propertyParameters);
                 constructingType.Properties[i] = new PickledPropertyInfoDef(constructingType, propertyBuilder, propertyParameters);
 
                 var count = state.Reader.Read7BitEncodedInt();
