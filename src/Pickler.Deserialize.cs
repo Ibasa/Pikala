@@ -223,6 +223,7 @@ namespace Ibasa.Pikala
             var typeBuilder = constructingType.TypeBuilder;
 
             var methodBuilder = typeBuilder.DefineMethod(methodName, methodAttributes, callingConventions);
+            System.Diagnostics.Debug.Assert(methodBuilder.CallingConvention == callingConventions, $"{methodBuilder.CallingConvention} != {callingConventions}");
 
             var methodGenericParameterNames = new string[state.Reader.Read7BitEncodedInt()];
             for (int j = 0; j < methodGenericParameterNames.Length; ++j)
@@ -682,17 +683,25 @@ namespace Ibasa.Pikala
             {
                 var propertyName = state.Reader.ReadString();
                 var propertyAttributes = (PropertyAttributes)state.Reader.ReadInt32();
-                var propertyCallingConvention = (CallingConventions)state.Reader.ReadByte();
-                var propertyType = DeserializeType(state, typeContext);
-                var propertyParametersCount = state.Reader.Read7BitEncodedInt();
-                var propertyParameters = new Type[propertyParametersCount];
-                for (int j = 0; j < propertyParametersCount; ++j)
+                var propertySignature = DeserializeSignature(state);
+
+                var (returnType, returnTypeRequiredCustomModifiers, returnTypeOptionalCustomModifiers) = propertySignature.ReturnType.Reify(typeContext);
+                var parameterTypes = new Type[propertySignature.Parameters.Length];
+                var parameterTypeRequiredCustomModifiers = new Type[propertySignature.Parameters.Length][];
+                var parameterTypeOptionalCustomModifiers = new Type[propertySignature.Parameters.Length][];
+                for (int j = 0; j < propertySignature.Parameters.Length; ++j)
                 {
-                    propertyParameters[j] = DeserializeType(state, typeContext).Type;
+                    var (type, reqmods, optmods) = propertySignature.Parameters[j].Reify(typeContext);
+                    parameterTypes[j] = type;
+                    parameterTypeRequiredCustomModifiers[j] = reqmods;
+                    parameterTypeOptionalCustomModifiers[j] = optmods;
                 }
 
-                var propertyBuilder = typeBuilder.DefineProperty(propertyName, propertyAttributes, propertyCallingConvention, propertyType.Type, propertyParameters);
-                constructingType.Properties[i] = new PickledPropertyInfoDef(constructingType, propertyBuilder, propertyCallingConvention, propertyParameters);
+                var propertyBuilder = typeBuilder.DefineProperty(
+                    propertyName, propertyAttributes, propertySignature.CallingConvention,
+                    returnType, returnTypeRequiredCustomModifiers, returnTypeOptionalCustomModifiers,
+                    parameterTypes, parameterTypeRequiredCustomModifiers, parameterTypeOptionalCustomModifiers);
+                constructingType.Properties[i] = new PickledPropertyInfoDef(constructingType, propertyBuilder, propertySignature);
 
                 var count = state.Reader.Read7BitEncodedInt();
                 var hasGetter = (count & 0x1) != 0;

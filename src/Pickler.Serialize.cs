@@ -699,22 +699,9 @@ namespace Ibasa.Pikala
             {
                 state.Writer.Write(property.Name);
                 state.Writer.Write((int)property.Attributes);
-                // Get the calling convention for this property
+                SerializeSignature(state, Signature.GetSignature(property));
+
                 var accessors = property.GetAccessors(true);
-                if (accessors.Length == 0)
-                {
-                    throw new InvalidOperationException($"Property {property.Name} has no accessor methods");
-                }
-                state.Writer.Write((byte)accessors[0].CallingConvention);
-
-                SerializeType(state, property.PropertyType, genericParameters, null);
-                var indexParameters = property.GetIndexParameters();
-                state.Writer.Write7BitEncodedInt(indexParameters.Length);
-                foreach (var indexParameter in indexParameters)
-                {
-                    SerializeType(state, indexParameter.ParameterType, genericParameters, null);
-                }
-
                 var getter = property.GetMethod;
                 var setter = property.SetMethod;
                 var otherCount = accessors.Length - (

@@ -623,7 +623,7 @@ namespace Ibasa.Pikala
             {
                 foreach (var property in Properties)
                 {
-                    if (property.GetSignature().Equals(signature))
+                    if (property.Signature.Equals(signature))
                     {
                         return property;
                     }
@@ -1194,19 +1194,16 @@ namespace Ibasa.Pikala
 
     sealed class PickledPropertyInfoDef : PickledPropertyInfo
     {
-        public PickledPropertyInfoDef(PickledTypeInfoDef declaringType, PropertyBuilder propertyBuilder, CallingConventions callingConvention, Type[] indexParameters)
+        public PickledPropertyInfoDef(PickledTypeInfoDef declaringType, PropertyBuilder propertyBuilder, Signature signature)
         {
             DeclaringType = declaringType;
             PropertyBuilder = propertyBuilder;
-            IndexParameters = indexParameters;
-            _callingConvention = callingConvention;
+            Signature = signature;
         }
 
         public PickledTypeInfoDef DeclaringType { get; }
         public PropertyBuilder PropertyBuilder { get; }
-        public Type[] IndexParameters { get; }
-
-        private CallingConventions _callingConvention;
+        public Signature Signature { get; }
 
         public override PropertyInfo PropertyInfo
         {
@@ -1218,23 +1215,17 @@ namespace Ibasa.Pikala
                     return PropertyBuilder;
                 }
 
-                var signature = GetSignature();
                 var properties = resolvedType.GetProperties(BindingsAll);
                 foreach (var property in properties)
                 {
-                    if (Signature.GetSignature(property) == signature)
+                    if (Signature.GetSignature(property) == Signature)
                     {
                         return property;
                     }
                 }
 
-                throw new Exception($"Could not load property '{signature}' from type '{DeclaringType.Type.Name}'");
+                throw new Exception($"Could not load property '{Signature}' from type '{DeclaringType.Type.Name}'");
             }
-        }
-
-        public Signature GetSignature()
-        {
-            return new Signature(PropertyBuilder.Name, _callingConvention, 0, SignatureElement.FromType(PropertyBuilder.PropertyType), SignatureElement.FromTypes(IndexParameters));
         }
     }
 

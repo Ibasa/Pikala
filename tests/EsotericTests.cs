@@ -89,8 +89,8 @@ namespace Ibasa.Pikala.Tests
         private static PropertyBuilder DefineAutomaticProperty(TypeBuilder type, string name, PropertyAttributes attributes, Type returnType)
         {
             var field = type.DefineField("@backingfield_" + name, returnType, FieldAttributes.Private);
-            var getmethod = type.DefineMethod("get_" + name, MethodAttributes.SpecialName, returnType, null);
-            var setmethod = type.DefineMethod("set_" + name, MethodAttributes.SpecialName, typeof(void), new[] { returnType });
+            var getmethod = type.DefineMethod("get_" + name, MethodAttributes.SpecialName, CallingConventions.HasThis, returnType, null);
+            var setmethod = type.DefineMethod("set_" + name, MethodAttributes.SpecialName, CallingConventions.HasThis, typeof(void), new[] { returnType });
 
             var getgen = getmethod.GetILGenerator();
             getgen.Emit(OpCodes.Ldarg_0);
@@ -103,7 +103,28 @@ namespace Ibasa.Pikala.Tests
             setgen.Emit(OpCodes.Stfld, field);
             setgen.Emit(OpCodes.Ret);
 
-            var property = type.DefineProperty(name, attributes, returnType, null);
+            var property = type.DefineProperty(name, attributes, CallingConventions.HasThis, returnType, null);
+            property.SetGetMethod(getmethod);
+            property.SetSetMethod(setmethod);
+            return property;
+        }
+
+        private static PropertyBuilder DefineStaticAutomaticProperty(TypeBuilder type, string name, PropertyAttributes attributes, Type returnType)
+        {
+            var field = type.DefineField("@backingfield_" + name, returnType, FieldAttributes.Private | FieldAttributes.Static);
+            var getmethod = type.DefineMethod("get_" + name, MethodAttributes.SpecialName | MethodAttributes.Static, CallingConventions.Standard, returnType, null);
+            var setmethod = type.DefineMethod("set_" + name, MethodAttributes.SpecialName | MethodAttributes.Static, CallingConventions.Standard, typeof(void), new[] { returnType });
+
+            var getgen = getmethod.GetILGenerator();
+            getgen.Emit(OpCodes.Ldsfld, field);
+            getgen.Emit(OpCodes.Ret);
+
+            var setgen = setmethod.GetILGenerator();
+            setgen.Emit(OpCodes.Ldarg_0);
+            setgen.Emit(OpCodes.Stsfld, field);
+            setgen.Emit(OpCodes.Ret);
+
+            var property = type.DefineProperty(name, attributes, CallingConventions.Standard, returnType, null);
             property.SetGetMethod(getmethod);
             property.SetSetMethod(setmethod);
             return property;
@@ -197,6 +218,27 @@ namespace Ibasa.Pikala.Tests
             Assert.Equal(FieldAttributes.Public | FieldAttributes.Static | FieldAttributes.HasFieldRVA, rebuiltField.Attributes);
             var rebuiltAttr = Assert.Single(rebuiltField.GetCustomAttributes(true));
             Assert.Equal(1, (int)rebuiltType.GetField("Tag").GetValue(rebuiltAttr));
+        }
+
+        [Fact]
+        public void TestPropertyOverloadByCallingConvention()
+        {
+            var pickler = new Pickler(_ => AssemblyPickleMode.PickleByReference);
+
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestPropertyOverloadByCallingConvention"), AssemblyBuilderAccess.Run);
+            var module = assembly.DefineDynamicModule("main");
+            var type = module.DefineType("test");
+            var intProp = DefineAutomaticProperty(type, "Prop", PropertyAttributes.None, typeof(int));
+            var longProp = DefineStaticAutomaticProperty(type, "Prop", PropertyAttributes.None, typeof(int));
+            var typeInstance = type.CreateType();
+
+            var properties = typeInstance.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
+            Assert.Equal(2, properties.Length);
+
+            foreach (var prop in properties)
+            {
+                RoundTrip.Assert(pickler, prop);
+            }
         }
     }
 }

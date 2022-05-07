@@ -22,6 +22,8 @@ namespace Ibasa.Pikala
     {
         public abstract bool Equals(SignatureElement? other);
 
+        public abstract (Type, Type[], Type[]) Reify(GenericTypeContext typeContext);
+
         public static SignatureElement FromType(Type type)
         {
             if (type.IsGenericParameter)
@@ -115,6 +117,20 @@ namespace Ibasa.Pikala
             return false;
         }
 
+        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
+        {
+            Type result;
+            if (IsGenericTypeParameter)
+            {
+                result = typeContext.GenericTypeParameters![GenericParameterPosition];
+            }
+            else
+            {
+                result = typeContext.GenericMethodParameters![GenericParameterPosition];
+            }
+            return (result, Type.EmptyTypes, Type.EmptyTypes);
+        }
+
         public override string ToString()
         {
             return $"{(IsGenericTypeParameter ? "!" : "!!")}{GenericParameterPosition}";
@@ -137,6 +153,12 @@ namespace Ibasa.Pikala
                 return ElementType.Equals(sp.ElementType);
             }
             return false;
+        }
+
+        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
+        {
+            var (inner, reqs, opts) = ElementType.Reify(typeContext);
+            return (inner.MakePointerType(), reqs, opts);
         }
 
         public override string ToString()
@@ -163,6 +185,12 @@ namespace Ibasa.Pikala
             return false;
         }
 
+        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
+        {
+            var (inner, reqs, opts) = ElementType.Reify(typeContext);
+            return (inner.MakeByRefType(), reqs, opts);
+        }
+
         public override string ToString()
         {
             return $"{ElementType}&";
@@ -187,6 +215,16 @@ namespace Ibasa.Pikala
                 return Rank == sa.Rank && ElementType.Equals(sa.ElementType);
             }
             return false;
+        }
+
+        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
+        {
+            var (inner, reqs, opts) = ElementType.Reify(typeContext);
+            if (Rank == 1)
+            {
+                return (inner.MakeArrayType(), reqs, opts);
+            }
+            return (inner.MakeArrayType(Rank), reqs, opts);
         }
 
         public override string ToString()
@@ -221,6 +259,11 @@ namespace Ibasa.Pikala
             return false;
         }
 
+        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
+        {
+            return (Type, Type.EmptyTypes, Type.EmptyTypes);
+        }
+
         public override string ToString()
         {
             return Type.FullName!;
@@ -247,6 +290,15 @@ namespace Ibasa.Pikala
             return false;
         }
 
+        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
+        {
+            var (inner, reqs, opts) = ElementType.Reify(typeContext);
+            var newReqs = new Type[reqs.Length + 1];
+            reqs.CopyTo(newReqs, 0);
+            newReqs[newReqs.Length - 1] = RequiredModifier;
+            return (inner, newReqs, opts);
+        }
+
         public override string ToString()
         {
             return $"{ElementType} modreq {RequiredModifier}";
@@ -271,6 +323,15 @@ namespace Ibasa.Pikala
                 return ElementType.Equals(so.ElementType) && OptionalModifier == so.OptionalModifier;
             }
             return false;
+        }
+
+        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
+        {
+            var (inner, reqs, opts) = ElementType.Reify(typeContext);
+            var newOpts = new Type[opts.Length + 1];
+            opts.CopyTo(newOpts, 0);
+            newOpts[newOpts.Length - 1] = OptionalModifier;
+            return (inner, reqs, newOpts);
         }
 
         public override string ToString()
@@ -318,6 +379,26 @@ namespace Ibasa.Pikala
                 return true;
             }
             return false;
+        }
+
+        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
+        {
+            var genericArguments = new Type[GenericArguments.Length];
+            for (int i = 0; i < GenericArguments.Length; ++i)
+            {
+                var (genericArgument, reqs, opts) = GenericArguments[i].Reify(typeContext);
+                if (reqs.Length != 0)
+                {
+                    throw new InvalidOperationException("Unexpected required modifer on generic argument");
+                }
+                if (opts.Length != 0)
+                {
+                    throw new InvalidOperationException("Unexpected optional modifer on generic argument");
+                }
+                genericArguments[i] = genericArgument;
+            }
+
+            return (GenericTypeDefinition.MakeGenericType(genericArguments), Type.EmptyTypes, Type.EmptyTypes);
         }
 
         public override string ToString()
