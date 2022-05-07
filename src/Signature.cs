@@ -70,16 +70,19 @@ namespace Ibasa.Pikala
 
         public static SignatureElement FromParameter(ParameterInfo parameter)
         {
-            var innerType = FromType(parameter.ParameterType);
-            var reqs = parameter.GetRequiredCustomModifiers();
-            var opts = parameter.GetOptionalCustomModifiers();
+            return FromParameter(parameter.ParameterType, parameter.GetRequiredCustomModifiers(), parameter.GetOptionalCustomModifiers());
+        }
+
+        public static SignatureElement FromParameter(Type type, Type[] requiredCustomModifiers, Type[] optionalCustomModifiers)
+        {
+            var innerType = FromType(type);
 
             var result = innerType;
-            foreach (var req in reqs)
+            foreach (var req in requiredCustomModifiers)
             {
                 result = new SignatureReq(result, req);
             }
-            foreach (var opt in opts)
+            foreach (var opt in optionalCustomModifiers)
             {
                 result = new SignatureOpt(result, opt);
             }
@@ -501,7 +504,7 @@ namespace Ibasa.Pikala
             }
             var callingConvention = accessors[0].CallingConvention;
 
-            SignatureElement returnType = SignatureElement.FromType(property.PropertyType);
+            SignatureElement returnType = SignatureElement.FromParameter(property.PropertyType, property.GetRequiredCustomModifiers(), property.GetOptionalCustomModifiers());
             return new Signature(
                 property.Name,
                 callingConvention,
