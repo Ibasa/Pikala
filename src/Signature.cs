@@ -342,15 +342,17 @@ namespace Ibasa.Pikala
 
     sealed class Signature : IEquatable<Signature>
     {
-        public string Name { get; private set; }
-        public int GenericParameterCount { get; private set; }
+        public string Name { get; }
+        public CallingConventions CallingConvention { get; }
+        public int GenericParameterCount { get; }
 
-        public SignatureElement ReturnType { get; private set; }
-        public SignatureElement[] Parameters { get; private set; }
+        public SignatureElement ReturnType { get; }
+        public SignatureElement[] Parameters { get; }
 
-        public Signature(string name, int genericParameterCount, SignatureElement returnType, SignatureElement[] parameters)
+        public Signature(string name, CallingConventions callingConvention, int genericParameterCount, SignatureElement returnType, SignatureElement[] parameters)
         {
             Name = name;
+            CallingConvention = callingConvention;
             GenericParameterCount = genericParameterCount;
             ReturnType = returnType;
             Parameters = parameters;
@@ -403,6 +405,7 @@ namespace Ibasa.Pikala
 
             return new Signature(
                 methodBase.Name,
+                methodBase.CallingConvention,
                 methodBase.IsGenericMethod ? methodBase.GetGenericArguments().Length : 0,
                 returnType,
                 SignatureElement.FromParameters(methodBase.GetParameters()));
@@ -410,9 +413,17 @@ namespace Ibasa.Pikala
 
         public static Signature GetSignature(PropertyInfo property)
         {
+            var accessors = property.GetAccessors(true);
+            if (accessors.Length == 0)
+            {
+                throw new InvalidOperationException($"Property {property.Name} had no accessor methods");
+            }
+            var callingConvention = accessors[0].CallingConvention;
+
             SignatureElement returnType = SignatureElement.FromType(property.PropertyType);
             return new Signature(
                 property.Name,
+                callingConvention,
                 0,
                 returnType,
                 SignatureElement.FromParameters(property.GetIndexParameters()));
@@ -421,6 +432,8 @@ namespace Ibasa.Pikala
         public bool Equals(Signature? other)
         {
             if (other == null) return false;
+
+            if (CallingConvention != other.CallingConvention) return false;
 
             if (Name != other.Name) return false;
 

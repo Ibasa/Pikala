@@ -735,7 +735,7 @@ namespace Ibasa.Pikala
 
         public Signature GetSignature()
         {
-            return new Signature(MethodBuilder.Name, GenericParameters?.Length ?? 0, SignatureElement.FromType(MethodBuilder.ReturnType), SignatureElement.FromTypes(ParameterTypes));
+            return new Signature(MethodBuilder.Name, MethodBuilder.CallingConvention, GenericParameters?.Length ?? 0, SignatureElement.FromType(MethodBuilder.ReturnType), SignatureElement.FromTypes(ParameterTypes));
         }
     }
 
@@ -1159,7 +1159,9 @@ namespace Ibasa.Pikala
 
         public Signature GetSignature()
         {
-            return new Signature(ConstructorBuilder.Name, 0, SignatureElement.FromType(ConstructingType.Type), SignatureElement.FromTypes(ParameterTypes));
+            // TODO ConstructorBuilder either returns HasThis or Standard based on if the type is generic or not. But a ConstructorInfo will always (?) return HasThis | Standard.
+            var callingConvention = CallingConventions.HasThis | CallingConventions.Standard;
+            return new Signature(ConstructorBuilder.Name, callingConvention, 0, SignatureElement.FromType(ConstructingType.Type), SignatureElement.FromTypes(ParameterTypes));
         }
 
         public PickledTypeInfoDef ConstructingType { get; }
@@ -1192,16 +1194,19 @@ namespace Ibasa.Pikala
 
     sealed class PickledPropertyInfoDef : PickledPropertyInfo
     {
-        public PickledPropertyInfoDef(PickledTypeInfoDef declaringType, PropertyBuilder propertyBuilder, Type[] indexParameters)
+        public PickledPropertyInfoDef(PickledTypeInfoDef declaringType, PropertyBuilder propertyBuilder, CallingConventions callingConvention, Type[] indexParameters)
         {
             DeclaringType = declaringType;
             PropertyBuilder = propertyBuilder;
             IndexParameters = indexParameters;
+            _callingConvention = callingConvention;
         }
 
         public PickledTypeInfoDef DeclaringType { get; }
         public PropertyBuilder PropertyBuilder { get; }
         public Type[] IndexParameters { get; }
+
+        private CallingConventions _callingConvention;
 
         public override PropertyInfo PropertyInfo
         {
@@ -1229,7 +1234,7 @@ namespace Ibasa.Pikala
 
         public Signature GetSignature()
         {
-            return new Signature(PropertyBuilder.Name, 0, SignatureElement.FromType(PropertyBuilder.PropertyType), SignatureElement.FromTypes(IndexParameters));
+            return new Signature(PropertyBuilder.Name, _callingConvention, 0, SignatureElement.FromType(PropertyBuilder.PropertyType), SignatureElement.FromTypes(IndexParameters));
         }
     }
 

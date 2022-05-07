@@ -269,6 +269,7 @@ namespace Ibasa.Pikala
         private void SerializeSignature(PicklerSerializationState state, Signature signature)
         {
             state.Writer.Write(signature.Name);
+            state.Writer.Write((byte)signature.CallingConvention);
             state.Writer.Write7BitEncodedInt(signature.GenericParameterCount);
             SerializeSignatureElement(state, signature.ReturnType);
             state.Writer.Write7BitEncodedInt(signature.Parameters.Length);

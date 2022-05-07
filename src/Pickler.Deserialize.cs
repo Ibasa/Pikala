@@ -131,6 +131,7 @@ namespace Ibasa.Pikala
         private Signature DeserializeSignature(PicklerDeserializationState state)
         {
             var name = state.Reader.ReadString();
+            var callingConvention = (CallingConventions)state.Reader.ReadByte();
             var genericParameterCount = state.Reader.Read7BitEncodedInt();
             var returnType = DeserializeSignatureElement(state);
             var parameters = new SignatureElement[state.Reader.Read7BitEncodedInt()];
@@ -138,7 +139,7 @@ namespace Ibasa.Pikala
             {
                 parameters[i] = DeserializeSignatureElement(state);
             }
-            return new Signature(name, genericParameterCount, returnType, parameters);
+            return new Signature(name, callingConvention, genericParameterCount, returnType, parameters);
         }
 
         private void DeserializeConstructorHeader(PicklerDeserializationState state, Type[]? genericTypeParameters, PickledTypeInfoDef constructingType, out PickledConstructorInfoDef constructingConstructor)
@@ -691,7 +692,7 @@ namespace Ibasa.Pikala
                 }
 
                 var propertyBuilder = typeBuilder.DefineProperty(propertyName, propertyAttributes, propertyCallingConvention, propertyType.Type, propertyParameters);
-                constructingType.Properties[i] = new PickledPropertyInfoDef(constructingType, propertyBuilder, propertyParameters);
+                constructingType.Properties[i] = new PickledPropertyInfoDef(constructingType, propertyBuilder, propertyCallingConvention, propertyParameters);
 
                 var count = state.Reader.Read7BitEncodedInt();
                 var hasGetter = (count & 0x1) != 0;
