@@ -735,7 +735,12 @@ namespace Ibasa.Pikala
 
         public Signature GetSignature()
         {
-            return new Signature(MethodBuilder.Name, MethodBuilder.CallingConvention, GenericParameters?.Length ?? 0, SignatureElement.FromType(MethodBuilder.ReturnType), SignatureElement.FromTypes(ParameterTypes));
+            return new Signature(
+                MethodBuilder.Name,
+                MethodBuilder.CallingConvention,
+                GenericParameters?.Length ?? 0,
+                SignatureLocation.FromType(MethodBuilder.ReturnType),
+                SignatureLocation.FromTypes(ParameterTypes));
         }
     }
 
@@ -1161,7 +1166,12 @@ namespace Ibasa.Pikala
         {
             // TODO ConstructorBuilder either returns HasThis or Standard based on if the type is generic or not. But a ConstructorInfo will always (?) return HasThis | Standard.
             var callingConvention = CallingConventions.HasThis | CallingConventions.Standard;
-            return new Signature(ConstructorBuilder.Name, callingConvention, 0, SignatureElement.FromType(ConstructingType.Type), SignatureElement.FromTypes(ParameterTypes));
+            return new Signature(
+                ConstructorBuilder.Name,
+                callingConvention,
+                0,
+                SignatureLocation.FromType(ConstructingType.Type),
+                SignatureLocation.FromTypes(ParameterTypes));
         }
 
         public PickledTypeInfoDef ConstructingType { get; }

@@ -248,21 +248,36 @@ namespace Ibasa.Pikala
                 state.Writer.Write((byte)SignatureElementOperation.Pointer);
                 SerializeSignatureElement(state, si.ElementType);
             }
-            else if (signature is SignatureReq sr)
-            {
-                state.Writer.Write((byte)SignatureElementOperation.Modreq);
-                SerializeSignatureElement(state, sr.ElementType);
-                SerializeType(state, sr.RequiredModifier, null, null);
-            }
-            else if (signature is SignatureOpt so)
-            {
-                state.Writer.Write((byte)SignatureElementOperation.Modopt);
-                SerializeSignatureElement(state, so.ElementType);
-                SerializeType(state, so.OptionalModifier, null, null);
-            }
             else
             {
                 throw new NotImplementedException($"Unhandled SignatureElement: {signature}");
+            }
+        }
+
+        private void SerializeSignatureLocation(PicklerSerializationState state, SignatureLocation location, bool withModifiers)
+        {
+            SerializeSignatureElement(state, location.Element);
+
+            if (withModifiers)
+            {
+                // Combine the count of required and optional parameters and write that out
+                var reqmods = location.RequiredCustomModifiers;
+                var optmods = location.OptionalCustomModifiers;
+
+                if (reqmods.Count > 15) { throw new NotSupportedException("Pikala does not support more than 15 required modifiers"); }
+                if (optmods.Count > 15) { throw new NotSupportedException("Pikala does not support more than 15 optional modifiers"); }
+
+                var interleave = (reqmods.Count << 4) | optmods.Count;
+
+                state.Writer.Write((byte)interleave);
+                foreach (var reqmod in reqmods)
+                {
+                    SerializeType(state, reqmod, null, null);
+                }
+                foreach (var optmod in optmods)
+                {
+                    SerializeType(state, optmod, null, null);
+                }
             }
         }
 
@@ -271,11 +286,23 @@ namespace Ibasa.Pikala
             state.Writer.Write(signature.Name);
             state.Writer.Write((byte)signature.CallingConvention);
             state.Writer.Write7BitEncodedInt(signature.GenericParameterCount);
-            SerializeSignatureElement(state, signature.ReturnType);
-            state.Writer.Write7BitEncodedInt(signature.Parameters.Length);
+            SerializeSignatureLocation(state, signature.ReturnType, true);
+
+
+            bool withModifiers = false;
+            foreach (var parameter in signature.Parameters)
+            {
+                if (parameter.RequiredCustomModifiers.Count > 0 || parameter.OptionalCustomModifiers.Count > 0)
+                {
+                    withModifiers = true;
+                    break;
+                }
+            }
+            state.Writer.Write7BitEncodedInt((signature.Parameters.Length << 1) | (withModifiers ? 1 : 0));
+
             foreach (var param in signature.Parameters)
             {
-                SerializeSignatureElement(state, param);
+                SerializeSignatureLocation(state, param, withModifiers);
             }
         }
 

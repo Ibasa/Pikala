@@ -1,10 +1,10 @@
 ﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
 
 namespace Ibasa.Pikala
 {
-
     enum SignatureElementOperation : byte
     {
         Type = 0,
@@ -14,15 +14,16 @@ namespace Ibasa.Pikala
         Array = 4,
         ByRef = 5,
         Pointer = 6,
-        Modreq = 7,
-        Modopt = 8,
     }
+
+    // Parameter class of (reqs + opts + type)
+    // Get rid of SignatureElement, just use the normal type serialiser (Which means we need to refify on that type with generic context)
 
     abstract class SignatureElement : IEquatable<SignatureElement>
     {
         public abstract bool Equals(SignatureElement? other);
 
-        public abstract (Type, Type[], Type[]) Reify(GenericTypeContext typeContext);
+        public abstract Type Reify(GenericTypeContext typeContext);
 
         public static SignatureElement FromType(Type type)
         {
@@ -67,37 +68,6 @@ namespace Ibasa.Pikala
             }
             return result;
         }
-
-        public static SignatureElement FromParameter(ParameterInfo parameter)
-        {
-            return FromParameter(parameter.ParameterType, parameter.GetRequiredCustomModifiers(), parameter.GetOptionalCustomModifiers());
-        }
-
-        public static SignatureElement FromParameter(Type type, Type[] requiredCustomModifiers, Type[] optionalCustomModifiers)
-        {
-            var innerType = FromType(type);
-
-            var result = innerType;
-            foreach (var req in requiredCustomModifiers)
-            {
-                result = new SignatureReq(result, req);
-            }
-            foreach (var opt in optionalCustomModifiers)
-            {
-                result = new SignatureOpt(result, opt);
-            }
-            return result;
-        }
-
-        public static SignatureElement[] FromParameters(ParameterInfo[] parameters)
-        {
-            var result = new SignatureElement[parameters.Length];
-            for (int i = 0; i < parameters.Length; ++i)
-            {
-                result[i] = FromParameter(parameters[i]);
-            }
-            return result;
-        }
     }
 
     sealed class SignatureGenericParameter : SignatureElement
@@ -120,7 +90,7 @@ namespace Ibasa.Pikala
             return false;
         }
 
-        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
+        public override Type Reify(GenericTypeContext typeContext)
         {
             Type result;
             if (IsGenericTypeParameter)
@@ -131,7 +101,7 @@ namespace Ibasa.Pikala
             {
                 result = typeContext.GenericMethodParameters![GenericParameterPosition];
             }
-            return (result, Type.EmptyTypes, Type.EmptyTypes);
+            return result;
         }
 
         public override string ToString()
@@ -158,10 +128,10 @@ namespace Ibasa.Pikala
             return false;
         }
 
-        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
+        public override Type Reify(GenericTypeContext typeContext)
         {
-            var (inner, reqs, opts) = ElementType.Reify(typeContext);
-            return (inner.MakePointerType(), reqs, opts);
+            var inner = ElementType.Reify(typeContext);
+            return inner.MakePointerType();
         }
 
         public override string ToString()
@@ -188,10 +158,10 @@ namespace Ibasa.Pikala
             return false;
         }
 
-        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
+        public override Type Reify(GenericTypeContext typeContext)
         {
-            var (inner, reqs, opts) = ElementType.Reify(typeContext);
-            return (inner.MakeByRefType(), reqs, opts);
+            var inner = ElementType.Reify(typeContext);
+            return inner.MakeByRefType();
         }
 
         public override string ToString()
@@ -220,14 +190,14 @@ namespace Ibasa.Pikala
             return false;
         }
 
-        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
+        public override Type Reify(GenericTypeContext typeContext)
         {
-            var (inner, reqs, opts) = ElementType.Reify(typeContext);
+            var inner = ElementType.Reify(typeContext);
             if (Rank == 1)
             {
-                return (inner.MakeArrayType(), reqs, opts);
+                return inner.MakeArrayType();
             }
-            return (inner.MakeArrayType(Rank), reqs, opts);
+            return inner.MakeArrayType(Rank);
         }
 
         public override string ToString()
@@ -262,84 +232,14 @@ namespace Ibasa.Pikala
             return false;
         }
 
-        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
+        public override Type Reify(GenericTypeContext typeContext)
         {
-            return (Type, Type.EmptyTypes, Type.EmptyTypes);
+            return Type;
         }
 
         public override string ToString()
         {
             return Type.FullName!;
-        }
-    }
-
-    sealed class SignatureReq : SignatureElement
-    {
-        public SignatureElement ElementType { get; private set; }
-        public Type RequiredModifier { get; private set; }
-
-        public SignatureReq(SignatureElement elementType, Type req)
-        {
-            ElementType = elementType;
-            RequiredModifier = req;
-        }
-
-        public override bool Equals(SignatureElement? other)
-        {
-            if (other is SignatureReq sr)
-            {
-                return ElementType.Equals(sr.ElementType) && RequiredModifier == sr.RequiredModifier;
-            }
-            return false;
-        }
-
-        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
-        {
-            var (inner, reqs, opts) = ElementType.Reify(typeContext);
-            var newReqs = new Type[reqs.Length + 1];
-            reqs.CopyTo(newReqs, 0);
-            newReqs[newReqs.Length - 1] = RequiredModifier;
-            return (inner, newReqs, opts);
-        }
-
-        public override string ToString()
-        {
-            return $"{ElementType} modreq {RequiredModifier}";
-        }
-    }
-
-    sealed class SignatureOpt : SignatureElement
-    {
-        public SignatureElement ElementType { get; private set; }
-        public Type OptionalModifier { get; private set; }
-
-        public SignatureOpt(SignatureElement elementType, Type opt)
-        {
-            ElementType = elementType;
-            OptionalModifier = opt;
-        }
-
-        public override bool Equals(SignatureElement? other)
-        {
-            if (other is SignatureOpt so)
-            {
-                return ElementType.Equals(so.ElementType) && OptionalModifier == so.OptionalModifier;
-            }
-            return false;
-        }
-
-        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
-        {
-            var (inner, reqs, opts) = ElementType.Reify(typeContext);
-            var newOpts = new Type[opts.Length + 1];
-            opts.CopyTo(newOpts, 0);
-            newOpts[newOpts.Length - 1] = OptionalModifier;
-            return (inner, reqs, newOpts);
-        }
-
-        public override string ToString()
-        {
-            return $"{ElementType} modopt {OptionalModifier}";
         }
     }
 
@@ -384,24 +284,15 @@ namespace Ibasa.Pikala
             return false;
         }
 
-        public override (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
+        public override Type Reify(GenericTypeContext typeContext)
         {
             var genericArguments = new Type[GenericArguments.Length];
             for (int i = 0; i < GenericArguments.Length; ++i)
             {
-                var (genericArgument, reqs, opts) = GenericArguments[i].Reify(typeContext);
-                if (reqs.Length != 0)
-                {
-                    throw new InvalidOperationException("Unexpected required modifer on generic argument");
-                }
-                if (opts.Length != 0)
-                {
-                    throw new InvalidOperationException("Unexpected optional modifer on generic argument");
-                }
-                genericArguments[i] = genericArgument;
+                genericArguments[i] = GenericArguments[i].Reify(typeContext);
             }
 
-            return (GenericTypeDefinition.MakeGenericType(genericArguments), Type.EmptyTypes, Type.EmptyTypes);
+            return GenericTypeDefinition.MakeGenericType(genericArguments);
         }
 
         public override string ToString()
@@ -424,16 +315,149 @@ namespace Ibasa.Pikala
         }
     }
 
+    sealed class SignatureLocation : IEquatable<SignatureLocation>
+    {
+        // We might have a name, and if we do we can use it to improve ToString results
+        public string? Name { get; }
+
+        public SignatureElement Element { get; }
+
+        public System.Collections.Immutable.IImmutableSet<Type> RequiredCustomModifiers { get; }
+        public System.Collections.Immutable.IImmutableSet<Type> OptionalCustomModifiers { get; }
+
+        private sealed class TypeComparer : System.Collections.Generic.Comparer<Type>
+        {
+            private static int CompareStrings(string? x, string? y)
+            {
+                if (x == null && y == null) return 0;
+                else if (x == null && y != null) return -1;
+                else if (x != null && y == null) return 1;
+
+                return x!.CompareTo(y);
+            }
+
+            public override int Compare([AllowNull] Type x, [AllowNull] Type y)
+            {
+                if (x == null && y == null) return 0;
+                if (x == null && y != null) return -1;
+                if (x != null && y == null) return 1;
+
+                var cmp = CompareStrings(x.Assembly.FullName, y.Assembly.FullName);
+                if (cmp != 0) return cmp;
+
+                cmp = CompareStrings(x.FullName, y.FullName);
+                if (cmp != 0) return cmp;
+
+                cmp = CompareStrings(x.Namespace, y.Namespace);
+                if (cmp != 0) return cmp;
+
+                return CompareStrings(x.Name, y.Name);
+            }
+        }
+
+        private static readonly TypeComparer Comparer = new TypeComparer();
+
+        public SignatureLocation(SignatureElement element, Type[] requiredCustomModifiers, Type[] optionalCustomModifiers, string? name)
+        {
+            Name = name;
+            Element = element;
+            RequiredCustomModifiers = System.Collections.Immutable.ImmutableSortedSet.ToImmutableSortedSet(requiredCustomModifiers, Comparer);
+            OptionalCustomModifiers = System.Collections.Immutable.ImmutableSortedSet.ToImmutableSortedSet(optionalCustomModifiers, Comparer);
+        }
+
+        public static SignatureLocation FromParameter(ParameterInfo parameter)
+        {
+            return FromParameter(parameter.ParameterType, parameter.GetRequiredCustomModifiers(), parameter.GetOptionalCustomModifiers(), parameter.Name);
+        }
+
+        public static SignatureLocation FromParameter(Type type, Type[] requiredCustomModifiers, Type[] optionalCustomModifiers, string? name)
+        {
+            var elementType = SignatureElement.FromType(type);
+            return new SignatureLocation(elementType, requiredCustomModifiers, optionalCustomModifiers, name);
+        }
+
+        public static SignatureLocation[] FromParameters(ParameterInfo[] parameters)
+        {
+            var result = new SignatureLocation[parameters.Length];
+            for (int i = 0; i < parameters.Length; ++i)
+            {
+                result[i] = FromParameter(parameters[i]);
+            }
+            return result;
+        }
+
+        public bool Equals(SignatureLocation? other)
+        {
+            if (other == null) return false;
+
+            if (!Element.Equals(other.Element)) return false;
+            if (!RequiredCustomModifiers.SetEquals(other.RequiredCustomModifiers)) return false;
+            if (!OptionalCustomModifiers.SetEquals(other.OptionalCustomModifiers)) return false;
+
+            return true;
+        }
+
+        public override string ToString()
+        {
+            var builder = new StringBuilder();
+
+            builder.Append(Element.ToString());
+
+            foreach (var mod in RequiredCustomModifiers)
+            {
+                builder.Append(" modreq ");
+                builder.Append(mod.ToString());
+            }
+
+            foreach (var mod in OptionalCustomModifiers)
+            {
+                builder.Append(" modopt ");
+                builder.Append(mod.ToString());
+            }
+
+            if (Name != null)
+            {
+                builder.Append(" ");
+                builder.Append(Name);
+            }
+
+            return builder.ToString();
+        }
+        public (Type, Type[], Type[]) Reify(GenericTypeContext typeContext)
+        {
+            var element = Element.Reify(typeContext);
+            return (element, System.Linq.Enumerable.ToArray(RequiredCustomModifiers), System.Linq.Enumerable.ToArray(OptionalCustomModifiers));
+        }
+
+        // TODO These are wrong and shouldn't be used
+        public static SignatureLocation FromType(Type type)
+        {
+            var elementType = SignatureElement.FromType(type);
+            return new SignatureLocation(elementType, Type.EmptyTypes, Type.EmptyTypes, null);
+        }
+
+        public static SignatureLocation[] FromTypes(Type[]? types)
+        {
+            if (types == null) { return new SignatureLocation[0]; }
+            var result = new SignatureLocation[types.Length];
+            for (int i = 0; i < types.Length; ++i)
+            {
+                result[i] = FromType(types[i]);
+            }
+            return result;
+        }
+    }
+
     sealed class Signature : IEquatable<Signature>
     {
         public string Name { get; }
         public CallingConventions CallingConvention { get; }
         public int GenericParameterCount { get; }
 
-        public SignatureElement ReturnType { get; }
-        public SignatureElement[] Parameters { get; }
+        public SignatureLocation ReturnType { get; }
+        public SignatureLocation[] Parameters { get; }
 
-        public Signature(string name, CallingConventions callingConvention, int genericParameterCount, SignatureElement returnType, SignatureElement[] parameters)
+        public Signature(string name, CallingConventions callingConvention, int genericParameterCount, SignatureLocation returnType, SignatureLocation[] parameters)
         {
             Name = name;
             CallingConvention = callingConvention;
@@ -472,15 +496,15 @@ namespace Ibasa.Pikala
                 }
             }
 
-            SignatureElement returnType;
+            SignatureLocation returnType;
             if (methodBase is ConstructorInfo constructor)
             {
                 System.Diagnostics.Debug.Assert(constructor.DeclaringType != null);
-                returnType = SignatureElement.FromType(constructor.DeclaringType);
+                returnType = SignatureLocation.FromParameter(constructor.DeclaringType, Type.EmptyTypes, Type.EmptyTypes, null);
             }
             else if (methodBase is MethodInfo method)
             {
-                returnType = SignatureElement.FromType(method.ReturnType);
+                returnType = SignatureLocation.FromParameter(method.ReturnParameter);
             }
             else
             {
@@ -492,7 +516,7 @@ namespace Ibasa.Pikala
                 methodBase.CallingConvention,
                 methodBase.IsGenericMethod ? methodBase.GetGenericArguments().Length : 0,
                 returnType,
-                SignatureElement.FromParameters(methodBase.GetParameters()));
+                SignatureLocation.FromParameters(methodBase.GetParameters()));
         }
 
         public static Signature GetSignature(PropertyInfo property)
@@ -504,13 +528,13 @@ namespace Ibasa.Pikala
             }
             var callingConvention = accessors[0].CallingConvention;
 
-            SignatureElement returnType = SignatureElement.FromParameter(property.PropertyType, property.GetRequiredCustomModifiers(), property.GetOptionalCustomModifiers());
+            SignatureLocation returnType = SignatureLocation.FromParameter(property.PropertyType, property.GetRequiredCustomModifiers(), property.GetOptionalCustomModifiers(), null);
             return new Signature(
                 property.Name,
                 callingConvention,
                 0,
                 returnType,
-                SignatureElement.FromParameters(property.GetIndexParameters()));
+                SignatureLocation.FromParameters(property.GetIndexParameters()));
         }
 
         public bool Equals(Signature? other)

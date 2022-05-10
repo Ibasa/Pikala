@@ -109,23 +109,37 @@ namespace Ibasa.Pikala
                         var elementType = DeserializeSignatureElement(state);
                         return new SignaturePointer(elementType);
                     }
-
-                case SignatureElementOperation.Modreq:
-                    {
-                        var elementType = DeserializeSignatureElement(state);
-                        var modifier = DeserializeType(state, default);
-                        return new SignatureReq(elementType, modifier.Type);
-                    }
-
-                case SignatureElementOperation.Modopt:
-                    {
-                        var elementType = DeserializeSignatureElement(state);
-                        var modifier = DeserializeType(state, default);
-                        return new SignatureOpt(elementType, modifier.Type);
-                    }
             }
 
             throw new NotImplementedException($"Unhandled SignatureElement: {operation}");
+        }
+
+        private SignatureLocation DeserializeSignatureLocation(PicklerDeserializationState state, bool withModifiers)
+        {
+            var element = DeserializeSignatureElement(state);
+
+            if (withModifiers)
+            {
+                var mods = state.Reader.ReadByte();
+                var reqmodCount = mods >> 4;
+                var optmodCount = mods & 0xF;
+
+                var requiredCustomModifiers = new Type[reqmodCount];
+                var optionalCustomModifiers = new Type[optmodCount];
+
+                for (int k = 0; k < reqmodCount; ++k)
+                {
+                    requiredCustomModifiers[k] = DeserializeType(state, default).Type;
+                }
+                for (int k = 0; k < optmodCount; ++k)
+                {
+                    optionalCustomModifiers[k] = DeserializeType(state, default).Type;
+                }
+
+                return new SignatureLocation(element, requiredCustomModifiers, optionalCustomModifiers, null);
+            }
+
+            return new SignatureLocation(element, Type.EmptyTypes, Type.EmptyTypes, null);
         }
 
         private Signature DeserializeSignature(PicklerDeserializationState state)
@@ -133,11 +147,16 @@ namespace Ibasa.Pikala
             var name = state.Reader.ReadString();
             var callingConvention = (CallingConventions)state.Reader.ReadByte();
             var genericParameterCount = state.Reader.Read7BitEncodedInt();
-            var returnType = DeserializeSignatureElement(state);
-            var parameters = new SignatureElement[state.Reader.Read7BitEncodedInt()];
+            var returnType = DeserializeSignatureLocation(state, true);
+
+            var parameterCount = state.Reader.Read7BitEncodedInt();
+            var withModifiers = (parameterCount & 0x1) != 0;
+            parameterCount >>= 1;
+
+            var parameters = new SignatureLocation[parameterCount];
             for (int i = 0; i < parameters.Length; ++i)
             {
-                parameters[i] = DeserializeSignatureElement(state);
+                parameters[i] = DeserializeSignatureLocation(state, withModifiers);
             }
             return new Signature(name, callingConvention, genericParameterCount, returnType, parameters);
         }
