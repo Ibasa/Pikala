@@ -142,6 +142,34 @@ namespace Ibasa.Pikala
             return new Signature(name, callingConvention, genericParameterCount, returnType, parameters);
         }
 
+        private (Type, Type[], Type[]) DeserializeParameter(PicklerDeserializationState state, bool withModifiers, GenericTypeContext typeContext)
+        {
+            var parameterType = DeserializeType(state, typeContext).Type;
+
+            if (withModifiers)
+            {
+                var mods = state.Reader.ReadByte();
+                var reqmodCount = mods >> 4;
+                var optmodCount = mods & 0xF;
+
+                var requiredCustomModifiers = new Type[reqmodCount];
+                var optionalCustomModifiers = new Type[optmodCount];
+
+                for (int k = 0; k < reqmodCount; ++k)
+                {
+                    requiredCustomModifiers[k] = DeserializeType(state, typeContext).Type;
+                }
+                for (int k = 0; k < optmodCount; ++k)
+                {
+                    optionalCustomModifiers[k] = DeserializeType(state, typeContext).Type;
+                }
+
+                return (parameterType, requiredCustomModifiers, optionalCustomModifiers);
+            }
+
+            return (parameterType, Type.EmptyTypes, Type.EmptyTypes);
+        }
+
         private void DeserializeConstructorHeader(PicklerDeserializationState state, Type[]? genericTypeParameters, PickledTypeInfoDef constructingType, out PickledConstructorInfoDef constructingConstructor)
         {
             var typeContext = new GenericTypeContext(genericTypeParameters);
@@ -149,7 +177,7 @@ namespace Ibasa.Pikala
             var callingConvention = (CallingConventions)state.Reader.ReadByte();
 
             var parameterCount = state.Reader.Read7BitEncodedInt();
-            var hasModifiers = (parameterCount & 0x1) != 0;
+            var withModifiers = (parameterCount & 0x1) != 0;
             parameterCount >>= 1;
 
             Type[]? parameterTypes = null;
@@ -158,35 +186,15 @@ namespace Ibasa.Pikala
             if (parameterCount != 0)
             {
                 parameterTypes = new Type[parameterCount];
-                if (hasModifiers)
-                {
-                    requiredCustomModifiers = new Type[parameterCount][];
-                    optionalCustomModifiers = new Type[parameterCount][];
-                }
+                requiredCustomModifiers = new Type[parameterCount][];
+                optionalCustomModifiers = new Type[parameterCount][];
 
                 for (int j = 0; j < parameterTypes.Length; ++j)
                 {
-                    var parameterType = DeserializeType(state, typeContext);
-                    parameterTypes[j] = parameterType.Type;
-
-                    if (hasModifiers)
-                    {
-                        var mods = state.Reader.ReadByte();
-                        var reqmodCount = mods >> 4;
-                        var optmodCount = mods & 0xF;
-
-                        requiredCustomModifiers[j] = new Type[reqmodCount];
-                        optionalCustomModifiers[j] = new Type[optmodCount];
-
-                        for (int k = 0; k < reqmodCount; ++k)
-                        {
-                            requiredCustomModifiers[j][k] = DeserializeType(state, typeContext).Type;
-                        }
-                        for (int k = 0; k < optmodCount; ++k)
-                        {
-                            optionalCustomModifiers[j][k] = DeserializeType(state, typeContext).Type;
-                        }
-                    }
+                    var (parameterType, reqmods, optmods) = DeserializeParameter(state, withModifiers, typeContext);
+                    parameterTypes[j] = parameterType;
+                    requiredCustomModifiers[j] = reqmods;
+                    optionalCustomModifiers[j] = optmods;
                 }
             }
 
@@ -234,30 +242,10 @@ namespace Ibasa.Pikala
 
             var typeContext = new GenericTypeContext(genericTypeParameters, genericParameters);
 
-            var returnType = DeserializeType(state, typeContext).Type;
-            Type[]? returnTypeRequiredCustomModifiers;
-            Type[]? returnTypeOptionalCustomModifiers;
-
-            {
-                var mods = state.Reader.ReadByte();
-                var reqmodCount = mods >> 4;
-                var optmodCount = mods & 0xF;
-
-                returnTypeRequiredCustomModifiers = new Type[reqmodCount];
-                returnTypeOptionalCustomModifiers = new Type[optmodCount];
-
-                for (int k = 0; k < reqmodCount; ++k)
-                {
-                    returnTypeRequiredCustomModifiers[k] = DeserializeType(state, typeContext).Type;
-                }
-                for (int k = 0; k < optmodCount; ++k)
-                {
-                    returnTypeOptionalCustomModifiers[k] = DeserializeType(state, typeContext).Type;
-                }
-            }
+            var (returnType, returnTypeRequiredCustomModifiers, returnTypeOptionalCustomModifiers) = DeserializeParameter(state, true, typeContext);
 
             var parameterCount = state.Reader.Read7BitEncodedInt();
-            var hasModifiers = (parameterCount & 0x1) != 0;
+            var withModifiers = (parameterCount & 0x1) != 0;
             parameterCount >>= 1;
 
             Type[]? parameterTypes = null;
@@ -266,35 +254,15 @@ namespace Ibasa.Pikala
             if (parameterCount != 0)
             {
                 parameterTypes = new Type[parameterCount];
-                if (hasModifiers)
-                {
-                    parameterTypeRequiredCustomModifiers = new Type[parameterCount][];
-                    parameterTypeOptionalCustomModifiers = new Type[parameterCount][];
-                }
+                parameterTypeRequiredCustomModifiers = new Type[parameterCount][];
+                parameterTypeOptionalCustomModifiers = new Type[parameterCount][];
 
                 for (int j = 0; j < parameterTypes.Length; ++j)
                 {
-                    var parameterType = DeserializeType(state, typeContext);
-                    parameterTypes[j] = parameterType.Type;
-
-                    if (hasModifiers)
-                    {
-                        var mods = state.Reader.ReadByte();
-                        var reqmodCount = mods >> 4;
-                        var optmodCount = mods & 0xF;
-
-                        parameterTypeRequiredCustomModifiers[j] = new Type[reqmodCount];
-                        parameterTypeOptionalCustomModifiers[j] = new Type[optmodCount];
-
-                        for (int k = 0; k < reqmodCount; ++k)
-                        {
-                            parameterTypeRequiredCustomModifiers[j][k] = DeserializeType(state, typeContext).Type;
-                        }
-                        for (int k = 0; k < optmodCount; ++k)
-                        {
-                            parameterTypeOptionalCustomModifiers[j][k] = DeserializeType(state, typeContext).Type;
-                        }
-                    }
+                    var (parameterType, reqmods, optmods) = DeserializeParameter(state, withModifiers, typeContext);
+                    parameterTypes[j] = parameterType;
+                    parameterTypeRequiredCustomModifiers[j] = reqmods;
+                    parameterTypeOptionalCustomModifiers[j] = optmods;
                 }
             }
 
