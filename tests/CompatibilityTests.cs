@@ -308,7 +308,7 @@ namespace Ibasa.Pikala.Tests
 
                 if (error != null)
                 {
-                    throw new Exception($"Serialised bytes did not match\nObject: {obj}\nExpected length: { expectedBytes.Length}\nActual length: { actualBytes.Length}\n{error}");
+                    throw new Exception($"Serialised bytes did not match\nObject: {obj}\nExpected length: {expectedBytes.Length}\nActual length: {actualBytes.Length}\n{error}");
                 }
             }
             catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException)
