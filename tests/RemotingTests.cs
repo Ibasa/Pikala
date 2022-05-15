@@ -652,11 +652,17 @@ namespace Ibasa.Pikala.Tests
 
             var assembly = Assert.IsAssignableFrom<System.Reflection.Assembly>(result);
 
+            // FSI in dotnet 6.0.300 has started doing some odd things.
+            // 1) The assembly name now has a numeral suffix. It seems to be consistently '1' but just incase and to also support running this test on dotnet 5 we've changed the 
+            // assert from Equals("FSI-ASSEMBLY") to StartsWith.
+            // 2) FSI is repeatdly adding the CompanyNameAttribute. Seems to be added about 30 times. We've removed the Assert.Single to work around this, and replaced it with
+            // a call to Enumerable.First.
+
             var name = assembly.GetName();
-            Assert.Equal("FSI-ASSEMBLY", name.Name);
+            Assert.StartsWith("FSI-ASSEMBLY", name.Name);
             var companysAttribute =
                 Assert.IsType<System.Reflection.AssemblyCompanyAttribute>(
-                    Assert.Single(assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyCompanyAttribute), false)));
+                    (assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyCompanyAttribute), false)).First());
             Assert.Equal("Ibasa", companysAttribute.Company);
         }
 
@@ -749,9 +755,9 @@ namespace Ibasa.Pikala.Tests
 
             var assembly = customAttributeType.Assembly;
             var name = assembly.GetName();
-            Assert.Equal("FSI-ASSEMBLY", name.Name);
+            Assert.StartsWith("FSI-ASSEMBLY", name.Name);
 
-            var customAttribute = Assert.Single(assembly.GetCustomAttributes(customAttributeType, true));
+            var customAttribute = assembly.GetCustomAttributes(customAttributeType, true).First();
             Assert.Equal("testing", customAttribute.ToString());
         }
 
