@@ -1335,6 +1335,24 @@ namespace Ibasa.Pikala
                 SerializeType(state, elementType, genericTypeParameters, genericMethodParameters);
             }
 
+            else if (type.IsByRef)
+            {
+                AddMemo(state, false, position.Value, type);
+                state.Writer.Write((byte)TypeOperation.ByRefType);
+                var elementType = type.GetElementType();
+                System.Diagnostics.Debug.Assert(elementType != null, "GetElementType returned null for a byref type");
+                SerializeType(state, elementType, genericTypeParameters, genericMethodParameters);
+            }
+
+            else if (type.IsPointer)
+            {
+                AddMemo(state, false, position.Value, type);
+                state.Writer.Write((byte)TypeOperation.PointerType);
+                var elementType = type.GetElementType();
+                System.Diagnostics.Debug.Assert(elementType != null, "GetElementType returned null for a pointer type");
+                SerializeType(state, elementType, genericTypeParameters, genericMethodParameters);
+            }
+
             else if (type.IsGenericParameter)
             {
                 if (type.DeclaringMethod != null)

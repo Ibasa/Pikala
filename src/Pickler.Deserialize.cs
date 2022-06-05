@@ -1717,6 +1717,26 @@ namespace Ibasa.Pikala
                         return memo.Invoke();
                     }
 
+                case TypeOperation.ByRefType:
+                    {
+                        var memo = state.RegisterMemoCallback(position, (PickledTypeInfo elementType) =>
+                        {
+                            return state.SetMemo(position, true, new PickledByRefType(elementType));
+                        });
+                        var _ = DeserializeType(state, typeContext);
+                        return memo.Invoke();
+                    }
+
+                case TypeOperation.PointerType:
+                    {
+                        var memo = state.RegisterMemoCallback(position, (PickledTypeInfo elementType) =>
+                        {
+                            return state.SetMemo(position, true, new PickledPointerType(elementType));
+                        });
+                        var _ = DeserializeType(state, typeContext);
+                        return memo.Invoke();
+                    }
+
                 case TypeOperation.GenericInstantiation:
                     return DeserializeGenericInstantiation(state, position, typeContext);
 
@@ -1731,6 +1751,7 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an MVar operation without a current method context");
                         }
+                        // TODO: This looks wrong! Why isn't GenericMethodParameters a PickledTypeInfo?
                         return state.SetMemo(position, true, PickledTypeInfo.FromType(typeContext.GenericMethodParameters[genericParameterPosition]));
                     }
 
