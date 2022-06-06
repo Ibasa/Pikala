@@ -1435,6 +1435,10 @@ namespace Ibasa.Pikala
                     {
                         typeFlags |= TypeDef.Struct;
                     }
+                    else if (type.IsInterface)
+                    {
+                        typeFlags |= TypeDef.Interface;
+                    }
                     else
                     {
                         typeFlags |= TypeDef.Class;
@@ -1451,6 +1455,7 @@ namespace Ibasa.Pikala
                         foreach (var parameter in genericParameters)
                         {
                             state.Writer.Write(parameter.Name);
+                            state.Writer.Write((byte)parameter.GenericParameterAttributes);
                         }
                     }
 

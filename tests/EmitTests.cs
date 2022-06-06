@@ -424,5 +424,21 @@ namespace Ibasa.Pikala.Tests
 
             Assert.Equal(obj.ToString(), result.ToString());
         }
+
+        [Fact]
+        public void TestGenericVariance()
+        {
+            var pickler = CreatePickler();
+
+            var result = RoundTrip.Do<Type>(pickler, typeof(TestTypes.InterfaceWithVariance<,,,>));
+
+            var genericParams = result.GetGenericArguments();
+            Assert.Equal(4, genericParams.Length);
+
+            Assert.Equal(System.Reflection.GenericParameterAttributes.Contravariant, genericParams[0].GenericParameterAttributes);
+            Assert.Equal(System.Reflection.GenericParameterAttributes.Covariant, genericParams[1].GenericParameterAttributes);
+            Assert.Equal(System.Reflection.GenericParameterAttributes.ReferenceTypeConstraint, genericParams[2].GenericParameterAttributes);
+            Assert.Equal(System.Reflection.GenericParameterAttributes.DefaultConstructorConstraint, genericParams[3].GenericParameterAttributes);
+        }
     }
 }

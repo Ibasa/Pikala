@@ -629,5 +629,12 @@ namespace Ibasa.Pikala.Tests
                 return i + 1;
             }
         }
+
+        public interface InterfaceWithVariance<in T, out U, V, W>
+            where V : class
+            where W : new()
+        {
+            public U Method(T a, ref V b, ref W c);
+        }
     }
 }

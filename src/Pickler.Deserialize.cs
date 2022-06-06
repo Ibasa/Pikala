@@ -1590,6 +1590,7 @@ namespace Ibasa.Pikala
                 var isNested = (typeFlags & (int)TypeDef.Nested) != 0;
                 var typeDef = (TypeDef)(typeFlags & 0x7);
                 string[]? genericParameters = null;
+                GenericParameterAttributes[]? genericParameterAttributes = null;
                 if (typeDef != TypeDef.Enum)
                 {
                     // Enums never have generic parameters, but anything else might
@@ -1597,9 +1598,11 @@ namespace Ibasa.Pikala
                     if (genericParameterCount != 0)
                     {
                         genericParameters = new string[genericParameterCount];
+                        genericParameterAttributes = new GenericParameterAttributes[genericParameterCount];
                         for (int i = 0; i < genericParameterCount; ++i)
                         {
                             genericParameters[i] = state.Reader.ReadString();
+                            genericParameterAttributes[i] = (GenericParameterAttributes)state.Reader.ReadByte();
                         }
                     }
                 }
@@ -1615,6 +1618,10 @@ namespace Ibasa.Pikala
                         if (genericParameters != null)
                         {
                             result.GenericParameters = result.TypeBuilder.DefineGenericParameters(genericParameters);
+                            for (int i = 0; i < result.GenericParameters.Length; ++i)
+                            {
+                                result.GenericParameters[i].SetGenericParameterAttributes(genericParameterAttributes[i]);
+                            }
                         }
 
                         state.AddTypeDef(result);
@@ -1634,6 +1641,10 @@ namespace Ibasa.Pikala
                     if (genericParameters != null)
                     {
                         constructingType.GenericParameters = constructingType.TypeBuilder.DefineGenericParameters(genericParameters);
+                        for (int i = 0; i < constructingType.GenericParameters.Length; ++i)
+                        {
+                            constructingType.GenericParameters[i].SetGenericParameterAttributes(genericParameterAttributes[i]);
+                        }
                     }
 
                     state.AddTypeDef(constructingType);
