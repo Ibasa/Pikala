@@ -189,7 +189,7 @@ namespace Ibasa.Pikala
             return (parameterType, Type.EmptyTypes, Type.EmptyTypes);
         }
 
-        private void DeserializeConstructorHeader(PicklerDeserializationState state, Type[]? genericTypeParameters, PickledTypeInfoDef constructingType, out PickledConstructorInfoDef constructingConstructor)
+        private void DeserializeConstructorHeader(PicklerDeserializationState state, PickledTypeInfo[]? genericTypeParameters, PickledTypeInfoDef constructingType, out PickledConstructorInfoDef constructingConstructor)
         {
             var typeContext = new GenericTypeContext(genericTypeParameters);
             var methodAttributes = (MethodAttributes)state.Reader.ReadInt32();
@@ -241,7 +241,7 @@ namespace Ibasa.Pikala
             constructingConstructor = new PickledConstructorInfoDef(constructingType, constructorBuilder, parameters, parameterTypes);
         }
 
-        private void DeserializeMethodHeader(PicklerDeserializationState state, Type[]? genericTypeParameters, PickledTypeInfoDef constructingType, ref PickledMethodInfoDef constructingMethod)
+        private void DeserializeMethodHeader(PicklerDeserializationState state, PickledTypeInfo[]? genericTypeParameters, PickledTypeInfoDef constructingType, ref PickledMethodInfoDef constructingMethod)
         {
             var methodName = state.Reader.ReadString();
             var methodImplAttributes = (MethodImplAttributes)state.Reader.ReadInt32();
@@ -257,9 +257,20 @@ namespace Ibasa.Pikala
             {
                 methodGenericParameterNames[j] = state.Reader.ReadString();
             }
-            var genericParameters = methodGenericParameterNames.Length == 0 ? null : methodBuilder.DefineGenericParameters(methodGenericParameterNames);
 
-            var typeContext = new GenericTypeContext(genericTypeParameters, genericParameters);
+            constructingMethod = new PickledMethodInfoDef(constructingType, methodBuilder);
+
+            var genericParameterBuilders = methodGenericParameterNames.Length == 0 ? null : methodBuilder.DefineGenericParameters(methodGenericParameterNames);
+            if (genericParameterBuilders != null)
+            {
+                constructingMethod.GenericParameters = new PickledGenericParameterDef[genericParameterBuilders.Length];
+                for (int j = 0; j < genericParameterBuilders.Length; ++j)
+                {
+                    constructingMethod.GenericParameters[j] = new PickledGenericParameterDef(constructingMethod, genericParameterBuilders[j]);
+                }
+            }
+
+            var typeContext = new GenericTypeContext(genericTypeParameters, constructingMethod.GenericParameters);
 
             var (returnType, returnTypeRequiredCustomModifiers, returnTypeOptionalCustomModifiers) = DeserializeParameter(state, true, typeContext);
 
@@ -267,19 +278,18 @@ namespace Ibasa.Pikala
             var withModifiers = (parameterCount & 0x1) != 0;
             parameterCount >>= 1;
 
-            Type[]? parameterTypes = null;
             Type[][]? parameterTypeRequiredCustomModifiers = null;
             Type[][]? parameterTypeOptionalCustomModifiers = null;
             if (parameterCount != 0)
             {
-                parameterTypes = new Type[parameterCount];
+                constructingMethod.ParameterTypes = new Type[parameterCount];
                 parameterTypeRequiredCustomModifiers = new Type[parameterCount][];
                 parameterTypeOptionalCustomModifiers = new Type[parameterCount][];
 
-                for (int j = 0; j < parameterTypes.Length; ++j)
+                for (int j = 0; j < constructingMethod.ParameterTypes.Length; ++j)
                 {
                     var (parameterType, reqmods, optmods) = DeserializeParameter(state, withModifiers, typeContext);
-                    parameterTypes[j] = parameterType;
+                    constructingMethod.ParameterTypes[j] = parameterType;
                     parameterTypeRequiredCustomModifiers[j] = reqmods;
                     parameterTypeOptionalCustomModifiers[j] = optmods;
                 }
@@ -287,11 +297,7 @@ namespace Ibasa.Pikala
 
             methodBuilder.SetSignature(
                 returnType, returnTypeRequiredCustomModifiers, returnTypeOptionalCustomModifiers,
-                parameterTypes, parameterTypeRequiredCustomModifiers, parameterTypeOptionalCustomModifiers);
-
-            constructingMethod = new PickledMethodInfoDef(constructingType, methodBuilder);
-            constructingMethod.ParameterTypes = parameterTypes;
-            constructingMethod.GenericParameters = genericParameters;
+                constructingMethod.ParameterTypes, parameterTypeRequiredCustomModifiers, parameterTypeOptionalCustomModifiers);
 
             constructingMethod.Parameters = new ParameterBuilder[parameterCount];
             for (int j = 0; j < constructingMethod.Parameters.Length; ++j)
@@ -1617,10 +1623,12 @@ namespace Ibasa.Pikala
 
                         if (genericParameters != null)
                         {
-                            result.GenericParameters = result.TypeBuilder.DefineGenericParameters(genericParameters);
-                            for (int i = 0; i < result.GenericParameters.Length; ++i)
+                            var genericParameterBuilders = result.TypeBuilder.DefineGenericParameters(genericParameters);
+                            result.GenericParameters = new PickledGenericParameterDef[genericParameters.Length];
+                            for (int i = 0; i < genericParameters.Length; ++i)
                             {
-                                result.GenericParameters[i].SetGenericParameterAttributes(genericParameterAttributes[i]);
+                                genericParameterBuilders[i].SetGenericParameterAttributes(genericParameterAttributes[i]);
+                                result.GenericParameters[i] = new PickledGenericParameterDef(result, genericParameterBuilders[i]);
                             }
                         }
 
@@ -1640,10 +1648,12 @@ namespace Ibasa.Pikala
 
                     if (genericParameters != null)
                     {
-                        constructingType.GenericParameters = constructingType.TypeBuilder.DefineGenericParameters(genericParameters);
-                        for (int i = 0; i < constructingType.GenericParameters.Length; ++i)
+                        var genericParameterBuilders = constructingType.TypeBuilder.DefineGenericParameters(genericParameters);
+                        constructingType.GenericParameters = new PickledGenericParameterDef[genericParameters.Length];
+                        for (int i = 0; i < genericParameters.Length; ++i)
                         {
-                            constructingType.GenericParameters[i].SetGenericParameterAttributes(genericParameterAttributes[i]);
+                            genericParameterBuilders[i].SetGenericParameterAttributes(genericParameterAttributes[i]);
+                            constructingType.GenericParameters[i] = new PickledGenericParameterDef(constructingType, genericParameterBuilders[i]);
                         }
                     }
 
@@ -1762,8 +1772,7 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an MVar operation without a current method context");
                         }
-                        // TODO: This looks wrong! Why isn't GenericMethodParameters a PickledTypeInfo?
-                        return state.SetMemo(position, true, PickledTypeInfo.FromType(typeContext.GenericMethodParameters[genericParameterPosition]));
+                        return state.SetMemo(position, true, typeContext.GenericMethodParameters[genericParameterPosition]);
                     }
 
                 case TypeOperation.TVar:
@@ -1773,7 +1782,7 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an TVar operation without a current type context");
                         }
-                        return state.SetMemo(position, true, PickledTypeInfo.FromType(typeContext.GenericTypeParameters[genericParameterPosition]));
+                        return state.SetMemo(position, true, typeContext.GenericTypeParameters[genericParameterPosition]);
                     }
 
                 case TypeOperation.TypeRef:

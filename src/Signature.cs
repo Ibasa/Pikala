@@ -95,11 +95,11 @@ namespace Ibasa.Pikala
             Type result;
             if (IsGenericTypeParameter)
             {
-                result = typeContext.GenericTypeParameters![GenericParameterPosition];
+                result = typeContext.GenericTypeParameters![GenericParameterPosition].Type;
             }
             else
             {
-                result = typeContext.GenericMethodParameters![GenericParameterPosition];
+                result = typeContext.GenericMethodParameters![GenericParameterPosition].Type;
             }
             return result;
         }

@@ -27,16 +27,16 @@ namespace Ibasa.Pikala
 
     struct GenericTypeContext
     {
-        public readonly Type[]? GenericTypeParameters;
-        public readonly Type[]? GenericMethodParameters;
+        public readonly PickledTypeInfo[]? GenericTypeParameters;
+        public readonly PickledTypeInfo[]? GenericMethodParameters;
 
-        public GenericTypeContext(Type[]? genericTypeParameters, Type[]? genericMethodParameters)
+        public GenericTypeContext(PickledTypeInfo[]? genericTypeParameters, PickledTypeInfo[]? genericMethodParameters)
         {
             GenericTypeParameters = genericTypeParameters;
             GenericMethodParameters = genericMethodParameters;
         }
 
-        public GenericTypeContext(Type[]? genericTypeParameters)
+        public GenericTypeContext(PickledTypeInfo[]? genericTypeParameters)
         {
             GenericTypeParameters = genericTypeParameters;
             GenericMethodParameters = null;
@@ -597,14 +597,22 @@ namespace Ibasa.Pikala
 
     sealed class PickledGenericParameterDef : PickledTypeInfo
     {
-        public PickledGenericParameterDef(PickledTypeInfoDef declaringType, int position)
+        public PickledGenericParameterDef(PickledTypeInfoDef declaringType, GenericTypeParameterBuilder builder)
         {
             DeclaringType = declaringType;
-            Position = position;
+            Builder = builder;
         }
 
-        public PickledTypeInfoDef DeclaringType { get; }
-        public int Position { get; }
+        public PickledGenericParameterDef(PickledMethodInfoDef declaringMethod, GenericTypeParameterBuilder builder)
+        {
+            DeclaringMethod = declaringMethod;
+            Builder = builder;
+        }
+
+        public PickledTypeInfoDef? DeclaringType { get; }
+        public PickledMethodInfoDef? DeclaringMethod { get; }
+
+        public GenericTypeParameterBuilder Builder { get; }
 
         public override PickledTypeInfo GetGenericArgument(int position)
         {
@@ -643,14 +651,31 @@ namespace Ibasa.Pikala
 
         public override (Type, Resolved) Resolve(HashSet<PickledTypeInfoDef> assumeIsComplete)
         {
-            var (resolvedType, isComplete) = DeclaringType.Resolve(assumeIsComplete);
-            if (isComplete == Resolved.IsComplete)
+            if (DeclaringType != null)
             {
-                var args = resolvedType.GetGenericArguments();
-                return (args[Position], isComplete);
+                var (resolvedType, isComplete) = DeclaringType.Resolve(assumeIsComplete);
+                if (isComplete == Resolved.IsComplete)
+                {
+                    var args = resolvedType.GetGenericArguments();
+                    return (args[Builder.GenericParameterPosition], isComplete);
+                }
+
+                return (Builder, isComplete);
+            }
+            else if (DeclaringMethod != null)
+            {
+                var (resolvedMethod, isComplete) = DeclaringMethod.Resolve(assumeIsComplete);
+                if (isComplete == Resolved.IsComplete)
+                {
+                    var args = resolvedMethod.GetGenericArguments();
+                    return (args[Builder.GenericParameterPosition], isComplete);
+                }
+
+                return (Builder, isComplete);
             }
 
-            return (DeclaringType.GenericParameters![Position], isComplete);
+            System.Diagnostics.Debug.Fail("Unreachable");
+            return (null, Resolved.IsNotComplete);
         }
     }
 
@@ -724,7 +749,7 @@ namespace Ibasa.Pikala
         public PickledTypeInfo[]? BaseTypes { get; set; }
 
         public TypeBuilder TypeBuilder { get; }
-        public GenericTypeParameterBuilder[]? GenericParameters { get; set; }
+        public PickledGenericParameterDef[]? GenericParameters { get; set; }
         public PickledFieldInfoDef[]? Fields { get; set; }
         public PickledPropertyInfoDef[]? Properties { get; set; }
         public PickledMethodInfoDef[]? Methods { get; set; }
@@ -821,7 +846,7 @@ namespace Ibasa.Pikala
             System.Diagnostics.Debug.Assert(position >= 0, "Can't get generic argument for negative position");
             System.Diagnostics.Debug.Assert(position < GenericParameters.Length, "Generic argument position out of bounds");
 
-            return new PickledGenericParameterDef(this, position);
+            return GenericParameters[position];
         }
 
         public override IEnumerable<PickledFieldInfo> GetFields()
@@ -884,35 +909,44 @@ namespace Ibasa.Pikala
         {
             get
             {
-                var (resolvedType, isComplete) = DeclaringType.Resolve();
-                if (isComplete != true)
-                {
-                    return MethodBuilder;
-                }
-
-                var signature = GetSignature();
-                var methods = resolvedType.GetMethods(BindingsAll);
-                foreach (var method in methods)
-                {
-                    if (Signature.GetSignature(method) == signature)
-                    {
-                        return method;
-                    }
-                }
-
-                throw new Exception($"Could not load method '{signature}' from type '{DeclaringType.Type.Name}'");
+                var (resolvedMethod, _) = Resolve(new HashSet<PickledTypeInfoDef>());
+                return resolvedMethod;
             }
         }
 
+        public (MethodInfo, PickledTypeInfo.Resolved) Resolve(HashSet<PickledTypeInfoDef> assumeIsComplete)
+        {
+            var (resolvedType, isComplete) = DeclaringType.Resolve(assumeIsComplete);
+            if (isComplete != PickledTypeInfo.Resolved.IsComplete)
+            {
+                return (MethodBuilder, isComplete);
+            }
+
+            var signature = GetSignature();
+            var methods = resolvedType.GetMethods(BindingsAll);
+            foreach (var method in methods)
+            {
+                if (Signature.GetSignature(method) == signature)
+                {
+                    return (method, isComplete);
+                }
+            }
+
+            throw new Exception($"Could not load method '{signature}' from type '{DeclaringType.Type.Name}'");
+        }
 
         public MethodBuilder MethodBuilder { get; }
-        public GenericTypeParameterBuilder[]? GenericParameters { get; set; }
+        public PickledGenericParameterDef[]? GenericParameters { get; set; }
         public ParameterBuilder[]? Parameters { get; set; }
         public Type[]? ParameterTypes { get; set; }
 
         public override PickledTypeInfo GetGenericArgument(int position)
         {
-            throw new NotImplementedException();
+            System.Diagnostics.Debug.Assert(GenericParameters != null, "GenericParameters is null");
+            System.Diagnostics.Debug.Assert(position >= 0, "Can't get generic argument for negative position");
+            System.Diagnostics.Debug.Assert(position < GenericParameters.Length, "Generic argument position out of bounds");
+
+            return GenericParameters[position];
         }
 
         public Signature GetSignature()

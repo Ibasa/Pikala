@@ -142,7 +142,17 @@ namespace Ibasa.Pikala.Tests
         private object Base64ToObject(string base64)
         {
             var pickler = new Pickler();
-            var memoryStream = new MemoryStream(Convert.FromBase64String(base64));
+            byte[] bytes;
+            try
+            {
+                bytes = Convert.FromBase64String(base64);
+            }
+            catch
+            {
+                throw new Exception("Could not convert test output: " + base64);
+            }
+
+            var memoryStream = new MemoryStream(bytes);
             return pickler.Deserialize(memoryStream);
         }
 
