@@ -69,31 +69,6 @@ namespace Ibasa.Pikala
 
     abstract class PickledTypeInfo : PickledMemberInfo
     {
-        public static PickledTypeInfo FromType(Type type)
-        {
-            if (type.IsConstructedGenericType)
-            {
-                var genericArguments = type.GetGenericArguments();
-                var pickledArguments = new PickledTypeInfo[genericArguments.Length];
-                for (int i = 0; i < genericArguments.Length; ++i)
-                {
-                    pickledArguments[i] = FromType(genericArguments[i]);
-                }
-
-                return new PickledGenericType(
-                    FromType(type.GetGenericTypeDefinition()),
-                    pickledArguments);
-            }
-            else if (type.IsGenericParameter)
-            {
-                return new PickledGenericParameterRef(type);
-            }
-            else
-            {
-                return new PickledTypeInfoRef(type);
-            }
-        }
-
         public enum Resolved
         {
             IsComplete,
