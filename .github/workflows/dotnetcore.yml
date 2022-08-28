@@ -33,14 +33,6 @@ jobs:
         matrix:
             dotnet: [
                 {
-                    version: "3.1",
-                    moniker: "netcoreapp3.1"
-                }, 
-                {
-                    version: "5.0",
-                    moniker: "net5.0"
-                },
-                {
                     version: "6.0",
                     moniker: "net6.0"
                 }
@@ -49,20 +41,10 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    # We need to install all versions of dotnet to build even though we're using --framework to only test one of them per job
-    - name: Setup .NET Core 3.1
-      uses: actions/setup-dotnet@v1
-      with:
-        dotnet-version: 3.1.x
-    - name: Setup .NET Core 5.0
-      uses: actions/setup-dotnet@v1
-      with:
-        dotnet-version: 5.0.x
     - name: Setup .NET Core 6.0
       uses: actions/setup-dotnet@v1
       with:
         dotnet-version: 6.0.x
-
 
     - name: Build with dotnet
       run: dotnet build --configuration Release
