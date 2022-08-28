@@ -134,7 +134,7 @@ namespace Ibasa.Pikala
             // Don't bother memoing the well known types, they only take a byte to write out anyway
             foreach (var type in _wellKnownTypes)
             {
-                if (Object.ReferenceEquals(type, obj)) return false;
+                if (Object.ReferenceEquals(type.Key, obj)) return false;
             }
 
             // mscorlib gets saved as a single token
