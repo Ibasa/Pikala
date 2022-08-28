@@ -192,11 +192,108 @@ namespace Ibasa.Pikala.Tests
         }
 
         [Fact]
+        public void TestBasicAssembly()
+        {
+            var pickler = Utils.CreateIsolatedPickler();
+
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestBasicAssembly"), AssemblyBuilderAccess.RunAndCollect);
+
+            var rebuiltAssembly = RoundTrip.Do(pickler, assembly);
+            Assert.Equal("TestBasicAssembly", rebuiltAssembly.GetName().Name);
+        }
+
+        [Fact]
+        public void TestAssemblyAttributes()
+        {
+            var pickler = Utils.CreateIsolatedPickler();
+
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestAssemblyAttributes"), AssemblyBuilderAccess.RunAndCollect);
+
+            var attributeType = typeof(System.ObsoleteAttribute);
+
+            assembly.SetCustomAttribute(new CustomAttributeBuilder(
+                attributeType.GetConstructor(new Type[] { typeof(string) }),
+                new object[] { "Old assembly" },
+                new FieldInfo[0],
+                new object[0]));
+
+            var rebuiltAssemmly = RoundTrip.Do(pickler, assembly);
+            var rebuiltAttr = Assert.Single(rebuiltAssemmly.GetCustomAttributes(true));
+            Assert.Equal("Old assembly", (string)attributeType.GetProperty("Message").GetValue(rebuiltAttr));
+        }
+
+        [Fact]
+        public void TestCustomAssemblyAttributes()
+        {
+            var pickler = Utils.CreateIsolatedPickler();
+
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestCustomAssemblyAttributes"), AssemblyBuilderAccess.RunAndCollect);
+            var module = assembly.DefineDynamicModule("main");
+
+            var customAttributeTypeBuilder = module.DefineType("MyAttribute", TypeAttributes.Class, typeof(System.Attribute));
+            customAttributeTypeBuilder.DefineField("Tag", typeof(int), FieldAttributes.Public);
+            DefineDefaultCtor(customAttributeTypeBuilder);
+            var customAttributeType = customAttributeTypeBuilder.CreateType();
+
+            assembly.SetCustomAttribute(new CustomAttributeBuilder(
+                customAttributeType.GetConstructor(Type.EmptyTypes),
+                new object[0],
+                new FieldInfo[] { customAttributeType.GetField("Tag") },
+                new object[] { 1 }));
+
+            var rebuiltType = RoundTrip.Do(pickler, customAttributeType);
+            var rebuiltAssembly = rebuiltType.Assembly;
+            var rebuiltAttr = Assert.Single(rebuiltAssembly.GetCustomAttributes(true));
+            Assert.Equal(1, (int)rebuiltType.GetField("Tag").GetValue(rebuiltAttr));
+        }
+
+        [Fact]
+        public void TestBasicModule()
+        {
+            var pickler = Utils.CreateIsolatedPickler();
+
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestBasicModule"), AssemblyBuilderAccess.RunAndCollect);
+            var module = assembly.DefineDynamicModule("main");
+
+            var moduleField = module.DefineInitializedData("field", new byte[] { 1, 2 }, FieldAttributes.Public);
+            module.CreateGlobalFunctions();
+
+            var rebuiltModule = RoundTrip.Do(pickler, module);
+            var rebuiltField = rebuiltModule.GetField("field");
+            Assert.Equal(FieldAttributes.Public | FieldAttributes.Static | FieldAttributes.HasFieldRVA, rebuiltField.Attributes);
+        }
+
+        [Fact]
         public void TestModuleAttributes()
         {
             var pickler = Utils.CreateIsolatedPickler();
 
             var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestModuleAttributes"), AssemblyBuilderAccess.RunAndCollect);
+            var module = assembly.DefineDynamicModule("main");
+
+            var attributeType = typeof(System.ObsoleteAttribute);
+
+            var moduleField = module.DefineInitializedData("field", new byte[] { 1, 2 }, FieldAttributes.Public);
+            moduleField.SetCustomAttribute(new CustomAttributeBuilder(
+                attributeType.GetConstructor(new Type[] { typeof(string) }),
+                new object[] { "Old module" },
+                new FieldInfo[0],
+                new object[0]));
+            module.CreateGlobalFunctions();
+
+            var rebuiltModule = RoundTrip.Do(pickler, module);
+            var rebuiltField = rebuiltModule.GetField("field");
+            Assert.Equal(FieldAttributes.Public | FieldAttributes.Static | FieldAttributes.HasFieldRVA, rebuiltField.Attributes);
+            var rebuiltAttr = Assert.Single(rebuiltField.GetCustomAttributes(true));
+            Assert.Equal("Old module", (string)attributeType.GetProperty("Message").GetValue(rebuiltAttr));
+        }
+
+        [Fact]
+        public void TestCustomModuleAttributes()
+        {
+            var pickler = Utils.CreateIsolatedPickler();
+
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestCustomModuleAttributes"), AssemblyBuilderAccess.RunAndCollect);
             var module = assembly.DefineDynamicModule("main");
 
             var customAttributeTypeBuilder = module.DefineType("MyAttribute", TypeAttributes.Class, typeof(System.Attribute));

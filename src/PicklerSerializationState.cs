@@ -6,6 +6,8 @@ namespace Ibasa.Pikala
 {
     sealed class PicklerSerializationState
     {
+        public readonly SerializationStage<PicklerSerializationState> Stages = new SerializationStage<PicklerSerializationState>();
+
         Dictionary<object, long> memo;
         public BinaryWriter Writer { get; private set; }
 
@@ -14,6 +16,7 @@ namespace Ibasa.Pikala
             memo = new Dictionary<object, long>(ReferenceEqualityComparer.Instance);
             Writer = new PickleWriter(new PickleStream(stream));
         }
+
         public bool MaybeWriteMemo(object value, byte? op)
         {
             if (memo.TryGetValue(value, out var offset))
@@ -40,47 +43,6 @@ namespace Ibasa.Pikala
 #endif
         }
 
-        Stack<Action> trailers = new Stack<Action>();
-        List<Action> statics = new List<Action>();
-        int trailerDepth = 0;
-
         public readonly HashSet<Type> SeenTypes = new HashSet<Type>();
-
-        public void CheckTrailers()
-        {
-            if (trailers.Count != 0)
-            {
-                throw new Exception("Serialization trailers count should of been zero");
-            }
-
-            foreach (var staticFieldWriter in statics)
-            {
-                staticFieldWriter();
-            }
-        }
-
-        public void RunWithTrailers(Action action)
-        {
-            int depth = trailerDepth++;
-
-            action();
-
-            if (depth == 0)
-            {
-                while (trailers.Count > 0)
-                {
-                    var trailer = trailers.Pop();
-                    trailer();
-                }
-            }
-
-            --trailerDepth;
-        }
-
-        public void PushTrailer(Action trailer, Action staticFields)
-        {
-            trailers.Push(trailer);
-            statics.Add(staticFields);
-        }
     }
 }
