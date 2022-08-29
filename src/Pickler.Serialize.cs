@@ -2144,7 +2144,7 @@ namespace Ibasa.Pikala
                 // Work out what sort of operation this type needs
                 if (type.IsPointer || type == typeof(Pointer))
                 {
-                    info.Error = $"Pointer types are not serializable: '{type}'";
+                    throw new Exception($"Pointer types are not serializable: '{type}'");
                 }
 
                 else if (type.IsArray)
@@ -2200,7 +2200,7 @@ namespace Ibasa.Pikala
 
                 else if (type.IsAssignableTo(typeof(MarshalByRefObject)))
                 {
-                    info.Error = $"Type '{type}' is not automaticly serializable as it inherits from MarshalByRefObject.";
+                    throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from MarshalByRefObject.");
                 }
 
                 else
@@ -2385,11 +2385,6 @@ namespace Ibasa.Pikala
             }
 
             System.Diagnostics.Debug.Assert(obj != null, "Object was unexpectedly null");
-
-            if (typeInfo.Error != null)
-            {
-                throw new Exception(typeInfo.Error);
-            }
 
             if (runtimeType.IsEnum)
             {

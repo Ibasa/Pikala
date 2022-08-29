@@ -2310,14 +2310,14 @@ namespace Ibasa.Pikala
             {
                 if (!type.IsEnum)
                 {
-                    info.Error = $"Can not deserialise {type} expected it to be an enumeration type";
+                    throw new Exception($"Can not deserialise {type} expected it to be an enumeration type");
                 }
             }
             else if (info.Mode == PickledTypeMode.IsDelegate)
             {
                 if (!type.IsAssignableTo(typeof(MulticastDelegate)))
                 {
-                    info.Error = $"Can not deserialise {type} expected it to be a delegate type";
+                    throw new Exception($"Can not deserialise {type} expected it to be a delegate type");
                 }
             }
 
@@ -2328,7 +2328,7 @@ namespace Ibasa.Pikala
                 var writtenLength = state.Reader.Read7BitEncodedInt();
                 if (currentFields.Length != writtenLength)
                 {
-                    info.Error = $"Can not deserialize type '{type}', serialised {writtenLength} fields but type expects {currentFields.Length}";
+                    throw new Exception($"Can not deserialize type '{type}', serialised {writtenLength} fields but type expects {currentFields.Length}");
                 }
 
                 // We still need to read the fields we have written otherwise nothing else can deserialise. And hell we might not even try and read one of these types, it might just 
@@ -2352,7 +2352,7 @@ namespace Ibasa.Pikala
 
                     if (toSet == null)
                     {
-                        info.Error = $"Can not deserialize type '{type}', could not find expected field '{fieldName}'";
+                        throw new Exception($"Can not deserialize type '{type}', could not find expected field '{fieldName}'");
                     }
 
                     info.SerialisedFields[i] = (fieldInfo, toSet);
@@ -2364,20 +2364,20 @@ namespace Ibasa.Pikala
 
                 if (!type.IsEnum)
                 {
-                    info.Error = $"Can not deserialise {type} expected it to be an enumeration type";
+                    throw new Exception($"Can not deserialise {type} expected it to be an enumeration type");
                 }
 
                 var typeCode = Type.GetTypeCode(type);
-                if (info.TypeCode != typeCode && info.Error == null)
+                if (info.TypeCode != typeCode)
                 {
-                    info.Error = $"Can not deserialise {type} expected it to be an enumeration of {info.TypeCode} but was {typeCode}";
+                    throw new Exception($"Can not deserialise {type} expected it to be an enumeration of {info.TypeCode} but was {typeCode}");
                 }
             }
             else if (info.Mode == PickledTypeMode.IsDelegate)
             {
                 if (!type.IsAssignableTo(typeof(MulticastDelegate)))
                 {
-                    info.Error = $"Can not deserialise {type} expected it to be a delegate type";
+                    throw new Exception($"Can not deserialise {type} expected it to be a delegate type");
                 }
             }
 
@@ -2458,11 +2458,6 @@ namespace Ibasa.Pikala
                     var earlyResult = MaybeReadMemo(state);
                     if (earlyResult != null) return earlyResult;
                 }
-            }
-
-            if (runtimeInfo.Error != null)
-            {
-                throw new Exception(runtimeInfo.Error);
             }
 
             if (runtimeType.IsEnum)

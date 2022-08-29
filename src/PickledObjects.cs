@@ -55,8 +55,6 @@ namespace Ibasa.Pikala
         public PickledTypeFlags Flags;
         // Null if this wasn't serailised using object format, or if the fields have changed.
         public (SerialisedObjectTypeInfo, FieldInfo)[]? SerialisedFields;
-        // Non null if there was an error building Fields (we should use a DU really) or this type couldn't be serialised
-        public string? Error;
         // Only non-null if an enum
         public TypeCode? TypeCode;
         // Either an array OR Nullable<T>
