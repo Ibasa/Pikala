@@ -129,6 +129,12 @@ namespace Ibasa.Pikala
             }
 
             memo.Add(memo.Count + 1, value);
+#if DEBUG
+            // In debug mode we do a sanity check that we haven't possibly screwed up memoisation by checking that every value stored in
+            // memo is unique
+            var set = new HashSet<object>(memo.Values, ReferenceEqualityComparer.Instance);
+            System.Diagnostics.Debug.Assert(set.Count == memo.Count, "Two identical objects tried to memoise to different position");
+#endif
             return value;
         }
 

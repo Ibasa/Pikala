@@ -286,7 +286,6 @@ namespace Ibasa.Pikala
             state.Writer.Write7BitEncodedInt(signature.GenericParameterCount);
             SerializeSignatureLocation(state, signature.ReturnType, true);
 
-
             bool withModifiers = false;
             foreach (var parameter in signature.Parameters)
             {

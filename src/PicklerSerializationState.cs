@@ -19,13 +19,13 @@ namespace Ibasa.Pikala
 
         public bool MaybeWriteMemo(object value, byte? op)
         {
-            if (memo.TryGetValue(value, out var offset))
+            if (memo.TryGetValue(value, out var id))
             {
                 if (op != null)
                 {
                     Writer.Write(op.Value);
                 }
-                Writer.Write15BitEncodedLong(offset);
+                Writer.Write15BitEncodedLong(id);
                 return true;
             }
             return false;

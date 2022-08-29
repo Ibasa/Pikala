@@ -572,6 +572,8 @@ namespace Ibasa.Pikala
         {
             var typeContext = new GenericTypeContext(constructingType.GenericParameters);
 
+            state.SetMemo(true, constructingType);
+
             state.Stages.PushStage2(state =>
             {
                 var isValueType = constructingType.TypeDef == TypeDef.Struct;
@@ -870,6 +872,8 @@ namespace Ibasa.Pikala
                     enumerationField.SetConstant(value);
                 }
 
+                state.SetMemo(true, constructingType);
+
                 state.Stages.PushStage2(state =>
                 {
                     ReadCustomAttributesTypes(state);
@@ -930,6 +934,8 @@ namespace Ibasa.Pikala
                     constructingMethod.Parameters[i] = invokeMethod.DefineParameter(i + 1, ParameterAttributes.None, parameterNames[i]);
                 }
                 constructingType.Methods = new PickledMethodInfoDef[] { constructingMethod };
+
+                state.SetMemo(true, constructingType);
 
                 state.Stages.PushStage2(state =>
                 {
@@ -1753,42 +1759,27 @@ namespace Ibasa.Pikala
             if (isNested)
             {
                 var declaringType = (PickledTypeInfoDef)DeserializeType(state, typeContext);
-                var result = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, declaringType, declaringType.TypeBuilder.DefineNestedType);
-
-                if (genericParameters != null)
-                {
-                    var genericParameterBuilders = result.TypeBuilder.DefineGenericParameters(genericParameters);
-                    result.GenericParameters = new PickledGenericParameterDef[genericParameters.Length];
-                    for (int i = 0; i < genericParameters.Length; ++i)
-                    {
-                        genericParameterBuilders[i].SetGenericParameterAttributes(genericParameterAttributes[i]);
-                        result.GenericParameters[i] = new PickledGenericParameterDef(result, genericParameterBuilders[i]);
-                    }
-                }
-
-                state.AddTypeDef(result);
-                constructingType = state.SetMemo(true, result);
+                constructingType = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, declaringType, declaringType.TypeBuilder.DefineNestedType);
             }
             else
             {
                 var module = DeserializeModule(state, typeContext);
                 var moduleDef = (PickledModuleDef)module;
                 constructingType = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, null, moduleDef.ModuleBuilder.DefineType);
-
-                if (genericParameters != null)
-                {
-                    var genericParameterBuilders = constructingType.TypeBuilder.DefineGenericParameters(genericParameters);
-                    constructingType.GenericParameters = new PickledGenericParameterDef[genericParameters.Length];
-                    for (int i = 0; i < genericParameters.Length; ++i)
-                    {
-                        genericParameterBuilders[i].SetGenericParameterAttributes(genericParameterAttributes[i]);
-                        constructingType.GenericParameters[i] = new PickledGenericParameterDef(constructingType, genericParameterBuilders[i]);
-                    }
-                }
-
-                state.AddTypeDef(constructingType);
-                state.SetMemo(true, constructingType);
             }
+
+            if (genericParameters != null)
+            {
+                var genericParameterBuilders = constructingType.TypeBuilder.DefineGenericParameters(genericParameters);
+                constructingType.GenericParameters = new PickledGenericParameterDef[genericParameters.Length];
+                for (int i = 0; i < genericParameters.Length; ++i)
+                {
+                    genericParameterBuilders[i].SetGenericParameterAttributes(genericParameterAttributes[i]);
+                    constructingType.GenericParameters[i] = new PickledGenericParameterDef(constructingType, genericParameterBuilders[i]);
+                }
+            }
+
+            state.AddTypeDef(constructingType);
             DeserializeTypeDef(state, constructingType);
             return constructingType;
         }
@@ -2226,7 +2217,7 @@ namespace Ibasa.Pikala
             var tupleObject = closedCreateMethod.Invoke(null, items);
             System.Diagnostics.Debug.Assert(tupleObject != null, "Tuple.Create returned null");
 
-            return tupleObject;
+            return state.SetMemo(shouldMemo, tupleObject);
         }
 
         private object DeserializeReducer(PicklerDeserializationState state)
@@ -2527,7 +2518,7 @@ namespace Ibasa.Pikala
 
             else if (IsTupleType(runtimeType))
             {
-                return state.SetMemo(shouldMemo, DeserializeTuple(state, shouldMemo, runtimeType));
+                return DeserializeTuple(state, shouldMemo, runtimeType);
             }
 
             else if (runtimeType == typeof(bool))
