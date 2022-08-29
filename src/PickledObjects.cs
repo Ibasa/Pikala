@@ -1244,6 +1244,9 @@ namespace Ibasa.Pikala
         public override Module Module => _moduleBuilder;
         public ModuleBuilder ModuleBuilder => _moduleBuilder;
 
+        public PickledFieldInfoDef[] Fields;
+        public PickledMethodInfoDef[] Methods;
+
         public PickledModuleDef(ModuleBuilder moduleBuilder)
         {
             _moduleBuilder = moduleBuilder;
