@@ -7,14 +7,14 @@ namespace Ibasa.Pikala
 {
     public sealed class MemoException : Exception
     {
-        public MemoException(long position)
+        public MemoException(long id)
         {
-            Position = position;
+            ID = id;
         }
 
-        public long Position { get; }
+        public long ID { get; }
 
-        public override string Message => $"Tried to reference object from position {Position} in the stream, but that object is not yet created.";
+        public override string Message => $"Tried to reference object for ID {ID}, but that object is not yet created.";
     }
 
     sealed class PicklerDeserializationState : IDisposable
@@ -108,34 +108,40 @@ namespace Ibasa.Pikala
             AppDomain.CurrentDomain.TypeResolve -= CurrentDomain_TypeResolve;
         }
 
-        public object DoMemo(long memoPosition)
+        public object GetMemo(long id)
         {
-            if (memo.TryGetValue(memoPosition, out var value))
+            if (memo.TryGetValue(id, out var value))
             {
                 return value;
             }
             else
             {
-                throw new MemoException(memoPosition);
+                throw new MemoException(id);
             }
         }
 
         [return: NotNull]
-        public T SetMemo<T>(long position, bool shouldMemo, [DisallowNull] T value)
+        public T SetMemo<T>(bool shouldMemo, [DisallowNull] T value)
         {
             if (!shouldMemo)
             {
                 return value;
             }
 
-            memo.Add(position, value);
+            memo.Add(memo.Count + 1, value);
+#if DEBUG
+            // In debug mode we do a sanity check that we haven't possibly screwed up memoisation by checking that every value stored in
+            // memo is unique
+            var set = new HashSet<object>(memo.Values, ReferenceEqualityComparer.Instance);
+            System.Diagnostics.Debug.Assert(set.Count == memo.Count, "Two identical objects tried to memoise to different position");
+#endif
             return value;
         }
 
-        public object DoMemo()
+        public object GetMemo()
         {
-            var position = Reader.Read15BitEncodedLong();
-            return DoMemo(position);
+            var id = Reader.Read15BitEncodedLong();
+            return GetMemo(id);
         }
     }
 }
