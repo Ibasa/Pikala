@@ -182,5 +182,14 @@ namespace Ibasa.Pikala.Tests
                 Arb.From<string>(),
                 value => RoundTrip.Assert(pickler, value));
         }
+
+        [Fact]
+        public void TestObject()
+        {
+            var pickler = new Pickler();
+            var obj = new object();
+            var result = RoundTrip.Do<object>(pickler, obj);
+            Assert.NotNull(result);
+        }
     }
 }

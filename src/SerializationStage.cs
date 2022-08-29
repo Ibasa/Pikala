@@ -38,7 +38,7 @@ namespace Ibasa.Pikala
                 action(state);
             }
 
-            System.Diagnostics.Debug.Assert(_stage2.Count == 0);
+            System.Diagnostics.Debug.Assert(_stage2.Count == 0, "Stage 2 was not cleared");
 
             if (to == 2) return;
 
@@ -46,10 +46,10 @@ namespace Ibasa.Pikala
             {
                 action(state);
                 // Ensure that no stage 2 items have been added.
-                System.Diagnostics.Debug.Assert(_stage2.Count == 0);
+                System.Diagnostics.Debug.Assert(_stage2.Count == 0, "Stage 2 was added to while processing stage 3");
             }
 
-            System.Diagnostics.Debug.Assert(_stage3.Count == 0);
+            System.Diagnostics.Debug.Assert(_stage3.Count == 0, "Stage 3 was not cleared");
 
             if (to == 3) return;
 
@@ -57,18 +57,18 @@ namespace Ibasa.Pikala
             {
                 action(state);
                 // Ensure that no stage 2 or 3 itesm have been added.
-                System.Diagnostics.Debug.Assert(_stage2.Count == 0);
-                System.Diagnostics.Debug.Assert(_stage3.Count == 0);
+                System.Diagnostics.Debug.Assert(_stage2.Count == 0, "Stage 2 was added to while processing stage 4");
+                System.Diagnostics.Debug.Assert(_stage3.Count == 0, "Stage 3 was added to while processing stage 4");
             }
 
-            System.Diagnostics.Debug.Assert(_stage4.Count == 0);
+            System.Diagnostics.Debug.Assert(_stage4.Count == 0, "Stage 4 was not cleared");
         }
 
         public void AssertEmpty()
         {
-            System.Diagnostics.Debug.Assert(_stage2.Count == 0);
-            System.Diagnostics.Debug.Assert(_stage3.Count == 0);
-            System.Diagnostics.Debug.Assert(_stage4.Count == 0);
+            System.Diagnostics.Debug.Assert(_stage2.Count == 0, "Stage 2 was not empty");
+            System.Diagnostics.Debug.Assert(_stage3.Count == 0, "Stage 3 was not empty");
+            System.Diagnostics.Debug.Assert(_stage4.Count == 0, "Stage 4 was not empty");
         }
     }
 }

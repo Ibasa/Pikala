@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Xml.Linq;
 
 namespace Ibasa.Pikala
 {
@@ -43,9 +44,33 @@ namespace Ibasa.Pikala
         }
     }
 
+    public sealed class MissingFieldException : System.Exception
+    {
+        public MissingFieldException(Module declaringModule, string field) 
+            : base($"Could not load field '{field}' from module '{declaringModule}'")
+        {
+            Module = declaringModule;
+            Field = field;
+        }
+
+        public MissingFieldException(Type declaringType, string field) 
+            : base($"Could not load field '{field}' from type '{declaringType}'")
+        {
+            Module = declaringType.Module;
+            DeclaringType = declaringType;
+            Field = field;
+        }
+
+        public Module Module { get; }
+        public Type? DeclaringType { get; }
+        public string Field { get; }
+    }
+
+
     sealed class SerialisedObjectTypeInfo
     {
         public readonly Type Type;
+
         public SerialisedObjectTypeInfo(Type type)
         {
             Type = type;
@@ -57,12 +82,45 @@ namespace Ibasa.Pikala
         public (SerialisedObjectTypeInfo, FieldInfo)[]? SerialisedFields;
         // Only non-null if an enum
         public TypeCode? TypeCode;
-        // Either an array OR Nullable<T>
+        // Either an array OR Nullable<T>.
         public SerialisedObjectTypeInfo? Element;
+        // True if this is an Nullable<T>.
+        public bool IsNullable;
+        // True if this is an array type.
+        public bool IsArray;
         // Only non-null if reduced
         public IReducer? Reducer;
         // Only non-null if tuple
         public SerialisedObjectTypeInfo[]? TupleArguments;
+        // Non null if there was an error building Fields (we should use a DU really) or this type couldn't be serialised
+        public string? Error;
+
+        // True if this was a ValueType at serialization time
+        public bool IsValueType
+        {
+            get
+            {
+                return Flags.HasFlag(PickledTypeFlags.IsValueType);
+            }
+        }
+
+        // True if this type was sealed at serialization time
+        public bool IsSealed
+        {
+            get
+            {
+                return Flags.HasFlag(PickledTypeFlags.IsSealed);
+            }
+        }
+
+        // True if this type was abstract (or an interface) at serialization time
+        public bool IsAbstract
+        {
+            get
+            {
+                return Flags.HasFlag(PickledTypeFlags.IsAbstract);
+            }
+        }
     }
 
     abstract class PickledTypeInfo : PickledMemberInfo
@@ -199,7 +257,7 @@ namespace Ibasa.Pikala
             var result = Type.GetField(name, BindingsAll);
             if (result == null)
             {
-                throw new Exception($"Could not load field '{name}' from type '{Type.Name}'");
+                throw new MissingFieldException(Type, name);
             }
             return new PickledFieldInfoRef(result);
         }
@@ -301,7 +359,7 @@ namespace Ibasa.Pikala
             var result = Type.GetField(name, BindingsAll);
             if (result == null)
             {
-                throw new Exception($"Could not load field '{name}' from type '{Type.Name}'");
+                throw new MissingFieldException(Type, name);
             }
             return new PickledFieldInfoRef(result);
         }
@@ -392,7 +450,7 @@ namespace Ibasa.Pikala
             var result = Type.GetField(name, BindingsAll);
             if (result == null)
             {
-                throw new Exception($"Could not load field '{name}' from type '{Type.Name}'");
+                throw new MissingFieldException(Type, name);
             }
             return new PickledFieldInfoRef(result);
         }
@@ -483,7 +541,7 @@ namespace Ibasa.Pikala
             var result = Type.GetField(name, BindingsAll);
             if (result == null)
             {
-                throw new Exception($"Could not load field '{name}' from type '{Type.Name}'");
+                throw new MissingFieldException(Type, name);
             }
             return new PickledFieldInfoRef(result);
         }
@@ -779,7 +837,7 @@ namespace Ibasa.Pikala
                 }
             }
 
-            throw new Exception($"Could not load field '{name}' from type '{TypeBuilder.Name}'");
+            throw new MissingFieldException(TypeBuilder, name);
         }
         public override PickledEventInfo GetEvent(string name)
         {
@@ -948,7 +1006,7 @@ namespace Ibasa.Pikala
                     var result = type.GetField(Name, BindingsAll);
                     if (result == null)
                     {
-                        throw new Exception($"Could not load field '{Name}' from type '{type.Name}'");
+                        throw new MissingFieldException(type, Name);
                     }
                     return result;
                 }
@@ -1223,6 +1281,10 @@ namespace Ibasa.Pikala
         }
 
         public abstract Module Module { get; }
+
+        public abstract PickledMethodInfo GetMethod(Signature signature);
+
+        public abstract PickledFieldInfo GetField(string name);
     }
 
     sealed class PickledModuleRef : PickledModule
@@ -1233,6 +1295,30 @@ namespace Ibasa.Pikala
         public PickledModuleRef(Module module)
         {
             _module = module;
+        }
+
+        public override PickledMethodInfo GetMethod(Signature signature)
+        {
+            var methods = Module.GetMethods(BindingsAll);
+            foreach (var method in methods)
+            {
+                if (Signature.GetSignature(method).Equals(signature))
+                {
+                    return new PickledMethodInfoRef(method);
+                }
+            }
+
+            throw new Exception($"Could not load method '{signature}' from type '{Module.Name}'");
+        }
+
+        public override PickledFieldInfo GetField(string name)
+        {
+            var result = Module.GetField(name, BindingsAll);
+            if (result == null)
+            {
+                throw new MissingFieldException(Module, name);
+            }
+            return new PickledFieldInfoRef(result);
         }
     }
 
@@ -1248,6 +1334,38 @@ namespace Ibasa.Pikala
         public PickledModuleDef(ModuleBuilder moduleBuilder)
         {
             _moduleBuilder = moduleBuilder;
+        }
+
+        public override PickledMethodInfo GetMethod(Signature signature)
+        {
+            if (Methods != null)
+            {
+                foreach (var method in Methods)
+                {
+                    if (method.GetSignature().Equals(signature))
+                    {
+                        return method;
+                    }
+                }
+            }
+
+            throw new Exception($"Could not load method '{signature}' from type '{ModuleBuilder.Name}'");
+        }
+
+        public override PickledFieldInfo GetField(string name)
+        {
+            if (Fields != null)
+            {
+                foreach (var field in Fields)
+                {
+                    if (field.FieldBuilder.Name == name)
+                    {
+                        return field;
+                    }
+                }
+            }
+
+            throw new MissingFieldException(ModuleBuilder, name);
         }
     }
 
@@ -1532,7 +1650,14 @@ namespace Ibasa.Pikala
             FieldBuilder = fieldBuilder;
         }
 
-        public PickledTypeInfoDef DeclaringType { get; }
+        public PickledFieldInfoDef(PickledModuleDef declaringModule, FieldBuilder fieldBuilder)
+        {
+            DeclaringModule = declaringModule;
+            FieldBuilder = fieldBuilder;
+        }
+
+        public PickledTypeInfoDef? DeclaringType { get; }
+        public PickledModuleDef? DeclaringModule { get; }
 
         public FieldBuilder FieldBuilder { get; }
 
@@ -1548,18 +1673,31 @@ namespace Ibasa.Pikala
         {
             get
             {
-                var (resolvedType, isComplete) = DeclaringType.Resolve();
-                if (isComplete != true)
+                if (DeclaringType != null)
                 {
-                    return FieldBuilder;
-                }
+                    var (resolvedType, isComplete) = DeclaringType.Resolve();
+                    if (isComplete != true)
+                    {
+                        return FieldBuilder;
+                    }
 
-                var result = resolvedType.GetField(FieldBuilder.Name, BindingsAll);
-                if (result == null)
-                {
-                    throw new Exception($"GetField for {DeclaringType.Type.Name} unexpectedly returned null");
+                    var result = resolvedType.GetField(FieldBuilder.Name, BindingsAll);
+                    if (result == null)
+                    {
+                        throw new Exception($"GetField for {DeclaringType.Type.Name} unexpectedly returned null");
+                    }
+                    return result;
                 }
-                return result;
+                if (DeclaringModule != null)
+                {
+                    var result = DeclaringModule.Module.GetField(FieldBuilder.Name, BindingsAll);
+                    if (result == null)
+                    {
+                        throw new Exception($"GetField for {DeclaringModule.Module.Name} unexpectedly returned null");
+                    }
+                    return result;
+                }
+                throw new Exception("Field was not assigned to a type or module");
             }
         }
     }

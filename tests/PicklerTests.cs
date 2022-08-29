@@ -4,6 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection.Emit;
+using System.Threading;
 using Xunit;
 
 namespace Ibasa.Pikala.Tests
@@ -28,77 +30,6 @@ namespace Ibasa.Pikala.Tests
             RoundTrip.Assert(pickler, value);
         }
 
-        [Fact]
-        public void TestNull()
-        {
-            var pickler = new Pickler();
-            var result = RoundTrip.Do<object>(pickler, null);
-            Assert.Null(result);
-        }
-
-        [Property]
-        public Property TestIntArray()
-        {
-            var pickler = new Pickler();
-            return Prop.ForAll(
-                Arb.From<int[]>(),
-                value => RoundTrip.Assert(pickler, value));
-        }
-
-        [Property]
-        public Property TestByteArray()
-        {
-            var pickler = new Pickler();
-            return Prop.ForAll(
-                Arb.From<byte[]>(),
-                value => RoundTrip.Assert(pickler, value));
-        }
-
-        [Property]
-        public Property TestCharArray()
-        {
-            var pickler = new Pickler();
-            return Prop.ForAll(
-                Arb.From<char[]>(),
-                value => RoundTrip.Assert(pickler, value));
-        }
-
-        [Property]
-        public Property TestNullableArray()
-        {
-            var pickler = new Pickler();
-            return Prop.ForAll(
-                Arb.From<double?[]>(),
-                value => RoundTrip.Assert(pickler, value));
-        }
-
-        [Property]
-        public Property TestSystemEnumArray()
-        {
-            var pickler = new Pickler();
-            return Prop.ForAll(
-            Arb.From<System.ConsoleColor[]>(),
-                value => RoundTrip.Assert(pickler, value));
-        }
-
-        [Property]
-        public Property TestCustomEnumArray()
-        {
-            var pickler = new Pickler();
-            return Prop.ForAll(
-            Arb.From<TestTypes.EnumurationType[]>(),
-                value => RoundTrip.Assert(pickler, value));
-        }
-
-        [Property]
-        public Property TestKeyValuePair()
-        {
-            var pickler = new Pickler();
-            return Prop.ForAll(
-                Arb.From<System.Collections.Generic.KeyValuePair<int, string>>(),
-                value => RoundTrip.Assert(pickler, value));
-        }
-
         [Property]
         public Property TestIntStringDictionary()
         {
@@ -108,23 +39,23 @@ namespace Ibasa.Pikala.Tests
                 value => RoundTrip.Assert(pickler, value));
         }
 
-        [Property]
-        public Property TestNullableInt()
+        [Fact]
+        public void TestInterface()
         {
             var pickler = new Pickler();
-            return Prop.ForAll(
-                Arb.From<int?>(),
-                value => RoundTrip.Assert(pickler, value));
+            var value = Tuple.Create<IEnumerable<int>>(new int[] { 1, 2, 3 });
+            RoundTrip.Assert(pickler, value);
         }
 
-        [Property]
-        public Property TestNullableEnum()
+        [Fact]
+        public void TestNullInvalidType()
         {
             var pickler = new Pickler();
-            return Prop.ForAll(
-                Arb.From<TypeCode?>(),
-                value => RoundTrip.Assert(pickler, value));
+            // These types can't be serialized but that's fine if their null.
+            var value = Tuple.Create<Mutex, DynamicMethod>(null, null);
+            RoundTrip.Assert(pickler, value);
         }
+
 
         [Serializable]
         unsafe struct PointerStruct
@@ -147,32 +78,9 @@ namespace Ibasa.Pikala.Tests
                 });
                 Assert.Equal("Pointer types are not serializable: 'System.Int32*'", exc.Message);
             }
-        }
 
-        [Fact]
-        public void TestEmptyValueTuple()
-        {
-            var pickler = new Pickler();
-            var obj = ValueTuple.Create();
-            RoundTrip.Assert(pickler, obj);
-        }
-
-        [Theory]
-        [InlineData(2, "test", true)]
-        public void TestValueTuple(int i, string s, bool b)
-        {
-            var pickler = new Pickler();
-            var obj = ValueTuple.Create(i, s, b);
-            RoundTrip.Assert(pickler, obj);
-        }
-
-        [Theory]
-        [InlineData(2, "test", true)]
-        public void TestTuple(int i, string s, bool b)
-        {
-            var pickler = new Pickler();
-            var obj = Tuple.Create(i, s, b);
-            RoundTrip.Assert(pickler, obj);
+            // Pointers can't be serialized, but it's fine if they're null.
+            RoundTrip.Assert(pickler, new PointerStruct());
         }
 
         [Fact]
@@ -185,15 +93,8 @@ namespace Ibasa.Pikala.Tests
             {
                 pickler.Serialize(memoryStream, obj);
             });
-            Assert.Equal("Type 'System.Threading.Mutex' is not automaticly serializable as it inherits from MarshalByRefObject.", exc.Message);
-        }
 
-        [Fact]
-        public void TestTimeZoneInfo()
-        {
-            var pickler = new Pickler();
-            RoundTrip.Assert(pickler, TimeZoneInfo.Local);
-            RoundTrip.Assert(pickler, TimeZoneInfo.Utc);
+            Assert.Equal("Type 'System.Threading.Mutex' is not automaticly serializable as it inherits from MarshalByRefObject.", exc.Message);
         }
 
         public static object[][] ExampleTypeSet = new Type[][]
@@ -355,20 +256,6 @@ namespace Ibasa.Pikala.Tests
             RoundTrip.Assert(pickler, doit2.MakeGenericMethod(typeof(float), typeof(string)));
         }
 
-        private static int StaticFunction() { return 4; }
-
-        [Fact]
-        public void TestDelegate()
-        {
-            var pickler = new Pickler();
-            var memoryStream = new MemoryStream();
-            var function = new Func<int>(StaticFunction);
-
-            var result = RoundTrip.Do(pickler, function);
-
-            Assert.Equal(function(), result());
-        }
-
         [Fact]
         public void TestReferencesAreDeduplicated()
         {
@@ -380,19 +267,6 @@ namespace Ibasa.Pikala.Tests
             var z = RoundTrip.Do(pickler, y);
 
             Assert.Same(z.Item1, z.Item2);
-        }
-
-        [Fact]
-        public void TestSelfReferentialArray()
-        {
-            var pickler = new Pickler();
-
-            var array = new object[1];
-            array[0] = array;
-
-            var result = RoundTrip.Do(pickler, array);
-
-            Assert.Same(result, result[0]);
         }
 
         [Fact]
@@ -413,90 +287,6 @@ namespace Ibasa.Pikala.Tests
             Assert.Same(tuple.Item1, tuple.Item2);
             tuple = RoundTrip.Do(pickler, tuple);
             Assert.Same(tuple.Item1, tuple.Item2);
-        }
-
-        [Fact]
-        public void TestNotExplcitlySerialisableObject()
-        {
-            var pickler = new Pickler();
-
-            var value = new TestTypes.PlainObject();
-            value.X = 2;
-            value.Y = "hello world";
-            value.Z = (1, 4);
-
-            RoundTrip.Assert(pickler, value);
-        }
-
-        [Fact]
-        public void TestSelfReferentialObject()
-        {
-            var pickler = new Pickler();
-
-            var value = new TestTypes.SelfReferenceObject();
-            value.Foo = 124;
-            value.Myself = value;
-
-            var result = RoundTrip.Do(pickler, value);
-
-            Assert.Same(value, value.Myself);
-        }
-
-        [Fact]
-        public void TestCircularClasses()
-        {
-            var pickler = new Pickler();
-            var aValue = new TestTypes.CircularClassA() { Foo = 4.5 };
-            var bValue = new TestTypes.CircularClassB() { Bar = 123m };
-
-            aValue.B = bValue;
-            bValue.A = aValue;
-
-            var aResult = RoundTrip.Do<object>(pickler, aValue);
-            Assert.Equal(aValue.ToString(), aResult.ToString());
-
-            var bResult = RoundTrip.Do<object>(pickler, bValue);
-            Assert.Equal(bValue.ToString(), bResult.ToString());
-        }
-
-        [Fact]
-        public void ArrayOfValueTypeSmallerThanBoxedType()
-        {
-            var pickler = new Pickler();
-
-            var stream = new MemoryStream();
-            pickler.Serialize(stream, new int[] { 1, 2, 3 });
-            var valueArray = stream.ToArray();
-
-            stream = new MemoryStream();
-            pickler.Serialize(stream, new object[] { 1, 2, 3 });
-            var boxedArray = stream.ToArray();
-
-            Assert.True(valueArray.Length < boxedArray.Length);
-        }
-
-        [Fact]
-        public void TestLazyValue()
-        {
-            var pickler = new Pickler();
-
-            var lazyValue = new Lazy<int>(4);
-            var lazyResult = RoundTrip.Do(pickler, lazyValue);
-
-            Assert.Equal(lazyValue.IsValueCreated, lazyResult.IsValueCreated);
-            Assert.Equal(lazyValue.Value, lazyResult.Value);
-        }
-
-        [Fact]
-        public void TestLazyFunc()
-        {
-            var pickler = new Pickler();
-
-            var lazyValue = new Lazy<int>(() => 6);
-            var lazyResult = RoundTrip.Do(pickler, lazyValue);
-
-            Assert.Equal(lazyValue.IsValueCreated, lazyResult.IsValueCreated);
-            Assert.Equal(lazyValue.Value, lazyResult.Value);
         }
 
         [Fact]
@@ -539,46 +329,6 @@ namespace Ibasa.Pikala.Tests
             Assert.True(expected == actual, $"README.md needs updating with string \"{actual}\"");
         }
 
-        [Property]
-        public Property TestJaggedIntArray()
-        {
-            var pickler = new Pickler();
-
-            return Prop.ForAll(
-                Arb.From<int[][]>(),
-                value => RoundTrip.Assert(pickler, value));
-        }
-
-        [Property]
-        public Property TestNestedIntArray()
-        {
-            var pickler = new Pickler();
-
-            return Prop.ForAll(
-                Arb.From<int[][][]>(),
-                value => RoundTrip.Assert(pickler, value));
-        }
-
-        [Property]
-        public Property TestMultirankIntArray()
-        {
-            var pickler = new Pickler();
-
-            return Prop.ForAll(
-                Arb.From<int[,]>(),
-                value => RoundTrip.Assert(pickler, value));
-        }
-
-        [Property]
-        public Property TestVariablesizeIntArray()
-        {
-            var pickler = new Pickler();
-
-            return Prop.ForAll(
-                Utils.ArbitraryArray(Arb.Default.Int32().Generator),
-                value => RoundTrip.Assert(pickler, value));
-        }
-
         [Fact]
         public void TestMemoizationWorksOnReferencesNotEquality()
         {
@@ -595,24 +345,6 @@ namespace Ibasa.Pikala.Tests
         }
 
         [Fact]
-        public void TestArrayVariance()
-        {
-            var pickler = new Pickler();
-
-            var stringArray = new string[2] { "A", "B" };
-            var objArray = (object[])stringArray;
-            // Wrap in a tuple so the array type is staticly known
-            var tuple = Tuple.Create(objArray);
-            var result = RoundTrip.Do(pickler, tuple);
-
-            var array = tuple.Item1;
-            // Should be able to write this
-            array[0] = "C";
-            // This should fail
-            Assert.Throws<ArrayTypeMismatchException>(() => array[1] = 4);
-        }
-
-        [Fact]
         public void TestStaticReflectionValues()
         {
             // This test checks that if we have static types for reflection objects we can still handle null or values correctly
@@ -625,83 +357,30 @@ namespace Ibasa.Pikala.Tests
         }
 
         [Fact]
-        public void TestDelegatesAreMemoised()
-        {
-            var pickler = new Pickler();
-            var memoryStream = new MemoryStream();
-            var function = new Func<int>(StaticFunction);
-            var anotherFunction = new Func<int>(() => 1);
-
-            Assert.NotSame(function, anotherFunction);
-            var combinedFunction = Delegate.Combine(function, anotherFunction, anotherFunction);
-
-            // The invocation list should have the same delegate for item 1 and 2
-            var invocationList = combinedFunction.GetInvocationList();
-            Assert.NotSame(invocationList[0], invocationList[1]);
-            Assert.Same(invocationList[1], invocationList[2]);
-
-            var result = RoundTrip.Do(pickler, combinedFunction);
-
-            // Check the invocationList has the same reference constraints
-            var resultInvocationList = result.GetInvocationList();
-            Assert.NotSame(resultInvocationList[0], resultInvocationList[1]);
-            Assert.Same(resultInvocationList[1], resultInvocationList[2]);
-        }
-
-        [Fact]
-        public void TestRecursiveDelegates()
-        {
-            var recursive = new TestTypes.RecursiveDelegate();
-            recursive.SelfDelegate = recursive.SomeMethod;
-
-            var pickler = new Pickler();
-            // The target of the delegate itself needs the delegate to construct
-            var result = RoundTrip.Do(pickler, recursive.SelfDelegate);
-
-            Assert.Equal(recursive.SelfDelegate(1), result(1));
-        }
-
-        [Fact]
-        public void TestRecursiveTuple()
-        {
-            var array = new Tuple<object, int>[2];
-            array[0] = Tuple.Create<object, int>(null, 2);
-
-            var recursive = Tuple.Create<object, int>(array, 4);
-            array[1] = recursive;
-
-            Assert.Same(recursive, ((Tuple<object, int>[])recursive.Item1)[1]);
-
-            var pickler = new Pickler();
-            // The first item of this tuple is the array, of which the second item is the tuple
-            var result = RoundTrip.Do(pickler, recursive);
-
-            // Check the int value is the same
-            Assert.Equal(recursive.Item2, result.Item2);
-            // Pull out the result array
-            var resultArray = (Tuple<object, int>[])result.Item1;
-            // Check the tuple objects are the same
-            Assert.Same(result, resultArray[1]);
-        }
-
-        [Fact]
         public void TestStaticArrayReflectionValues()
         {
             // This test checks that if we have static types for an array of reflection objects we can still handle them correctly.
-
             var pickler = new Pickler();
 
             RoundTrip.Assert(pickler, Tuple.Create<Type[]>(null));
             RoundTrip.Assert(pickler, Tuple.Create<Type[]>(new Type[0]));
             RoundTrip.Assert(pickler, Tuple.Create<Type[]>(new Type[] { typeof(Stream) }));
 
-            // Check that a static type of TypeBuilder[] throws
-            var exc = Assert.Throws<Exception>(() => RoundTrip.Assert(pickler, Tuple.Create<System.Reflection.Emit.TypeBuilder[]>(null)));
-            Assert.Equal("Type 'System.Reflection.Emit.TypeBuilder' is not automaticly serializable as it inherits from Type.", exc.Message);
+        }
 
-            // Check that a static type of AssemblyBuilder[] throws (We can serialise these objects but we can't have AssemblyBuilder as part of static type signatures)
-            exc = Assert.Throws<Exception>(() => RoundTrip.Assert(pickler, Tuple.Create<System.Reflection.Emit.AssemblyBuilder[]>(null)));
-            Assert.Equal("Pikala can not serialise type System.Reflection.Emit.AssemblyBuilder[], try System.Reflection.Assembly[]", exc.Message);
+        [Fact(Skip = "DynamicMethods aren't really working yet")]
+        public void TestDynamicMethod()
+        {
+            var pickler = new Pickler();
+
+            // Test we can handle a created dynamic method on this type
+            var dynamicMethod = new DynamicMethod("test", typeof(void), null, typeof(PicklerTests));
+            var il = dynamicMethod.GetILGenerator();
+            il.Emit(OpCodes.Ret);
+            dynamicMethod.CreateDelegate<Action>();
+            RoundTrip.Assert(pickler, Tuple.Create(dynamicMethod));
+
+            // TODO test on module and annonymous context
         }
     }
 }

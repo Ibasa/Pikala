@@ -4,8 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
-using System.Runtime.CompilerServices;
-using System.Runtime.Serialization;
+using System.Runtime.Loader;
+using System.Xml.Linq;
 
 namespace Ibasa.Pikala
 {
@@ -812,6 +812,7 @@ namespace Ibasa.Pikala
                                 if (fieldName == staticFields[j].Name)
                                 {
                                     fieldInfo = staticFields[j];
+                                    break;
                                 }
                             }
 
@@ -820,6 +821,7 @@ namespace Ibasa.Pikala
                                 throw new Exception($"Could not find static field '{fieldName}' on type '{type.Name}'");
                             }
 
+                            var typeInfo = GetOrReadSerialisedObjectTypeInfo(state, fieldInfo.FieldType);
                             var fieldValue = Deserialize(state, fieldInfo.FieldType);
                             fieldInfo.SetValue(null, fieldValue);
                         }
@@ -964,9 +966,20 @@ namespace Ibasa.Pikala
         private PickledFieldInfo DeserializeFieldRef(PicklerDeserializationState state)
         {
             var name = state.Reader.ReadString();
-            var type = DeserializeType(state, default);
-            state.Stages.PopStages(state, 2);
-            return state.SetMemo(true, type.GetField(name));
+            // Fields can be on modules or types
+            var typeField = state.Reader.ReadBoolean();
+            if (typeField)
+            {
+                var type = DeserializeType(state, default);
+                state.Stages.PopStages(state, 2);
+                return state.SetMemo(true, type.GetField(name));
+            }
+            else
+            {
+                var module = DeserializeModule(state, default);
+                state.Stages.PopStages(state, 2);
+                return state.SetMemo(true, module.GetField(name));
+            }
         }
 
         private PickledPropertyInfo DeserializePropertyRef(PicklerDeserializationState state)
@@ -1007,10 +1020,21 @@ namespace Ibasa.Pikala
                 }
             }
 
-            var type = DeserializeType(state, default);
-            state.Stages.PopStages(state, 2);
-
-            var methodInfo = type.GetMethod(signature);
+            // Methods can be on modules or types
+            var typeMethod = state.Reader.ReadBoolean();
+            PickledMethodInfo methodInfo;
+            if (typeMethod)
+            {
+                var type = DeserializeType(state, default);
+                state.Stages.PopStages(state, 2);
+                methodInfo = type.GetMethod(signature);
+            }
+            else
+            {
+                var module = DeserializeModule(state, default);
+                state.Stages.PopStages(state, 2);
+                methodInfo = module.GetMethod(signature);
+            }
 
             if (genericArguments != null)
             {
@@ -1036,7 +1060,8 @@ namespace Ibasa.Pikala
                 earlyResult = MaybeReadMemo(state);
                 if (earlyResult != null) return earlyResult;
 
-                var method = (MethodInfo)Deserialize(state, typeof(MethodInfo))!;
+                var pickledMethod = Deserialize(state, runtimeMethodInfoType);
+                var method = pickledMethod as MethodInfo;
                 earlyResult = MaybeReadMemo(state);
                 if (earlyResult != null) return earlyResult;
 
@@ -1629,8 +1654,7 @@ namespace Ibasa.Pikala
                         fieldBuilder = moduleDef.ModuleBuilder.DefineInitializedData(fieldName, data, fieldAttributes);
                     }
 
-                    // TODO This isn't right, FieldInfo needs to handle that it might be on a module
-                    moduleDef.Fields[i] = new PickledFieldInfoDef(null!, fieldBuilder);
+                    moduleDef.Fields[i] = new PickledFieldInfoDef(moduleDef, fieldBuilder);
                 }
 
                 var methodCount = state.Reader.Read7BitEncodedInt();
@@ -1840,7 +1864,10 @@ namespace Ibasa.Pikala
             switch (operation)
             {
                 case TypeOperation.Memo:
-                    return (PickledTypeInfo)state.GetMemo();
+                    {
+                        var memo = state.GetMemo();
+                        return (PickledTypeInfo)memo;
+                    }
 
                 case TypeOperation.ArrayType:
                     {
@@ -2079,99 +2106,49 @@ namespace Ibasa.Pikala
                 state.SetMemo(true, array);
             }
 
-            // If this is a primitive type just block copy it across to the stream, excepting endianness (Which dotnet
-            // currently only supports little endian anyway, and mono on big endian is probably a fringe use?) this is
-            // safe. We could extend this to also consider product types with static layout but:
-            // A) Currently I don't think any mscorlib types are defined with a strict layout so they would never hit this
-            // B) We wouldn't do this for user defined type because they might change layout been write and read
-            if (elementType.IsPrimitive)
+            if (arrayType.IsSZArray)
             {
-                // TODO We should just use Unsafe.SizeOf here but that's a net5.0 addition
-                long byteCount;
-                if (elementType == typeof(bool))
+                for (int index = 0; index < array.Length; ++index)
                 {
-                    byteCount = array.LongLength;
-                }
-                else if (elementType == typeof(char))
-                {
-                    byteCount = 2 * array.LongLength;
-                }
-                else
-                {
-                    byteCount = System.Runtime.InteropServices.Marshal.SizeOf(elementType) * array.LongLength;
-                }
-
-                var arrayHandle = System.Runtime.InteropServices.GCHandle.Alloc(array, System.Runtime.InteropServices.GCHandleType.Pinned);
-                try
-                {
-                    unsafe
-                    {
-                        var pin = (byte*)arrayHandle.AddrOfPinnedObject().ToPointer();
-                        while (byteCount > 0)
-                        {
-                            // Read upto 4k at a time
-                            var length = (int)Math.Min(byteCount, 4096);
-
-                            var span = new Span<byte>(pin, length);
-                            state.Reader.Read(span);
-
-                            pin += length;
-                            byteCount -= length;
-                        }
-                    }
-                }
-                finally
-                {
-                    arrayHandle.Free();
-
+                    array.SetValue(Deserialize(state, elementType), index);
                 }
             }
             else
             {
-                if (arrayType.IsSZArray)
+                var indices = new int[array.Rank];
+                bool isEmpty = false;
+                for (int dimension = 0; dimension < array.Rank; ++dimension)
                 {
-                    for (int index = 0; index < array.Length; ++index)
-                    {
-                        array.SetValue(Deserialize(state, elementType), index);
-                    }
+                    indices[dimension] = array.GetLowerBound(dimension);
+                    isEmpty |= array.GetLength(dimension) == 0;
                 }
-                else
+
+                // If the array is empty (any length == 0) no need to loop
+                if (!isEmpty)
                 {
-                    var indices = new int[array.Rank];
-                    bool isEmpty = false;
-                    for (int dimension = 0; dimension < array.Rank; ++dimension)
+                    var didBreak = true;
+                    while (didBreak)
                     {
-                        indices[dimension] = array.GetLowerBound(dimension);
-                        isEmpty |= array.GetLength(dimension) == 0;
-                    }
+                        // The first time we call into Iterate we know the array is non-empty, and indices is equal to lowerBounds (i.e the first element)
+                        // If we reach the last element we don't call back into Iterate
 
-                    // If the array is empty (any length == 0) no need to loop
-                    if (!isEmpty)
-                    {
-                        var didBreak = true;
-                        while (didBreak)
+                        var item = Deserialize(state, elementType);
+                        array.SetValue(item, indices);
+
+                        // Increment indices to the next position, we work through the dimensions backwards because that matches the order that GetEnumerator returns when we serialise out the items
+                        didBreak = false;
+                        for (int dimension = array.Rank - 1; dimension >= 0; --dimension)
                         {
-                            // The first time we call into Iterate we know the array is non-empty, and indices is equal to lowerBounds (i.e the first element)
-                            // If we reach the last element we don't call back into Iterate
-
-                            var item = Deserialize(state, elementType);
-                            array.SetValue(item, indices);
-
-                            // Increment indices to the next position, we work through the dimensions backwards because that matches the order that GetEnumerator returns when we serialise out the items
-                            didBreak = false;
-                            for (int dimension = array.Rank - 1; dimension >= 0; --dimension)
+                            var next = indices[dimension] + 1;
+                            if (next < array.GetLowerBound(dimension) + array.GetLength(dimension))
                             {
-                                var next = indices[dimension] + 1;
-                                if (next < array.GetLowerBound(dimension) + array.GetLength(dimension))
-                                {
-                                    indices[dimension] = next;
-                                    didBreak = true;
-                                    break;
-                                }
-                                else
-                                {
-                                    indices[dimension] = array.GetLowerBound(dimension);
-                                }
+                                indices[dimension] = next;
+                                didBreak = true;
+                                break;
+                            }
+                            else
+                            {
+                                indices[dimension] = array.GetLowerBound(dimension);
                             }
                         }
                     }
@@ -2304,8 +2281,6 @@ namespace Ibasa.Pikala
                 info.Mode = PickledTypeMode.IsBuiltin;
             }
 
-
-
             if (info.Mode == PickledTypeMode.IsEnum)
             {
                 if (!type.IsEnum)
@@ -2336,26 +2311,21 @@ namespace Ibasa.Pikala
                 info.SerialisedFields = new (SerialisedObjectTypeInfo, FieldInfo)[writtenLength];
                 for (int i = 0; i < writtenLength; ++i)
                 {
-                    var fieldName = state.Reader.ReadString();
+                    PickledFieldInfo fieldInfo;
+                    try
+                    {
+                        fieldInfo = DeserializeFieldInfo(state);
+                    }
+                    catch (MissingFieldException exc)
+                    {
+                        throw new Exception($"Can not deserialize type '{type}', could not find expected field '{exc.Field}'");
+                    }
+
+
                     var fieldType = DeserializeType(state, default).CompleteType;
-                    var fieldInfo = GetOrReadSerialisedObjectTypeInfo(state, fieldType);
+                    var fieldTypeInfo = GetOrReadSerialisedObjectTypeInfo(state, fieldType);
 
-                    FieldInfo? toSet = null;
-                    foreach (var field in currentFields)
-                    {
-                        if (field.Name == fieldName)
-                        {
-                            toSet = field;
-                            break;
-                        }
-                    }
-
-                    if (toSet == null)
-                    {
-                        throw new Exception($"Can not deserialize type '{type}', could not find expected field '{fieldName}'");
-                    }
-
-                    info.SerialisedFields[i] = (fieldInfo, toSet);
+                    info.SerialisedFields[i] = (fieldTypeInfo, fieldInfo.FieldInfo);
                 }
             }
             else if (info.Mode == PickledTypeMode.IsEnum)
@@ -2383,10 +2353,12 @@ namespace Ibasa.Pikala
 
             if (IsNullableType(type, out var elementType))
             {
+                info.IsNullable = true;
                 info.Element = GetOrReadSerialisedObjectTypeInfo(state, elementType);
             }
             else if (info.Flags.HasFlag(PickledTypeFlags.HasElementType))
             {
+                info.IsArray = true;
                 info.Element = GetOrReadSerialisedObjectTypeInfo(state, type.GetElementType());
             }
             else if (IsTupleType(type))
@@ -2399,7 +2371,7 @@ namespace Ibasa.Pikala
 
         private object? Deserialize(PicklerDeserializationState state, Type staticType)
         {
-            System.Diagnostics.Debug.Assert(SanatizeType(staticType) == staticType, "Static type didn't match sanatized static type");
+            //System.Diagnostics.Debug.Assert(SanatizeType(staticType, true) == staticType, "Static type didn't match sanatized static type");
 
             var staticInfo = GetOrReadSerialisedObjectTypeInfo(state, staticType);
             if (IsNullableType(staticType, out var nullableInnerType))
@@ -2446,7 +2418,7 @@ namespace Ibasa.Pikala
 
                 var isSealed = rootElementType.Flags.HasFlag(PickledTypeFlags.IsSealed) || rootElementType.Flags.HasFlag(PickledTypeFlags.IsValueType);
 
-                if (!reflectionTypes.Contains(rootElementType.Type) && !isSealed)
+                if (!isSealed)
                 {
                     // TODO We'd like to use CompleteType elsewhere in this repo but ReadCustomAttributes currently relies on this method which means types might still be constructing.
                     var pickledType = DeserializeType(state, default);
@@ -2474,31 +2446,31 @@ namespace Ibasa.Pikala
                 return DeserializeArray(state, runtimeType);
             }
 
-            else if (runtimeType == typeof(FieldInfo))
+            else if (runtimeType.IsAssignableTo(typeof(FieldInfo)))
             {
                 var fieldRef = DeserializeFieldRef(state);
                 state.Stages.PopStages(state);
                 return fieldRef.FieldInfo;
             }
-            else if (runtimeType == typeof(PropertyInfo))
+            else if (runtimeType.IsAssignableTo(typeof(PropertyInfo)))
             {
                 var propertyRef = DeserializePropertyRef(state);
                 state.Stages.PopStages(state);
                 return propertyRef.PropertyInfo;
             }
-            else if (runtimeType == typeof(EventInfo))
+            else if (runtimeType.IsAssignableTo(typeof(EventInfo)))
             {
                 var eventRef = DeserializeEventRef(state);
                 state.Stages.PopStages(state);
                 return eventRef.EventInfo;
             }
-            else if (runtimeType == typeof(MethodInfo))
+            else if (runtimeType.IsAssignableTo(typeof(MethodInfo)))
             {
                 var methodRef = DeserializeMethodRef(state);
                 state.Stages.PopStages(state);
                 return methodRef.MethodInfo;
             }
-            else if (runtimeType == typeof(ConstructorInfo))
+            else if (runtimeType.IsAssignableTo(typeof(ConstructorInfo)))
             {
                 var constructorRef = DeserializeConstructorRef(state);
                 state.Stages.PopStages(state);
@@ -2514,6 +2486,13 @@ namespace Ibasa.Pikala
             else if (IsTupleType(runtimeType))
             {
                 return DeserializeTuple(state, shouldMemo, runtimeType);
+            }
+
+            else if (runtimeType == typeof(object))
+            {
+                var result = new object();
+                state.SetMemo(shouldMemo, result);
+                return result;
             }
 
             else if (runtimeType == typeof(bool))
@@ -2619,23 +2598,38 @@ namespace Ibasa.Pikala
                 return result;
             }
 
-            else if (runtimeType == typeof(Assembly))
+            else if (runtimeType.IsAssignableTo(typeof(Assembly)))
             {
                 var assembly = DeserializeAssembly(state, default);
                 state.Stages.PopStages(state);
                 return assembly.Assembly;
             }
-            else if (runtimeType == typeof(Module))
+            else if (runtimeType.IsAssignableTo(typeof(Module)))
             {
                 var module = DeserializeModule(state, default);
                 state.Stages.PopStages(state);
                 return module.Module;
             }
-            else if (runtimeType == typeof(Type))
+            else if (runtimeType.IsAssignableTo(typeof(Type)))
             {
                 var type = DeserializeType(state, default);
                 state.Stages.PopStages(state);
                 return type.CompleteType;
+            }
+
+            else if (runtimeType == typeof(Pickler))
+            {
+                // Pickler caches _a lot_ of runtime information but all we care about is alc and the reducers assigned to it.
+                //var assemblyLoadContext = Deserialize(state, typeof(object)) as AssemblyLoadContext;
+                //var assemblyPickleMode = Deserialize(state, typeof(object)) as Func<Assembly, AssemblyPickleMode>;
+                //var reducers = Deserialize(state, typeof(object)) as IReducer[];
+
+                var pickler = new Pickler(null, null);
+                //foreach(var reducer in reducers)
+                //{
+                //    pickler.RegisterReducer(reducer);
+                //}
+                return state.SetMemo(shouldMemo, pickler);
             }
 
             else if (runtimeInfo.Mode == PickledTypeMode.IsReduced)

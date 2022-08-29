@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using Xunit;
 using System.Linq;
+using System.Xml.Linq;
 
 namespace Ibasa.Pikala.Tests
 {
@@ -448,7 +449,7 @@ namespace Ibasa.Pikala.Tests
             var script = string.Join('\n', new[]
             {
                 ScriptHeader,
-                "let func = deserializeBase64 \"" +   Base64FromObject(value) + "\" :?> System.Func<int, string>",
+                "let func = deserializeBase64 \"" + Base64FromObject(value) + "\" :?> System.Func<int, string>",
                 "printfn \"%s\" (func.Invoke 1)",
                 "printfn \"%s\" (func.Invoke 2)",
             });
@@ -569,8 +570,8 @@ namespace Ibasa.Pikala.Tests
             {
                 ScriptHeader,
                 "let intValue = ref 1",
-                "let value = fun i -> i + !intValue",
-                "intValue := 123",
+                "let value = fun i -> i + intValue.Value",
+                "intValue.Value <- 123",
                 "let base64 = serializeBase64 value",
                 "printf \"%s\" base64",
             });
@@ -587,8 +588,8 @@ namespace Ibasa.Pikala.Tests
             {
                 ScriptHeader,
                 "let intValue = ref 1",
-                "let value = fun i -> i + !intValue",
-                "intValue := 123",
+                "let value = fun i -> i + intValue.Value",
+                "intValue.Value <- 123",
                 "let base64 = serializeBase64 value",
                 "printf \"%s\" base64",
             });
@@ -674,6 +675,24 @@ namespace Ibasa.Pikala.Tests
                 Assert.IsType<System.Reflection.AssemblyCompanyAttribute>(
                     (assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyCompanyAttribute), false)).First());
             Assert.Equal("Ibasa", companysAttribute.Company);
+        }
+
+        [Fact]
+        public void TestReturnModule()
+        {
+            var script = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "let value = System.Reflection.Assembly.GetExecutingAssembly().ManifestModule",
+                "let base64 = serializeBase64 value",
+                "printf \"%s\" base64",
+            });
+
+            var result = Base64ToObject(RunFsi(script));
+
+            var module = Assert.IsAssignableFrom<System.Reflection.Module>(result);
+
+            Assert.Equal("<In Memory Module>", module.Name);
         }
 
         [Fact]

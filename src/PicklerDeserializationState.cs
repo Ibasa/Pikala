@@ -110,6 +110,11 @@ namespace Ibasa.Pikala
 
         public object GetMemo(long id)
         {
+            if (id == 0)
+            {
+                throw new Exception("Invalid pikala stream, memo id was 0");
+            }
+
             if (memo.TryGetValue(id, out var value))
             {
                 return value;

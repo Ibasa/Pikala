@@ -1,133 +1,25 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
+using System.Runtime.Loader;
 using System.Runtime.Serialization;
 
 namespace Ibasa.Pikala
 {
     public sealed partial class Pickler
     {
-        private static HashSet<Type> reflectionTypes = new HashSet<Type>()
-        {
-            typeof(Type),
-            typeof(FieldInfo),
-            typeof(PropertyInfo),
-            typeof(MethodInfo),
-            typeof(ConstructorInfo),
-            typeof(EventInfo),
-            typeof(Module),
-            typeof(Assembly),
-        };
-
-        private Type SanatizeType(Type type)
-        {
-            if (type.IsArray)
-            {
-                // Sanatize the inner type
-                var elementType = SanatizeType(type.GetElementType()!);
-                if (type.IsSZArray)
-                {
-                    return elementType.MakeArrayType();
-                }
-                else
-                {
-                    return elementType.MakeArrayType(type.GetArrayRank());
-                }
-            }
-
-            // We do a sanitisation pass here for reflection types, so that we don't see things like RuntimeType, just Type.
-            if (type.IsAssignableTo(typeof(Assembly)))
-            {
-                // We only support serialising the actual runtime assembly type (either a real runtime assembly, or an assemblybuilder)
-                if (!type.IsAssignableTo(runtimeAssemblyType) && type != runtimeAssemblyBuilderType && type != typeof(Assembly))
-                {
-                    throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from Assembly.");
-                }
-                return typeof(Assembly);
-            }
-            else if (type.IsAssignableTo(typeof(Module)))
-            {
-                if (!type.IsAssignableTo(runtimeModuleType) && type != runtimeModuleBuilderType && type != typeof(Module))
-                {
-                    throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from Module.");
-                }
-                return typeof(Module);
-            }
-            else if (type.IsAssignableTo(typeof(MemberInfo)))
-            {
-                if (type.IsAssignableTo(typeof(Type)))
-                {
-                    if (!type.IsAssignableTo(runtimeTypeType) && type != typeof(Type))
-                    {
-                        throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from Type.");
-                    }
-                    return typeof(Type);
-                }
-                else if (type.IsAssignableTo(typeof(FieldInfo)))
-                {
-                    if (!type.IsAssignableTo(runtimeFieldInfoType) && type != typeof(FieldInfo))
-                    {
-                        throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from FieldInfo.");
-                    }
-                    return typeof(FieldInfo);
-                }
-                else if (type.IsAssignableTo(typeof(PropertyInfo)))
-                {
-                    if (!type.IsAssignableTo(runtimePropertyInfoType) && type != typeof(PropertyInfo))
-                    {
-                        throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from PropertyInfo.");
-                    }
-                    return typeof(PropertyInfo);
-                }
-                else if (type.IsAssignableTo(typeof(EventInfo)))
-                {
-                    if (!type.IsAssignableTo(runtimeEventInfoType) && type != typeof(EventInfo))
-                    {
-                        throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from EventInfo.");
-                    }
-                    return typeof(EventInfo);
-                }
-                else if (type.IsAssignableTo(typeof(MethodBase)))
-                {
-                    if (type.IsAssignableTo(typeof(ConstructorInfo)) && type != typeof(ConstructorInfo))
-                    {
-                        if (!type.IsAssignableTo(runtimeConstructorInfoType))
-                        {
-                            throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from ConstructorInfo.");
-                        }
-                        return typeof(ConstructorInfo);
-                    }
-                    else if (type.IsAssignableTo(typeof(MethodInfo)))
-                    {
-                        if (!type.IsAssignableTo(runtimeMethodInfoType) && type != typeof(MethodInfo))
-                        {
-                            throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from MethodInfo.");
-                        }
-                        return typeof(MethodInfo);
-                    }
-                    else if (type != typeof(MethodBase))
-                    {
-                        throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from MethodBase.");
-                    }
-                    return typeof(MethodBase);
-                }
-                else if (type != typeof(MemberInfo))
-                {
-                    throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from MemberInfo.");
-                }
-                return typeof(MemberInfo);
-            }
-
-            return type;
-        }
-
         /// <summary>
         /// There are some objects that we shouldn't bother to memoise because it's cheaper to just write their tokens.
         /// </summary>
-        private bool ShouldMemo(object? obj)
+        private static bool ShouldMemo(object? obj)
         {
             // Don't bother memoing the well known types, they only take a byte to write out anyway
             foreach (var type in _wellKnownTypes)
@@ -144,9 +36,9 @@ namespace Ibasa.Pikala
             return true;
         }
 
-        private void AddMemo(PicklerSerializationState state, bool isValueType, object obj)
+        private static void AddMemo(PicklerSerializationState state, object? obj)
         {
-            if (!isValueType)
+            if (obj != null)
             {
                 System.Diagnostics.Debug.Assert(ShouldMemo(obj), "Tried to call AddMemo for an object that shouldn't be memoised");
                 state.AddMemo(obj);
@@ -551,7 +443,7 @@ namespace Ibasa.Pikala
             state.Writer.Write((byte)ModuleOperation.ModuleDef);
             state.Writer.Write(module.Name);
             SerializeAssembly(state, module.Assembly);
-            AddMemo(state, false, module);
+            AddMemo(state, module);
 
             var fields = module.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             var methods = module.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
@@ -812,14 +704,21 @@ namespace Ibasa.Pikala
 
                     state.Stages.PushStage4(state =>
                     {
-                        var staticFields = type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                        var staticFields =
+                            type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly).OrderBy(fi => fi.Name);
                         foreach (var field in staticFields)
                         {
                             if (!field.IsLiteral && !field.IsInitOnly)
                             {
+                                // It's ok to just have names here because we're only looking at fields one exactly one type, no base type fields. So there will not be any name conflicts.
                                 state.Writer.Write(field.Name);
                                 var value = field.GetValue(null);
-                                Serialize(state, value, field.FieldType);
+
+                                // This will be a no-op for most well known types but also sealed types which we will of written out for the static value
+                                var typeInfo = GetCachedTypeInfo(field.FieldType);
+                                MaybeWriteTypeInfo(state, typeInfo);
+
+                                InvokeSerializationMethod(typeInfo, state, value, null, false);
                             }
                         }
                     });
@@ -968,10 +867,10 @@ namespace Ibasa.Pikala
                 {
                     state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Type);
                 }
-                else if (type.IsArray)
+                else if (IsArrayType(type, out var elementType))
                 {
                     state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.SZArray);
-                    WriteType(type.GetElementType()!);
+                    WriteType(elementType);
                 }
                 else
                 {
@@ -1165,6 +1064,7 @@ namespace Ibasa.Pikala
                 }
             }
         }
+
         private void WriteCustomAttributesTypes(PicklerSerializationState state, CustomAttributeData[] attributes)
         {
             void WriteType(Type type)
@@ -1226,10 +1126,10 @@ namespace Ibasa.Pikala
                 {
                     state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.Type);
                 }
-                else if (type.IsArray)
+                else if (IsArrayType(type, out var elementType))
                 {
                     state.Writer.Write((byte)System.Reflection.Metadata.SerializationTypeCode.SZArray);
-                    WriteType(type.GetElementType()!);
+                    WriteType(elementType);
                 }
                 else
                 {
@@ -1353,7 +1253,6 @@ namespace Ibasa.Pikala
             }
         }
 
-
         private void SerializeAssembly(PicklerSerializationState state, Assembly assembly, bool memo = true)
         {
             if (Object.ReferenceEquals(assembly, null))
@@ -1392,14 +1291,14 @@ namespace Ibasa.Pikala
                         WriteCustomAttributes(state, assembly.CustomAttributes.ToArray());
                     });
                 });
-                AddMemo(state, false, assembly);
+                AddMemo(state, assembly);
             }
             else
             {
                 // Just write out an assembly refernce
                 state.Writer.Write((byte)AssemblyOperation.AssemblyRef);
                 state.Writer.Write(assembly.FullName);
-                AddMemo(state, false, assembly);
+                AddMemo(state, assembly);
             }
         }
 
@@ -1446,7 +1345,7 @@ namespace Ibasa.Pikala
                 }
 
                 SerializeAssembly(state, module.Assembly);
-                AddMemo(state, false, module);
+                AddMemo(state, module);
             }
         }
 
@@ -1478,11 +1377,11 @@ namespace Ibasa.Pikala
                 {
                     SerializeType(state, arg, genericTypeParameters, genericMethodParameters);
                 }
-                AddMemo(state, false, type);
+                AddMemo(state, type);
             }
 
             // Arrays aren't simple generic types, we need to write out the rank and element type
-            else if (type.IsArray)
+            else if (IsArrayType(type, out var arrayElementType))
             {
                 state.Writer.Write((byte)TypeOperation.ArrayType);
                 if (type.IsSZArray)
@@ -1499,10 +1398,8 @@ namespace Ibasa.Pikala
                     }
                     state.Writer.Write((byte)rank);
                 }
-                var elementType = type.GetElementType();
-                System.Diagnostics.Debug.Assert(elementType != null, "GetElementType returned null for an array type");
-                SerializeType(state, elementType, genericTypeParameters, genericMethodParameters);
-                AddMemo(state, false, type);
+                SerializeType(state, arrayElementType, genericTypeParameters, genericMethodParameters);
+                AddMemo(state, type);
             }
 
             else if (type.IsByRef)
@@ -1511,7 +1408,7 @@ namespace Ibasa.Pikala
                 var elementType = type.GetElementType();
                 System.Diagnostics.Debug.Assert(elementType != null, "GetElementType returned null for a byref type");
                 SerializeType(state, elementType, genericTypeParameters, genericMethodParameters);
-                AddMemo(state, false, type);
+                AddMemo(state, type);
             }
 
             else if (type.IsPointer)
@@ -1520,7 +1417,7 @@ namespace Ibasa.Pikala
                 var elementType = type.GetElementType();
                 System.Diagnostics.Debug.Assert(elementType != null, "GetElementType returned null for a pointer type");
                 SerializeType(state, elementType, genericTypeParameters, genericMethodParameters);
-                AddMemo(state, false, type);
+                AddMemo(state, type);
             }
 
             else if (type.IsGenericParameter)
@@ -1559,7 +1456,7 @@ namespace Ibasa.Pikala
                 {
                     throw new Exception($"'{type}' is a generic parameter but is not bound to a type or method");
                 }
-                AddMemo(state, false, type);
+                AddMemo(state, type);
             }
 
             // Is this assembly one we should save by value?
@@ -1650,7 +1547,7 @@ namespace Ibasa.Pikala
                         WriteEnumerationValue(state.Writer, typeCode, value);
                     }
 
-                    AddMemo(state, false, type);
+                    AddMemo(state, type);
 
                     state.Stages.PushStage2(state =>
                     {
@@ -1677,7 +1574,7 @@ namespace Ibasa.Pikala
                         SerializeType(state, parameter.ParameterType, genericTypeParameters, genericMethodParameters);
                     }
 
-                    AddMemo(state, false, type);
+                    AddMemo(state, type);
 
                     state.Stages.PushStage2(state =>
                     {
@@ -1691,7 +1588,7 @@ namespace Ibasa.Pikala
                 }
                 else
                 {
-                    AddMemo(state, false, type);
+                    AddMemo(state, type);
                     SerializeDef(state, type, genericTypeParameters);
                 }
             }
@@ -1726,7 +1623,7 @@ namespace Ibasa.Pikala
                     SerializeModule(state, type.Module);
                 }
 
-                AddMemo(state, false, type);
+                AddMemo(state, type);
             }
         }
 
@@ -1748,9 +1645,19 @@ namespace Ibasa.Pikala
             }
 
             state.Writer.Write(field.Name);
-            SerializeType(state, field.ReflectedType, null, null);
+            // Fields can be on either modules or types, if its on a module we write a null type and then the module
+            if (field.ReflectedType == null)
+            {
+                state.Writer.Write(false);
+                SerializeModule(state, field.Module);
+            }
+            else
+            {
+                state.Writer.Write(true);
+                SerializeType(state, field.ReflectedType, null, null);
+            }
             state.Stages.PopStages(state, 2);
-            AddMemo(state, false, field);
+            AddMemo(state, field);
         }
 
         private void SerializePropertyInfo(PicklerSerializationState state, PropertyInfo property, bool memo = true)
@@ -1773,7 +1680,7 @@ namespace Ibasa.Pikala
             SerializeSignature(state, Signature.GetSignature(property));
             SerializeType(state, property.ReflectedType, null, null);
             state.Stages.PopStages(state, 2);
-            AddMemo(state, false, property);
+            AddMemo(state, property);
         }
 
         private void SerializeEventInfo(PicklerSerializationState state, EventInfo evt, bool memo = true)
@@ -1796,7 +1703,7 @@ namespace Ibasa.Pikala
             state.Writer.Write(evt.Name);
             SerializeType(state, evt.ReflectedType, null, null);
             state.Stages.PopStages(state, 2);
-            AddMemo(state, false, evt);
+            AddMemo(state, evt);
         }
 
         private void SerializeMethodInfo(PicklerSerializationState state, MethodInfo methodInfo, bool memo = true)
@@ -1832,9 +1739,19 @@ namespace Ibasa.Pikala
                 state.Writer.Write7BitEncodedInt(0);
             }
 
-            SerializeType(state, methodInfo.ReflectedType, null, null);
+            // Methods can be on either modules or types
+            if (methodInfo.ReflectedType == null)
+            {
+                state.Writer.Write(false);
+                SerializeModule(state, methodInfo.Module);
+            }
+            else
+            {
+                state.Writer.Write(true);
+                SerializeType(state, methodInfo.ReflectedType, null, null);
+            }
             state.Stages.PopStages(state, 2);
-            AddMemo(state, false, methodInfo);
+            AddMemo(state, methodInfo);
         }
 
         private void SerializeConstructorInfo(PicklerSerializationState state, ConstructorInfo constructor, bool memo = true)
@@ -1857,7 +1774,7 @@ namespace Ibasa.Pikala
             SerializeSignature(state, Signature.GetSignature(constructor));
             SerializeType(state, constructor.ReflectedType, null, null);
             state.Stages.PopStages(state, 2);
-            AddMemo(state, false, constructor);
+            AddMemo(state, constructor);
         }
 
         private void SerializeMethodBase(PicklerSerializationState state, MethodBase methodBase)
@@ -1940,283 +1857,6 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void SerializeArray(PicklerSerializationState state, Array obj, Type objType)
-        {
-            System.Diagnostics.Debug.Assert(obj.GetType() == objType, "GetType did not match passed in Type");
-
-            // This is an array, write the type then loop over each item.
-            // Theres a performance optimisation we could do here with value types,
-            // we we fetch the handler only once.
-
-            var elementType = objType.GetElementType();
-            System.Diagnostics.Debug.Assert(elementType != null, "GetElementType returned null for an array type");
-
-            // Special case szarray (i.e. Rank 1, lower bound 0)
-            if (objType.IsSZArray)
-            {
-                state.Writer.Write7BitEncodedInt(obj.Length);
-            }
-            else
-            {
-                // This might just be rank 1 but with non-normal bounds
-                for (int dimension = 0; dimension < obj.Rank; ++dimension)
-                {
-                    state.Writer.Write7BitEncodedInt(obj.GetLength(dimension));
-                    state.Writer.Write7BitEncodedInt(obj.GetLowerBound(dimension));
-                }
-            }
-
-            AddMemo(state, false, obj);
-
-            // If this is a primitive type just block copy it across to the stream
-            if (elementType.IsPrimitive)
-            {
-                var arrayHandle = System.Runtime.InteropServices.GCHandle.Alloc(obj, System.Runtime.InteropServices.GCHandleType.Pinned);
-                try
-                {
-                    // TODO We should just use Unsafe.SizeOf here but that's a net5.0 addition
-                    long byteCount;
-                    if (elementType == typeof(bool))
-                    {
-                        byteCount = obj.LongLength;
-                    }
-                    else if (elementType == typeof(char))
-                    {
-                        byteCount = 2 * obj.LongLength;
-                    }
-                    else
-                    {
-                        byteCount = System.Runtime.InteropServices.Marshal.SizeOf(elementType) * obj.LongLength;
-                    }
-
-                    unsafe
-                    {
-                        var pin = (byte*)arrayHandle.AddrOfPinnedObject().ToPointer();
-                        while (byteCount > 0)
-                        {
-                            // Write upto 4k at a time
-                            var length = (int)Math.Min(byteCount, 4096);
-
-                            var span = new ReadOnlySpan<byte>(pin, length);
-                            state.Writer.Write(span);
-
-                            pin += length;
-                            byteCount -= length;
-                        }
-                    }
-                }
-                finally
-                {
-                    arrayHandle.Free();
-                }
-            }
-            else
-            {
-                foreach (var item in obj)
-                {
-                    // TODO If we know all items are the same type we can save calling MakeInfo on each one
-                    Serialize(state, item, elementType);
-                }
-            }
-        }
-
-        private void SerializeMulticastDelegate(PicklerSerializationState state, MulticastDelegate multicastDelegate)
-        {
-            // Delegates are just a target and a method
-            var invocationList = multicastDelegate.GetInvocationList();
-            state.Writer.Write7BitEncodedInt(invocationList.Length);
-
-            // We need to memoise delegates correctly, if the invocation list has a single element we write out the target and method,
-            // but if the invocation list has multiple elements we need to recurse them through Serialize so they can be memoised correctly
-            if (invocationList.Length == 1)
-            {
-                Serialize(state, invocationList[0].Target, typeof(object));
-                // Serialise the sub-objects may recurse and serialise this delegate so early out if that's the case
-                if (state.MaybeWriteMemo(multicastDelegate, null)) return;
-                state.Writer.Write15BitEncodedLong(0);
-
-                Serialize(state, invocationList[0].Method, typeof(MethodInfo));
-                if (state.MaybeWriteMemo(multicastDelegate, null)) return;
-                state.Writer.Write15BitEncodedLong(0);
-            }
-            else
-            {
-                foreach (var invocation in invocationList)
-                {
-                    Serialize(state, invocation, typeof(Delegate));
-                    if (state.MaybeWriteMemo(multicastDelegate, null)) return;
-                    state.Writer.Write15BitEncodedLong(0);
-                }
-            }
-            AddMemo(state, false, multicastDelegate);
-        }
-
-        private void SerializeTuple(PicklerSerializationState state, bool isValueType, System.Runtime.CompilerServices.ITuple tuple, Type[] genericArguments)
-        {
-            System.Diagnostics.Debug.Assert(genericArguments.Length == tuple.Length, "genericArguments length did not match tuple length");
-
-            // Write out the values
-            for (int i = 0; i < tuple.Length; ++i)
-            {
-                var item = tuple[i];
-                Serialize(state, item, genericArguments[i]);
-                // If this is a reference to a tuple (i.e. Tuple, or boxed ValueTuple) then serialising the fields may serialise the tuple itself.
-                if (!isValueType)
-                {
-                    if (state.MaybeWriteMemo(tuple, null)) return;
-                    state.Writer.Write15BitEncodedLong(0);
-                }
-            }
-            AddMemo(state, isValueType, tuple);
-        }
-
-        private void SerializeReducer(PicklerSerializationState state, object obj, IReducer reducer, Type runtimeType)
-        {
-            // We've got a reducer for the type (or its generic variant)
-            var (method, target, args) = reducer.Reduce(runtimeType, obj);
-
-            SerializeMethodBase(state, method);
-
-            // Assert properties of the reduction
-            if (method is ConstructorInfo constructorInfo)
-            {
-                if (target != null)
-                {
-                    throw new Exception($"Invalid reduction for type '{runtimeType}'. MethodBase was a ConstructorInfo but Target was not null.");
-                }
-
-                if (constructorInfo.DeclaringType != runtimeType)
-                {
-                    throw new Exception($"Invalid reduction for type '{runtimeType}'. MethodBase was a ConstructorInfo for '{constructorInfo.DeclaringType}'.");
-                }
-
-                // We don't write target for ConstructorInfo, it must be null.
-            }
-            else if (method is MethodInfo methodInfo)
-            {
-                if (methodInfo.ReturnType != runtimeType)
-                {
-                    throw new Exception($"Invalid reduction for type '{runtimeType}'. MethodBase was a MethodInfo that returns '{methodInfo.ReturnType}'.");
-                }
-
-                Serialize(state, target, typeof(object));
-            }
-            else
-            {
-                throw new Exception($"Invalid reduction for type '{runtimeType}'. MethodBase was '{method}'.");
-            }
-
-            state.Writer.Write7BitEncodedInt(args.Length);
-            foreach (var arg in args)
-            {
-                Serialize(state, arg, typeof(object));
-            }
-        }
-
-        private void SerializeObject(PicklerSerializationState state, object obj, (SerialisedObjectTypeInfo, FieldInfo)[] fields)
-        {
-            // Must be an object, try and dump all it's fields
-
-            foreach (var (fieldType, field) in fields)
-            {
-                System.Diagnostics.Debug.Assert(fieldType.Type == field.FieldType, "FieldType didn't match");
-
-                var value = field.GetValue(obj);
-                Serialize(state, value, field.FieldType);
-            }
-        }
-
-        private void BuildSerialisedObjectTypeInfo(SerialisedObjectTypeInfo info, Func<Type, SerialisedObjectTypeInfo> recurse)
-        {
-            var type = info.Type;
-
-            info.Flags =
-                (type.IsValueType ? PickledTypeFlags.IsValueType : 0) |
-                (type.IsSealed ? PickledTypeFlags.IsSealed : 0) |
-                (type.IsAbstract ? PickledTypeFlags.IsAbstract : 0) |
-                (type.HasElementType ? PickledTypeFlags.HasElementType : 0);
-
-            // Assume builtin, we'll type check and change that below.
-            info.Mode = PickledTypeMode.IsBuiltin;
-
-            if (!type.IsAbstract)
-            {
-                // Work out what sort of operation this type needs
-                if (type.IsPointer || type == typeof(Pointer))
-                {
-                    throw new Exception($"Pointer types are not serializable: '{type}'");
-                }
-
-                else if (type.IsArray)
-                {
-                    info.Element = recurse(type.GetElementType());
-                }
-
-                else if (IsNullableType(type, out var nullableElement))
-                {
-                    info.Element = recurse(nullableElement);
-                }
-
-                // Reflection
-                else if (type.IsAssignableTo(typeof(Assembly)))
-                {
-                }
-                else if (type.IsAssignableTo(typeof(Module)))
-                {
-                }
-                else if (type.IsAssignableTo(typeof(MemberInfo)))
-                {
-
-                }
-                // End of reflection handlers
-
-                // Tuples!
-                else if (IsTupleType(type))
-                {
-                    info.TupleArguments = type.GetGenericArguments().Select(recurse).ToArray();
-                }
-
-                else if (IsBuiltinType(type))
-                {
-                    // Builtin do nothing
-                }
-
-                else if (type.IsEnum)
-                {
-                    info.Mode = PickledTypeMode.IsEnum;
-                    info.TypeCode = Type.GetTypeCode(type);
-                }
-
-                else if (type.IsAssignableTo(typeof(MulticastDelegate)))
-                {
-                    info.Mode = PickledTypeMode.IsDelegate;
-                }
-
-                else if (_reducers.TryGetValue(type, out var reducer) || (type.IsGenericType && _reducers.TryGetValue(type.GetGenericTypeDefinition(), out reducer)))
-                {
-                    info.Reducer = reducer;
-                    info.Mode = PickledTypeMode.IsReduced;
-                }
-
-                else if (type.IsAssignableTo(typeof(MarshalByRefObject)))
-                {
-                    throw new Exception($"Type '{type}' is not automaticly serializable as it inherits from MarshalByRefObject.");
-                }
-
-                else
-                {
-                    var fields = GetSerializedFields(type);
-                    info.Mode = PickledTypeMode.IsAutoSerialisedObject;
-
-                    info.SerialisedFields = new (SerialisedObjectTypeInfo, FieldInfo)[fields.Length];
-                    for (int i = 0; i < fields.Length; ++i)
-                    {
-                        info.SerialisedFields[i] = (recurse(fields[i].FieldType), fields[i]);
-                    }
-                }
-            }
-        }
-
         private void WriteSerialisedObjectTypeInfo(PicklerSerializationState state, SerialisedObjectTypeInfo info)
         {
             if (!IsBuiltinType(info.Type))
@@ -2243,7 +1883,7 @@ namespace Ibasa.Pikala
                 state.Writer.Write7BitEncodedInt(fields.Length);
                 foreach (var (fieldType, fieldInfo) in fields)
                 {
-                    state.Writer.Write(fieldInfo.Name);
+                    SerializeFieldInfo(state, fieldInfo);
                     SerializeType(state, fieldType.Type, null, null);
                     MaybeWriteTypeInfo(state, fieldType);
                 }
@@ -2262,16 +1902,6 @@ namespace Ibasa.Pikala
                 }
             }
         }
-        private SerialisedObjectTypeInfo GetCachedTypeInfo(Type type)
-        {
-            if (!_typeInfo.TryGetValue(type, out var maybeInfo))
-            {
-                maybeInfo = new SerialisedObjectTypeInfo(type);
-                _typeInfo.Add(type, maybeInfo);
-                BuildSerialisedObjectTypeInfo(maybeInfo, GetCachedTypeInfo);
-            }
-            return maybeInfo;
-        }
 
         private void MaybeWriteTypeInfo(PicklerSerializationState state, SerialisedObjectTypeInfo info)
         {
@@ -2282,300 +1912,1176 @@ namespace Ibasa.Pikala
             }
         }
 
-        private void Serialize(PicklerSerializationState state, object? obj, Type staticType)
+        // This can't change once a type is loaded, so it's safe to cache across multiple Serialize methods.
+        // TODO: This need to be parallel safe
+        private Dictionary<Type, MethodInfo> _serializationMethods = new Dictionary<Type, MethodInfo>();
+
+        private MethodInfo GetSerializationMethod(SerialisedObjectTypeInfo type)
         {
-            // Early out for types we can't possibly deal with
-            if (staticType.IsPointer)
+            if (_serializationMethods.TryGetValue(type.Type, out var method))
             {
-                throw new Exception($"Pointer types are not serializable: '{staticType}'");
+                return method;
             }
 
+            return BuildSerializationMethod(type);
+        }
+
+        private MethodInfo BuildSerializationMethod(SerialisedObjectTypeInfo type)
+        {
+            // Serialization methods are either (Pickler, PicklerSerializationState, T, bool) for reference types.
+            // Where the bool parameter is true to say that the null/memo & type has already been checked.
+            // Or (Pickler, PicklerSerializationState, T, object?) for value types.
+            // Where the object? parameter is non-null if the value type is boxed.
+            Type[] dynamicParameters;
+            if (type.Type.IsValueType) 
             {
-                // In a block because nothing else should refer to sanatizedStaticType, if we get past this block it's equal to staticType.
-                var sanatizedStaticType = SanatizeType(staticType);
-                // Check that we don't have a static type for a derived reflection type. 
-                // For example if staticType is RuntimeAssembly we might need to emit an AssemblyBuilder which wouldn't match
-                if (sanatizedStaticType != staticType)
+                dynamicParameters = new Type[] { typeof(Pickler), typeof(PicklerSerializationState), type.Type, typeof(object) };
+            } 
+            else 
+            {
+                dynamicParameters = new Type[] { typeof(Pickler), typeof(PicklerSerializationState), type.Type, typeof(bool) };
+            }
+
+            // All other types we build a dynamic method for it.
+            var dynamicMethod = new DynamicMethod("Serialize_" + type.Type.Name,typeof(void),dynamicParameters,typeof(Pickler));
+            _serializationMethods.Add(type.Type, dynamicMethod);
+
+            var il = dynamicMethod.GetILGenerator();
+            // Nearly every type needs access to the Writer property
+            var binaryWriterProperty = typeof(PicklerSerializationState).GetProperty("Writer");
+            System.Diagnostics.Debug.Assert(binaryWriterProperty != null, "Could not lookup Writer property");
+            var binaryWriterPropertyGet = binaryWriterProperty.GetMethod;
+            System.Diagnostics.Debug.Assert(binaryWriterPropertyGet != null, "Writer property had no get method");
+
+            // All object based methods need the WriteObjectOperation and WriteObjectType method
+            var writeObjectOperationMethod = typeof(Pickler).GetMethod("WriteObjectOperation", BindingFlags.NonPublic | BindingFlags.Static);
+            System.Diagnostics.Debug.Assert(writeObjectOperationMethod != null, "Could not lookup WriteObjectOperation method");
+            var writeObjectTypeMethod = typeof(Pickler).GetMethod("WriteObjectType", BindingFlags.NonPublic | BindingFlags.Instance);
+            System.Diagnostics.Debug.Assert(writeObjectTypeMethod != null, "Could not lookup WriteObjectType method");
+
+            // All methods need the memo methods (yes even value types because they could have been boxed)
+            var addMemoMethod = typeof(Pickler).GetMethod("AddMemo", BindingFlags.NonPublic | BindingFlags.Static, new Type[] { typeof(PicklerSerializationState), typeof(object)});
+            System.Diagnostics.Debug.Assert(addMemoMethod != null, "Could not lookup AddMemo method");
+            var maybeWriteMemoMethod = typeof(Pickler).GetMethod("MaybeWriteMemo", BindingFlags.NonPublic | BindingFlags.Static, new Type[] { typeof(PicklerSerializationState), typeof(object) });
+            System.Diagnostics.Debug.Assert(maybeWriteMemoMethod != null, "Could not lookup MaybeWriteMemo method");
+
+            if (type.Error != null)
+            {
+                // This type isn't actually serialisable, if it's null we're ok but otherwise throw.
+
+                var exceptionConstructor = typeof(Exception).GetConstructor(new Type[] { typeof(string) });
+                System.Diagnostics.Debug.Assert(exceptionConstructor != null, "Could not lookup Exception constructor");
+
+                var writeMethod = typeof(BinaryWriter).GetMethod("Write", new Type[] { typeof(byte) });
+                System.Diagnostics.Debug.Assert(writeMethod != null, "Could not lookup write method");
+
+                var earlyReturn = il.DefineLabel();
+
+                // We _might_ have to write out object headers here
+                var prechecked = il.DefineLabel();
+                il.Emit(OpCodes.Ldarg_3);
+                il.Emit(OpCodes.Brtrue, prechecked);
+                il.Emit(OpCodes.Ldarg_2);
+                // All we care about is nullness, for which we'll write ObjectOperation.Null
+                il.Emit(OpCodes.Brtrue, prechecked);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Callvirt, binaryWriterPropertyGet);
+                il.Emit(OpCodes.Ldc_I4, (int)ObjectOperation.Null);
+                il.Emit(OpCodes.Callvirt, writeMethod);
+                il.Emit(OpCodes.Br, earlyReturn);
+                il.MarkLabel(prechecked);
+
+                // Throw the erorr
+                il.Emit(OpCodes.Ldstr, type.Error);
+                il.Emit(OpCodes.Newobj, exceptionConstructor);
+                il.Emit(OpCodes.Throw);
+
+                il.MarkLabel(earlyReturn);
+                il.Emit(OpCodes.Ret);
+            }
+            else if (type.Type == typeof(DBNull))
+            {
+                // DBNull is easy, just do nothing
+                il.Emit(OpCodes.Ret);
+            }
+            else if (type.Type == typeof(UIntPtr))
+            {
+                // UIntPtr (and IntPtr) just cast to their 64 bit value and write that
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Callvirt, binaryWriterPropertyGet);
+                var writeMethod = typeof(BinaryWriter).GetMethod("Write", new Type[] { typeof(ulong) });
+                System.Diagnostics.Debug.Assert(writeMethod != null, "Could not lookup write method");
+                il.Emit(OpCodes.Ldarga_S, 2);
+                var castMethod = typeof(UIntPtr).GetMethod("ToUInt64");
+                System.Diagnostics.Debug.Assert(castMethod != null, "Could not lookup ToUInt64 method");
+                il.Emit(OpCodes.Call, castMethod);
+                il.Emit(OpCodes.Callvirt, writeMethod);
+
+                // Maybe memoize
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldarg_3);
+                il.Emit(OpCodes.Call, addMemoMethod);
+
+                il.Emit(OpCodes.Ret);
+            }
+            else if (type.Type == typeof(IntPtr))
+            {
+                // UIntPtr (and IntPtr) just cast to their 64 bit value and write that
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Callvirt, binaryWriterPropertyGet);
+                var writeMethod = typeof(BinaryWriter).GetMethod("Write", new Type[] { typeof(long) });
+                System.Diagnostics.Debug.Assert(writeMethod != null, "Could not lookup write method");
+                il.Emit(OpCodes.Ldarga_S, 2);
+                var castMethod = typeof(IntPtr).GetMethod("ToInt64");
+                System.Diagnostics.Debug.Assert(castMethod != null, "Could not lookup ToInt64 method");
+                il.Emit(OpCodes.Call, castMethod);
+                il.Emit(OpCodes.Callvirt, writeMethod);
+
+                // Maybe memoize
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldarg_3);
+                il.Emit(OpCodes.Call, addMemoMethod);
+
+                il.Emit(OpCodes.Ret);
+            }
+            else if (type.Type.IsPrimitive || type.Type == typeof(decimal))
+            {
+                // Lookup the write method for this type
+                var writeMethod = typeof(BinaryWriter).GetMethod("Write", new Type[] { type.Type });
+                System.Diagnostics.Debug.Assert(writeMethod != null, "Could not lookup write method");
+
+                // Primitive type like bool
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Callvirt, binaryWriterPropertyGet);
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Callvirt, writeMethod);
+
+                // Maybe memoize
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldarg_3);
+                il.Emit(OpCodes.Call, addMemoMethod);
+
+                il.Emit(OpCodes.Ret);
+            }
+            else if (type.TypeCode != null)
+            {
+                #region Enumeration
+                // This is an enum, lookup the write method for the inner type
+                Type enumType;
+                switch (type.TypeCode)
                 {
-                    throw new Exception($"Pikala can not serialise type {staticType}, try {sanatizedStaticType}");
+                    case TypeCode.SByte:
+                        enumType = typeof(sbyte);
+                        break;
+                    case TypeCode.Int16:
+                        enumType = typeof(short);
+                        break;
+                    case TypeCode.Int32:
+                        enumType = typeof(int);
+                        break;
+                    case TypeCode.Int64:
+                        enumType = typeof(long);
+                        break;
+
+                    case TypeCode.Byte:
+                        enumType = typeof(byte);
+                        break;
+                    case TypeCode.UInt16:
+                        enumType = typeof(ushort);
+                        break;
+                    case TypeCode.UInt32:
+                        enumType = typeof(uint);
+                        break;
+                    case TypeCode.UInt64:
+                        enumType = typeof(ulong);
+                        break;
+
+                    default:
+                        throw new NotSupportedException($"Invalid type code '{type.TypeCode}' for enumeration");
                 }
+
+                var writeMethod = typeof(BinaryWriter).GetMethod("Write", new Type[] { enumType });
+                System.Diagnostics.Debug.Assert(writeMethod != null, "Could not lookup write method");
+
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Callvirt, binaryWriterPropertyGet);
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Callvirt, writeMethod);
+
+                // Maybe memoize
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldarg_3);
+                il.Emit(OpCodes.Call, addMemoMethod);
+
+                il.Emit(OpCodes.Ret);
+                #endregion
             }
-
-            var typeInfo = GetCachedTypeInfo(staticType);
-            MaybeWriteTypeInfo(state, typeInfo);
-
-            if (IsNullableType(staticType, out var nullableInnerType))
+            else if (type.Type == typeof(string))
             {
+                #region String
+                var earlyReturn = il.DefineLabel();
+
+                // We _might_ have to write out object headers here
+                var prechecked = il.DefineLabel();
+                il.Emit(OpCodes.Ldarg_3);
+                il.Emit(OpCodes.Brtrue, prechecked);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Call, writeObjectOperationMethod);
+                il.Emit(OpCodes.Brtrue, earlyReturn);
+                il.MarkLabel(prechecked);
+
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Callvirt, binaryWriterPropertyGet);
+                var writeMethod = typeof(BinaryWriter).GetMethod("Write", new Type[] { typeof(string) });
+                System.Diagnostics.Debug.Assert(writeMethod != null, "Could not lookup write method");
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Callvirt, writeMethod);
+
+                // Memoize
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Call, addMemoMethod);
+
+                il.MarkLabel(earlyReturn);
+                il.Emit(OpCodes.Ret);
+                #endregion
+            }
+            else if (type.IsNullable)
+            {
+                #region Nullable
                 // Nullable<T> always writes the same way
-                if (Object.ReferenceEquals(obj, null))
-                {
-                    state.Writer.Write(false);
-                    return;
-                }
+                var innerTypeInfo = type.Element;
+                System.Diagnostics.Debug.Assert(innerTypeInfo != null, $"{type.Type} was nullable but Element was null");
+                var innerMethod = GetSerializationMethod(innerTypeInfo);
 
-                state.Writer.Write(true);
-                Serialize(state, obj, nullableInnerType);
-                return;
+                var nullReturn = il.DefineLabel();
+
+                var hasValueProperty = type.Type.GetProperty("HasValue");
+                System.Diagnostics.Debug.Assert(hasValueProperty != null, "Could not lookup HasValue property");
+                System.Diagnostics.Debug.Assert(hasValueProperty.GetMethod != null, "HasValue property had no get method");
+                il.Emit(OpCodes.Ldarga_S, 2);
+                il.Emit(OpCodes.Call, hasValueProperty.GetMethod);
+                il.Emit(OpCodes.Brfalse, nullReturn);
+
+                var writeMethod = typeof(BinaryWriter).GetMethod("Write", new Type[] { typeof(bool) });
+                System.Diagnostics.Debug.Assert(writeMethod != null, "Could not lookup write method");
+
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Callvirt, binaryWriterPropertyGet);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Callvirt, writeMethod);
+
+                var valueProperty = type.Type.GetProperty("Value");
+                System.Diagnostics.Debug.Assert(valueProperty != null, "Could not lookup Value property");
+                System.Diagnostics.Debug.Assert(valueProperty.GetMethod != null, "Value property had no get method");
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldarga_S, 2);
+                il.Emit(OpCodes.Call, valueProperty.GetMethod);
+                il.Emit(OpCodes.Ldarg_3);
+                il.Emit(OpCodes.Call, innerMethod);
+
+                // We can't directly memoize Nullable<T> it would always be boxed, and the inner method should handle this. So just return now.
+
+                il.Emit(OpCodes.Ret);
+
+                il.MarkLabel(nullReturn);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Callvirt, binaryWriterPropertyGet);
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Callvirt, writeMethod);
+                il.Emit(OpCodes.Ret);
+                #endregion
             }
-
-            // If this is a null it doesn't have a runtime type, and if it's memo'd then well we don't care because we just memo'd it. But else we'll be picking how 
-            // to deserialise it based on its type. However often the static type will be sufficent to also tell us the runtime type.
-            Type runtimeType;
-            if (!staticType.IsValueType)
+            else if (type.IsArray)
             {
-                if (Object.ReferenceEquals(obj, null))
+                #region Array
+                // This is an array, write the type then loop over each item.
+                // Theres a performance optimisation we could do here with value types,
+                // we we fetch the handler only once.
+
+                var elementType = type.Element;
+                System.Diagnostics.Debug.Assert(elementType != null, "Element returned null for an array type");
+                var innerMethod = GetSerializationMethod(elementType);
+
+                // Special case szarray (i.e. Rank 1, lower bound 0)
+                var isSZ = type.Type.IsSZArray;
+
+                var write7BitMethod = typeof(BinaryWriter).GetMethod("Write7BitEncodedInt", new Type[] { typeof(int) });
+                System.Diagnostics.Debug.Assert(write7BitMethod != null, "Could not lookup Write7BitEncodedInt method");
+
+                var earlyReturn = il.DefineLabel();
+
+                // We _might_ have to write out object headers here
+                var prechecked = il.DefineLabel();
+                il.Emit(OpCodes.Ldarg_3);
+                il.Emit(OpCodes.Brtrue, prechecked);
+
+                // If not pre-checked we _always_ need to do a memo/null check
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Call, writeObjectOperationMethod);
+                il.Emit(OpCodes.Brtrue, earlyReturn);
+
+                // But we only need to do a type check if this array could be variant.
+                // e.g. an int[] location always holds an int[] runtime value, but an object[] location could hold a string[].
+                // Unexpectedly a Type[] _must_ contain a Type[] because we don't allow other static type.
+                if (!elementType.IsValueType && !elementType.IsSealed)
                 {
-                    state.Writer.Write((byte)ObjectOperation.Null);
-                    return;
+                    il.Emit(OpCodes.Ldarg_0);
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Ldarg_2);
+                    il.Emit(OpCodes.Ldtoken, type.Type);
+                    il.Emit(OpCodes.Callvirt, writeObjectTypeMethod);
+                    il.Emit(OpCodes.Brtrue, earlyReturn);
                 }
 
-                if (state.MaybeWriteMemo(obj, (byte)ObjectOperation.Memo))
+                il.MarkLabel(prechecked);
+
+                // If we get here we know we are trying to write an array of exactly this type.
+
+                LocalBuilder? szLengthLocal = null;
+                var dimensions = 1;
+                if (isSZ)
                 {
-                    return;
-                }
+                    var lengthProperty = type.Type.GetProperty("Length");
+                    System.Diagnostics.Debug.Assert(lengthProperty != null, "Could not lookup Length property");
+                    System.Diagnostics.Debug.Assert(lengthProperty.GetMethod != null, "Length property had no get method");
+                    szLengthLocal = il.DeclareLocal(typeof(int));
 
-                state.Writer.Write((byte)ObjectOperation.Object);
-
-                // If the static type is a reflection type or sealed then we don't need to write out the runtime type
-                // All arrays are sealed but what actually matters for arrays is if the element type is sealed.
-                // e.g. object[] is sealed but we still need to write out the runtime type for, while string[] is 
-                // also sealed but so is string so we don't need to write the runtime type out for it. Likewise
-                // for int[]. This also applies to arrays of reflection objects, we don't need a type definition for 
-                // Type[].
-
-                var rootElementType = GetRootElementType(typeInfo);
-
-                if (reflectionTypes.Contains(rootElementType.Type))
-                {
-                    // Need to check that reflection types are the runtime reflection types, SanatizeType will throw if this is a non-runtime type.
-                    runtimeType = SanatizeType(obj.GetType());
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Callvirt, binaryWriterPropertyGet);
+                    il.Emit(OpCodes.Ldarg_2);
+                    il.Emit(OpCodes.Callvirt, lengthProperty.GetMethod);
+                    il.Emit(OpCodes.Dup);
+                    il.Emit(OpCodes.Stloc, szLengthLocal);
+                    il.Emit(OpCodes.Callvirt, write7BitMethod);
                 }
                 else
                 {
-                    var isSealed = rootElementType.Flags.HasFlag(PickledTypeFlags.IsSealed) || rootElementType.Flags.HasFlag(PickledTypeFlags.IsValueType);
+                    var getLengthMethod = type.Type.GetMethod("GetLength");
+                    System.Diagnostics.Debug.Assert(getLengthMethod != null, "Could not lookup GetLength method");
 
-                    if (isSealed)
+                    var getLowerBoundMethod = type.Type.GetMethod("GetLowerBound");
+                    System.Diagnostics.Debug.Assert(getLowerBoundMethod != null, "Could not lookup GetLowerBound method");
+
+                    // This might just be rank 1 but with non-normal bounds
+                    dimensions = type.Type.GetArrayRank();
+                    for (int dimension = 0; dimension < dimensions; ++dimension)
                     {
-                        System.Diagnostics.Debug.Assert(staticType == obj.GetType(), "Elided runtime type but it didn't match the static type");
+                        il.Emit(OpCodes.Ldarg_1);
+                        il.Emit(OpCodes.Callvirt, binaryWriterPropertyGet);
+                        il.Emit(OpCodes.Ldarg_2);
+                        il.Emit(OpCodes.Ldc_I4, dimension);
+                        il.Emit(OpCodes.Callvirt, getLengthMethod);
+                        il.Emit(OpCodes.Callvirt, write7BitMethod);
 
-                        runtimeType = staticType;
+                        il.Emit(OpCodes.Ldarg_1);
+                        il.Emit(OpCodes.Callvirt, binaryWriterPropertyGet);
+                        il.Emit(OpCodes.Ldarg_2);
+                        il.Emit(OpCodes.Ldc_I4, dimension);
+                        il.Emit(OpCodes.Callvirt, getLowerBoundMethod);
+                        il.Emit(OpCodes.Callvirt, write7BitMethod);
+                    }
+                }
+
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Call, addMemoMethod);
+
+                // Iterate all the items
+                if (isSZ)
+                {
+                    System.Diagnostics.Debug.Assert(szLengthLocal != null, "Length local was not declared for sz array");
+
+                    var startOfLoop = il.DefineLabel();
+                    var endOfLoop = il.DefineLabel();
+                    var indexLocal = il.DeclareLocal(typeof(int));
+
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Stloc, indexLocal);
+
+                    il.MarkLabel(startOfLoop);
+
+                    il.Emit(OpCodes.Ldloc, szLengthLocal);
+                    il.Emit(OpCodes.Ldloc, indexLocal);
+                    il.Emit(OpCodes.Ceq);
+                    il.Emit(OpCodes.Brtrue, endOfLoop);
+
+                    il.Emit(OpCodes.Ldarg_0);
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Ldarg_2);
+                    il.Emit(OpCodes.Ldloc, indexLocal);
+                    il.Emit(OpCodes.Ldelem, elementType.Type);
+                    if (elementType.IsValueType)
+                    {
+                        il.Emit(OpCodes.Ldnull);
                     }
                     else
                     {
-                        runtimeType = SanatizeType(obj.GetType());
-                        SerializeType(state, runtimeType, null, null);
-                        // Don't serialize static fields at this level
-                        state.Stages.PopStages(state, 3);
-                        // This will be a no-op for most well known types but also sealed types which we will of written out for the static value
-                        typeInfo = GetCachedTypeInfo(runtimeType);
-                        MaybeWriteTypeInfo(state, typeInfo);
-                        // Now we can write out static fields (which might serialise this type again)
-                        state.Stages.PopStages(state, 4);
-                        // At this point we _may_ have written out the value as part of circular static fields, so write a maybememo
-                        if (state.MaybeWriteMemo(obj, null)) return;
-                        state.Writer.Write15BitEncodedLong(0);
+                        il.Emit(OpCodes.Ldc_I4_0);
+                    }
+                    il.Emit(OpCodes.Call, innerMethod);
+
+                    il.Emit(OpCodes.Ldloc, indexLocal);
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    il.Emit(OpCodes.Add);
+                    il.Emit(OpCodes.Stloc, indexLocal);
+
+                    il.Emit(OpCodes.Br, startOfLoop);
+                    il.MarkLabel(endOfLoop);
+                }
+                else
+                {
+                    var getLowerBoundMethod = type.Type.GetMethod("GetLowerBound");
+                    System.Diagnostics.Debug.Assert(getLowerBoundMethod != null, "Could not lookup GetLowerBound method");
+
+                    var getUpperBoundMethod = type.Type.GetMethod("GetUpperBound");
+                    System.Diagnostics.Debug.Assert(getUpperBoundMethod != null, "Could not lookup GetUpperBound method");
+
+                    var getMethod = type.Type.GetMethod("Get");
+                    System.Diagnostics.Debug.Assert(getMethod != null, "Could not lookup Get method");
+
+                    // Copy values dimension by dimension
+                    var variables = new (Label, Label, LocalBuilder, LocalBuilder)[dimensions];
+                    for (int dimension = 0; dimension < dimensions; ++dimension)
+                    {
+                        var startOfLoop = il.DefineLabel();
+                        var endOfLoop = il.DefineLabel();
+                        var indexLocal = il.DeclareLocal(typeof(int));
+                        var upperBoundLocal = il.DeclareLocal(typeof(int));
+
+                        il.Emit(OpCodes.Ldarg_2);
+                        il.Emit(OpCodes.Ldc_I4, dimension);
+                        il.Emit(OpCodes.Callvirt, getUpperBoundMethod);
+                        il.Emit(OpCodes.Stloc, upperBoundLocal);
+
+                        variables[dimension] = (startOfLoop, endOfLoop, indexLocal, upperBoundLocal);
+                    }
+
+                    for (int dimension = 0; dimension < dimensions; ++dimension)
+                    {
+                        var (startOfLoop, endOfLoop, indexLocal, upperBoundLocal) = variables[dimension];
+
+                        // Set the index back to the lower bound for this dimension
+                        il.Emit(OpCodes.Ldarg_2);
+                        il.Emit(OpCodes.Ldc_I4, dimension);
+                        il.Emit(OpCodes.Callvirt, getLowerBoundMethod);
+                        il.Emit(OpCodes.Stloc, indexLocal);
+
+                        // And start interating until index is greater than the upper bound and then break out the loop
+                        il.MarkLabel(startOfLoop);
+
+                        // Jump to end if index greater than upperbound, i.e. loop while index <= upperBound
+                        il.Emit(OpCodes.Ldloc, indexLocal);
+                        il.Emit(OpCodes.Ldloc, upperBoundLocal);
+                        il.Emit(OpCodes.Cgt);
+                        il.Emit(OpCodes.Brtrue, endOfLoop);
+                    }
+
+                    // Index into the array and serialize the value
+                    il.Emit(OpCodes.Ldarg_0);
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Ldarg_2);
+                    for (int dimension = 0; dimension < dimensions; ++dimension)
+                    {
+                        var (_, _, indexLocal, _) = variables[dimension];
+                        il.Emit(OpCodes.Ldloc, indexLocal);
+                    }
+                    il.Emit(OpCodes.Callvirt, getMethod);
+                    if (elementType.IsValueType)
+                    {
+                        il.Emit(OpCodes.Ldnull);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Ldc_I4_0);
+                    }
+                    il.Emit(OpCodes.Call, innerMethod);
+
+                    for (int dimension = dimensions - 1; dimension >= 0; --dimension)
+                    {
+                        var (startOfLoop, endOfLoop, indexLocal, upperBoundLocal) = variables[dimension];
+
+                        // Add one to the index and jump back to the start
+                        il.Emit(OpCodes.Ldloc, indexLocal);
+                        il.Emit(OpCodes.Ldc_I4_1);
+                        il.Emit(OpCodes.Add);
+                        il.Emit(OpCodes.Stloc, indexLocal);
+                        il.Emit(OpCodes.Br, startOfLoop);
+
+                        il.MarkLabel(endOfLoop);
                     }
                 }
+
+                il.MarkLabel(earlyReturn);
+                il.Emit(OpCodes.Ret);
+                #endregion
+            }
+            else if (type.TupleArguments != null)
+            {
+                #region Tuple
+                // This is either Tuple or ValueTuple
+                // N.B This isn't for any ITuple as there might be user defined types that inherit from Tuple and it's not safe to pass them in here.
+
+                var earlyReturn = il.DefineLabel();
+                if (!type.Type.IsValueType)
+                {
+                    // We _might_ have to write out object headers here
+                    var prechecked = il.DefineLabel();
+                    il.Emit(OpCodes.Ldarg_3);
+                    il.Emit(OpCodes.Brtrue, prechecked);
+
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Ldarg_2);
+                    il.Emit(OpCodes.Call, writeObjectOperationMethod);
+                    il.Emit(OpCodes.Brtrue, earlyReturn);
+
+                    il.Emit(OpCodes.Ldarg_0);
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Ldarg_2);
+                    il.Emit(OpCodes.Ldtoken, type.Type);
+                    il.Emit(OpCodes.Callvirt, writeObjectTypeMethod);
+                    il.Emit(OpCodes.Brtrue, earlyReturn);
+
+                    il.MarkLabel(prechecked);
+                }
+
+                var index = 0;
+                foreach (var item in type.TupleArguments)
+                {
+                    // Lookup the ItemX (or Rest) property/field and serialize it
+                    index++;
+                    var itemName = index == 8 ? "Rest" : "Item" + index.ToString();
+                    var innerMethod = GetSerializationMethod(item);
+
+                    il.Emit(OpCodes.Ldarg_0);
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Ldarg_2);
+                    if (type.Type.IsValueType)
+                    {
+                        var itemField = type.Type.GetField(itemName);
+                        System.Diagnostics.Debug.Assert(itemField != null, $"Could not lookup {itemName} field");
+                        il.Emit(OpCodes.Ldfld, itemField);
+                    }
+                    else
+                    {
+                        var itemProperty = type.Type.GetProperty(itemName);
+                        System.Diagnostics.Debug.Assert(itemProperty != null, $"Could not lookup {itemName} property");
+                        System.Diagnostics.Debug.Assert(itemProperty.GetMethod != null, "Item property had no get method");
+                        il.Emit(OpCodes.Callvirt, itemProperty.GetMethod);
+                    }
+
+                    if (item.IsValueType)
+                    {
+                        il.Emit(OpCodes.Ldnull);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Ldc_I4_0);
+                    }
+                    il.Emit(OpCodes.Call, innerMethod);
+
+                    // If this is a reference to a tuple (i.e. Tuple, or boxed ValueTuple) then serialising the fields may serialise the tuple itself.
+                    // That is:
+                    //  if (MaybeWriteMemo(tuple)) return;
+                    // MaybeWriteMemo can handle a null input
+                    var skipMemo = il.DefineLabel();
+                    if (type.IsValueType)
+                    {
+                        il.Emit(OpCodes.Ldarg_3);
+                        il.Emit(OpCodes.Brfalse, skipMemo);
+                    }
+                    il.Emit(OpCodes.Ldarg_1);
+                    if (type.Type.IsValueType)
+                    {
+                        il.Emit(OpCodes.Ldarg_3);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Ldarg_2);
+                    }
+                    il.Emit(OpCodes.Call, maybeWriteMemoMethod);
+                    il.Emit(OpCodes.Brtrue, earlyReturn);
+                    il.MarkLabel(skipMemo);
+                }
+
+                // Memoize the result
+                il.Emit(OpCodes.Ldarg_1);
+                if (type.Type.IsValueType)
+                {
+                    il.Emit(OpCodes.Ldarg_3);
+                }
+                else
+                {
+                    il.Emit(OpCodes.Ldarg_2);
+                }
+                il.Emit(OpCodes.Call, addMemoMethod);
+
+                il.MarkLabel(earlyReturn);
+                il.Emit(OpCodes.Ret);
+                #endregion
+            }
+            else if (type.Mode == PickledTypeMode.IsDelegate)
+            {
+                #region Delegate
+                // Delegates are always reference objects, so no worry about boxing here.
+                var writeDelegateMethod = typeof(Pickler).GetMethod("WriteDelegate", BindingFlags.NonPublic | BindingFlags.Instance);
+                System.Diagnostics.Debug.Assert(writeDelegateMethod != null, "Could not lookup WriteDelegate method");
+
+                var earlyReturn = il.DefineLabel();
+                // We _might_ have to write out object headers here
+                var prechecked = il.DefineLabel();
+                il.Emit(OpCodes.Ldarg_3);
+                il.Emit(OpCodes.Brtrue, prechecked);
+
+                // We always need to do a null/memo check here
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Call, writeObjectOperationMethod);
+                il.Emit(OpCodes.Brtrue, earlyReturn);
+
+                il.MarkLabel(prechecked);
+
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Callvirt, writeDelegateMethod);
+
+                il.MarkLabel(earlyReturn);
+                il.Emit(OpCodes.Ret);
+                #endregion
+            }
+            else if (type.IsAbstract)
+            {
+                #region Abstract
+                // Abstract types must do dynamic dispatch
+                var earlyReturn = il.DefineLabel();
+
+                var exceptionConstructor = typeof(Exception).GetConstructor(new Type[] { typeof(string) });
+                System.Diagnostics.Debug.Assert(exceptionConstructor != null, "Could not lookup Exception constructor");
+
+                // If this say's it's prechecked that's a bug!
+                var prechecked = il.DefineLabel();
+                il.Emit(OpCodes.Ldarg_3);
+                il.Emit(OpCodes.Brfalse, prechecked);
+                il.Emit(OpCodes.Ldstr, "Abstract type was called as prechecked");
+                il.Emit(OpCodes.Newobj, exceptionConstructor);
+                il.Emit(OpCodes.Throw);
+                il.MarkLabel(prechecked);
+
+                // We always need to do a null/memo check here
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Call, writeObjectOperationMethod);
+                il.Emit(OpCodes.Brtrue, earlyReturn);
+                // And a type check because this type is abstract
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldarg_2);
+                // Make a zero Nullable<RuntimeTypeHandle>
+                var nullableLocal = il.DeclareLocal(typeof(RuntimeTypeHandle?));
+                il.Emit(OpCodes.Ldloc, nullableLocal);
+                il.Emit(OpCodes.Callvirt, writeObjectTypeMethod);
+                il.Emit(OpCodes.Brtrue, earlyReturn);
+
+                // If we get here something has gone very wrong
+                il.Emit(OpCodes.Ldstr, "Tried to serialize an abstract type");
+                il.Emit(OpCodes.Newobj, exceptionConstructor);
+                il.Emit(OpCodes.Throw);
+
+                il.MarkLabel(earlyReturn);
+                il.Emit(OpCodes.Ret);
+                #endregion
+            }
+            else if (type.Mode == PickledTypeMode.IsReduced)
+            {
+                #region IReducer
+                // Use of an IReducer causes boxing anyway so just cast up to object.
+                var writeReducerMethod = typeof(Pickler).GetMethod("WriteReducer", BindingFlags.NonPublic | BindingFlags.Instance);
+                System.Diagnostics.Debug.Assert(writeReducerMethod != null, "Could not lookup WriteReducer method");
+
+                var earlyReturn = il.DefineLabel();
+                if (!type.IsValueType)
+                {
+                    // We _might_ have to write out object headers here
+                    var prechecked = il.DefineLabel();
+                    il.Emit(OpCodes.Ldarg_3);
+                    il.Emit(OpCodes.Brtrue, prechecked);
+
+                    // We always need to do a null/memo check here
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Ldarg_2);
+                    il.Emit(OpCodes.Call, writeObjectOperationMethod);
+                    il.Emit(OpCodes.Brtrue, earlyReturn);
+
+                    // But we only need to do a type check if the type is not sealed
+                    if (!type.IsSealed)
+                    {
+                        il.Emit(OpCodes.Ldarg_0);
+                        il.Emit(OpCodes.Ldarg_1);
+                        il.Emit(OpCodes.Ldarg_2);
+                        il.Emit(OpCodes.Ldtoken, type.Type);
+                        il.Emit(OpCodes.Callvirt, writeObjectTypeMethod);
+                        il.Emit(OpCodes.Brtrue, earlyReturn);
+                    }
+
+                    il.MarkLabel(prechecked);
+                }
+
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldarg_2);
+                if (type.IsValueType)
+                {
+                    il.Emit(OpCodes.Box);
+                }
+                il.Emit(OpCodes.Callvirt, writeReducerMethod);
+
+                // Memoize the result
+                il.Emit(OpCodes.Ldarg_1);
+                if (type.IsValueType)
+                {
+                    il.Emit(OpCodes.Ldarg_3);
+                }
+                else
+                {
+                    il.Emit(OpCodes.Ldarg_2);
+                }
+                il.Emit(OpCodes.Call, addMemoMethod);
+
+                il.MarkLabel(earlyReturn);
+                il.Emit(OpCodes.Ret);
+                #endregion
+            }
+            else if (type.Mode == PickledTypeMode.IsBuiltin)
+            {
+                throw new Exception($"Unhandled built-in type: {type.Type}");
+            }
+            else 
+            {
+                #region Object
+                // Must be an object, try and dump all it's fields
+                System.Diagnostics.Debug.Assert(type.SerialisedFields != null, "SerialisedFields was null");
+
+                var earlyReturn = il.DefineLabel();
+                if (!type.IsValueType)
+                {
+                    // We _might_ have to write out object headers here
+                    var prechecked = il.DefineLabel();
+                    il.Emit(OpCodes.Ldarg_3);
+                    il.Emit(OpCodes.Brtrue, prechecked);
+
+                    // We always need to do a null/memo check here
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Ldarg_2);
+                    il.Emit(OpCodes.Call, writeObjectOperationMethod);
+                    il.Emit(OpCodes.Brtrue, earlyReturn);
+
+                    // But we only need to do a type check if the type is not sealed
+                    if (!type.IsSealed)
+                    {
+                        il.Emit(OpCodes.Ldarg_0);
+                        il.Emit(OpCodes.Ldarg_1);
+                        il.Emit(OpCodes.Ldarg_2);
+                        il.Emit(OpCodes.Ldtoken, type.Type);
+                        il.Emit(OpCodes.Callvirt, writeObjectTypeMethod);
+                        il.Emit(OpCodes.Brtrue, earlyReturn);
+                    }
+
+                    il.MarkLabel(prechecked);
+                }
+
+                il.Emit(OpCodes.Ldarg_1);
+                if (type.IsValueType)
+                {
+                    il.Emit(OpCodes.Ldarg_3);
+                }
+                else
+                {
+                    il.Emit(OpCodes.Ldarg_2);
+                }
+                il.Emit(OpCodes.Call, addMemoMethod);
+
+                foreach (var (fieldType, field) in type.SerialisedFields)
+                {
+                    var innerMethod = GetSerializationMethod(fieldType);
+
+                    il.Emit(OpCodes.Ldarg_0);
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Ldarg_2);
+                    il.Emit(OpCodes.Ldfld, field);
+                    if (fieldType.IsValueType)
+                    {
+                        il.Emit(OpCodes.Ldnull);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Ldc_I4_0);
+                    }
+                    il.Emit(OpCodes.Call, innerMethod);
+                }
+
+                il.MarkLabel(earlyReturn);
+                il.Emit(OpCodes.Ret);
+                #endregion
+            }
+
+            return dynamicMethod;
+        }
+
+        private void InvokeSerializationMethod(SerialisedObjectTypeInfo typeInfo, PicklerSerializationState state, object? obj, object? memo, bool prechecked)
+        {
+            var serializationMethod = GetSerializationMethod(typeInfo);
+            try
+            {
+                if (typeInfo.IsValueType)
+                {
+                    serializationMethod.Invoke(null, new[] { this, state, obj, memo });
+                }
+                else
+                {
+                    // We're calling a method like Serialize_Tuple`2 here but we now know that 
+                    // A) obj is not null, or memo'd
+                    // B) Is exactly a Tuple`2
+                    // So we pass true for the prechecked
+                    serializationMethod.Invoke(null, new[] { this, state, obj, prechecked });
+                }
+            }
+            catch (TargetInvocationException exc)
+            {
+                System.Diagnostics.Debug.Assert(exc.InnerException != null, "TargetInvocationException.InnerException was null");
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(exc.InnerException);
+            }
+        }
+
+        private static bool MaybeWriteMemo(PicklerSerializationState state, object obj)
+        {
+            System.Diagnostics.Debug.Assert(obj != null, "Should not call MaybeWriteMemo with a null object");
+            var wroteMemo = state.MaybeWriteMemo(obj, null);
+            if (!wroteMemo)
+            {
+                state.Writer.Write15BitEncodedLong(0);
+            }
+            return wroteMemo;
+        }
+
+        /// <summary>
+        /// WriteObjectHeader deals with the common logic that all reference types need to deal with, that is.
+        /// </summary>
+        private static bool WriteObjectOperation(PicklerSerializationState state, [NotNullWhen(false)] object? obj)
+        {
+            if (Object.ReferenceEquals(obj, null))
+            {
+                state.Writer.Write((byte)ObjectOperation.Null);
+                return true;
+            }
+
+            if (state.MaybeWriteMemo(obj, (byte)ObjectOperation.Memo))
+            {
+                return true;
+            }
+
+            state.Writer.Write((byte)ObjectOperation.Object);
+            return false;
+        }
+
+        /// <summary>
+        /// WriteObjectType gets the runtime type of obj, writes out the TypeInfo for it if needed, rechecks the memo state,
+        /// and then checks if it's the expected type. If not it dynamic dispatchs to correct method.
+        /// </summary>
+        private bool WriteObjectType(PicklerSerializationState state, object obj, RuntimeTypeHandle? expectedType)
+        {
+            var runtimeType = obj.GetType();
+            SerializeType(state, runtimeType, null, null);
+            // Don't serialize static fields at this level
+            state.Stages.PopStages(state, 3);
+            // Get the type info for this type
+            var typeInfo = GetCachedTypeInfo(runtimeType);
+            MaybeWriteTypeInfo(state, typeInfo);
+            // Now we can write out static fields (which might serialise this type again)
+            state.Stages.PopStages(state, 4);
+            // At this point we _may_ have written out the value as part of circular static fields, so write a maybememo
+            if (state.MaybeWriteMemo(obj, null)) return true;
+            state.Writer.Write15BitEncodedLong(0);
+
+            // If runtimeType == expected then return that this expected type needs writing,
+            // else dynamic dispatch to the correct type but tell it headers are already set
+            if (expectedType.HasValue && runtimeType == expectedType.Value) return false;
+
+            InvokeSerializationMethod(typeInfo, state, obj, obj, true);
+            return true;
+        }
+
+        private void WriteReducer(PicklerSerializationState state, object obj)
+        {
+            // We know obj is not null by this point
+            var runtimeType = obj.GetType();
+            var typeInfo = GetCachedTypeInfo(runtimeType);
+
+            System.Diagnostics.Debug.Assert(typeInfo.Reducer != null, "Called WriteReducer for a type without a reducer");
+
+            // We've got a reducer for the type (or its generic variant)
+            var (method, target, args) = typeInfo.Reducer.Reduce(obj);
+
+            SerializeMethodBase(state, method);
+
+            // Assert properties of the reduction
+            if (method is ConstructorInfo constructorInfo)
+            {
+                if (target != null)
+                {
+                    throw new Exception($"Invalid reduction for type '{runtimeType}'. MethodBase was a ConstructorInfo but Target was not null.");
+                }
+
+                if (constructorInfo.DeclaringType != runtimeType)
+                {
+                    throw new Exception($"Invalid reduction for type '{runtimeType}'. MethodBase was a ConstructorInfo for '{constructorInfo.DeclaringType}'.");
+                }
+
+                // We don't write target for ConstructorInfo, it must be null.
+            }
+            else if (method is MethodInfo methodInfo)
+            {
+                if (methodInfo.ReturnType != runtimeType)
+                {
+                    throw new Exception($"Invalid reduction for type '{runtimeType}'. MethodBase was a MethodInfo that returns '{methodInfo.ReturnType}'.");
+                }
+
+                Serialize_Object(this, state, target, false);
             }
             else
             {
-                System.Diagnostics.Debug.Assert(obj != null, "Static type was a ValueType but obj was null");
-                System.Diagnostics.Debug.Assert(staticType == obj.GetType(), "Static type was a ValueType but didn't match runtime type");
-                runtimeType = staticType;
+                throw new Exception($"Invalid reduction for type '{runtimeType}'. MethodBase was '{method}'.");
             }
 
-            System.Diagnostics.Debug.Assert(obj != null, "Object was unexpectedly null");
-
-            if (runtimeType.IsEnum)
+            state.Writer.Write7BitEncodedInt(args.Length);
+            foreach (var arg in args)
             {
-                // typeCode for an enum will be something like Int32
-                WriteEnumerationValue(state.Writer, Type.GetTypeCode(runtimeType), obj);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
+                Serialize_Object(this, state, arg, false);
             }
-
-            else if (obj is Array arr)
-            {
-                SerializeArray(state, arr, runtimeType);
-                return;
-            }
-
-            else if (obj is FieldInfo fieldInfo)
-            {
-                SerializeFieldInfo(state, fieldInfo, false);
-                state.Stages.PopStages(state);
-                return;
-            }
-            else if (obj is PropertyInfo propertyInfo)
-            {
-                SerializePropertyInfo(state, propertyInfo, false);
-                state.Stages.PopStages(state);
-                return;
-            }
-            else if (obj is EventInfo eventInfo)
-            {
-                SerializeEventInfo(state, eventInfo, false);
-                state.Stages.PopStages(state);
-                return;
-            }
-            else if (obj is MethodInfo methodInfo)
-            {
-                SerializeMethodInfo(state, methodInfo, false);
-                state.Stages.PopStages(state);
-                return;
-            }
-            else if (obj is ConstructorInfo constructorInfo)
-            {
-                SerializeConstructorInfo(state, constructorInfo, false);
-                state.Stages.PopStages(state);
-                return;
-            }
-
-            else if (obj is MulticastDelegate multicastDelegate)
-            {
-                SerializeMulticastDelegate(state, multicastDelegate);
-                return;
-            }
-
-            else if (IsTupleType(runtimeType))
-            {
-                // N.B This isn't for any ITuple there might be user defined types that inherit from Tuple and it's not safe to pass them in here.
-                SerializeTuple(state, staticType.IsValueType, (System.Runtime.CompilerServices.ITuple)obj, runtimeType.GetGenericArguments());
-                return;
-            }
-
-            if (runtimeType == typeof(bool))
-            {
-                state.Writer.Write((bool)obj);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-            else if (runtimeType == typeof(char))
-            {
-                state.Writer.Write((char)obj);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-            else if (runtimeType == typeof(byte))
-            {
-                state.Writer.Write((byte)obj);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-            else if (runtimeType == typeof(ushort))
-            {
-                state.Writer.Write((ushort)obj);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-            else if (runtimeType == typeof(uint))
-            {
-                state.Writer.Write((uint)obj);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-            else if (runtimeType == typeof(ulong))
-            {
-                state.Writer.Write((ulong)obj);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-            else if (runtimeType == typeof(sbyte))
-            {
-                state.Writer.Write((sbyte)obj);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-            else if (runtimeType == typeof(short))
-            {
-                state.Writer.Write((short)obj);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-            else if (runtimeType == typeof(int))
-            {
-                state.Writer.Write((int)obj);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-            else if (runtimeType == typeof(long))
-            {
-                state.Writer.Write((long)obj);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-            else if (runtimeType == typeof(float))
-            {
-                state.Writer.Write((float)obj);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-            else if (runtimeType == typeof(double))
-            {
-                state.Writer.Write((double)obj);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-            else if (runtimeType == typeof(decimal))
-            {
-                state.Writer.Write((decimal)obj);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-            else if (runtimeType == typeof(UIntPtr))
-            {
-                state.Writer.Write(((UIntPtr)obj).ToUInt64());
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-            else if (runtimeType == typeof(IntPtr))
-            {
-                state.Writer.Write(((IntPtr)obj).ToInt64());
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-            else if (runtimeType == typeof(DBNull))
-            {
-                return;
-            }
-            else if (runtimeType == typeof(string))
-            {
-                state.Writer.Write((string)obj);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-
-            else if (obj is Assembly assembly)
-            {
-                SerializeAssembly(state, assembly, false);
-                state.Stages.PopStages(state);
-                return;
-            }
-            else if (obj is Module module)
-            {
-                SerializeModule(state, module, false);
-                state.Stages.PopStages(state);
-                return;
-            }
-            else if (obj is Type type)
-            {
-                SerializeType(state, type, null, null, false);
-                state.Stages.PopStages(state);
-                return;
-            }
-
-            else if (typeInfo.Reducer != null)
-            {
-                SerializeReducer(state, obj, typeInfo.Reducer, runtimeType);
-                AddMemo(state, staticType.IsValueType, obj);
-                return;
-            }
-
-            System.Diagnostics.Debug.Assert(typeInfo.SerialisedFields != null);
-            AddMemo(state, staticType.IsValueType, obj);
-            SerializeObject(state, obj, typeInfo.SerialisedFields);
-            return;
         }
+
+        private void WriteDelegate(PicklerSerializationState state, Delegate obj)
+        {
+            // Delegates are just a target and a method
+            var invocationList = obj.GetInvocationList();
+            state.Writer.Write7BitEncodedInt(invocationList.Length);
+
+            // We need to memoise delegates correctly, if the invocation list has a single element we write out the target and method,
+            // but if the invocation list has multiple elements we need to recurse them through Serialize so they can be memoised correctly
+            if (invocationList.Length == 1)
+            {
+                Serialize_Object(this, state, invocationList[0].Target, false);
+                // Serialise the sub-objects may recurse and serialise this delegate so early out if that's the case
+                if (state.MaybeWriteMemo(obj, null)) return;
+                state.Writer.Write15BitEncodedLong(0);
+                
+                Serialize_MethodInfo(this, state, invocationList[0].Method, false);
+                if (state.MaybeWriteMemo(obj, null)) return;
+                state.Writer.Write15BitEncodedLong(0);
+            }
+            else
+            {
+                foreach (var invocation in invocationList)
+                {
+                    Serialize_Delegate(this, state, invocation, false);
+                    if (state.MaybeWriteMemo(obj, null)) return;
+                    state.Writer.Write15BitEncodedLong(0);
+                }
+            }
+            AddMemo(state, obj);
+        }
+
+        #region Built in serialization methods
+        private static void Serialize_Object(Pickler self, PicklerSerializationState state, object? obj, bool prechecked)
+        {
+            // It's known that this IS a System.Object and it's not null or memo'd
+            if (!prechecked)
+            {
+                if (WriteObjectOperation(state, obj))
+                {
+                    return;
+                }
+                if (self.WriteObjectType(state, obj, typeof(object).TypeHandle))
+                {
+                    return;
+                }
+            }
+            // Don't need to actually write anything for System.Object
+        }
+
+        private static void Serialize_Delegate(Pickler self, PicklerSerializationState state, Delegate? obj, bool prechecked)
+        {
+            System.Diagnostics.Debug.Assert(!prechecked, "Serialize_Delegate was called as prechecked");
+
+            if (WriteObjectOperation(state, obj))
+            {
+                return;
+            }
+            if (self.WriteObjectType(state, obj, null))
+            {
+                return;
+            }
+
+            throw new Exception("Tried to serialize an abstract Delegate");
+        }
+
+        private static void Serialize_Type(Pickler self, PicklerSerializationState state, Type? obj, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (WriteObjectOperation(state, obj))
+                {
+                    return;
+                }
+            }
+
+            System.Diagnostics.Debug.Assert(obj != null, "Type was null but was prechecked");
+            self.SerializeType(state, obj, null, null, false);
+            state.Stages.PopStages(state);
+        }
+
+        private static void Serialize_Module(Pickler self, PicklerSerializationState state, Module? obj, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (WriteObjectOperation(state, obj))
+                {
+                    return;
+                }
+            }
+
+            System.Diagnostics.Debug.Assert(obj != null, "Module was null but was prechecked");
+            self.SerializeModule(state, obj, false);
+            state.Stages.PopStages(state);
+        }
+
+        private static void Serialize_Assembly(Pickler self, PicklerSerializationState state, Assembly? obj, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (WriteObjectOperation(state, obj))
+                {
+                    return;
+                }
+            }
+
+            System.Diagnostics.Debug.Assert(obj != null, "Assembly was null but was prechecked");
+            self.SerializeAssembly(state, obj, false);
+            state.Stages.PopStages(state);
+        }
+
+        private static void Serialize_MethodInfo(Pickler self, PicklerSerializationState state, MethodInfo? obj, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (WriteObjectOperation(state, obj))
+                {
+                    return;
+                }
+            }
+
+            System.Diagnostics.Debug.Assert(obj != null, "MethodInfo was null but was prechecked");
+            self.SerializeMethodInfo(state, obj, false);
+            state.Stages.PopStages(state);
+        }
+
+        private static void Serialize_DynamicMethod(Pickler self, PicklerSerializationState state, DynamicMethod? obj, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (WriteObjectOperation(state, obj))
+                {
+                    return;
+                }
+            }
+
+            System.Diagnostics.Debug.Assert(obj != null, "DynamicMethod was null but was prechecked");
+            self.SerializeMethodInfo(state, obj, false);
+            state.Stages.PopStages(state);
+        }
+
+        private static void Serialize_ConstructorInfo(Pickler self, PicklerSerializationState state, ConstructorInfo? obj, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (WriteObjectOperation(state, obj))
+                {
+                    return;
+                }
+            }
+
+            System.Diagnostics.Debug.Assert(obj != null, "ConstructorInfo was null but was prechecked");
+            self.SerializeConstructorInfo(state, obj, false);
+            state.Stages.PopStages(state);
+        }
+
+        private static void Serialize_FieldInfo(Pickler self, PicklerSerializationState state, FieldInfo? obj, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (WriteObjectOperation(state, obj))
+                {
+                    return;
+                }
+            }
+
+            System.Diagnostics.Debug.Assert(obj != null, "FieldInfo was null but was prechecked");
+            self.SerializeFieldInfo(state, obj, false);
+            state.Stages.PopStages(state);
+        }
+
+        private static void Serialize_PropertyInfo(Pickler self, PicklerSerializationState state, PropertyInfo? obj, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (WriteObjectOperation(state, obj))
+                {
+                    return;
+                }
+            }
+
+            System.Diagnostics.Debug.Assert(obj != null, "PropertyInfo was null but was prechecked");
+            self.SerializePropertyInfo(state, obj, false);
+            state.Stages.PopStages(state);
+        }
+
+        private static void Serialize_EventInfo(Pickler self, PicklerSerializationState state, EventInfo? obj, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (WriteObjectOperation(state, obj))
+                {
+                    return;
+                }
+            }
+
+            System.Diagnostics.Debug.Assert(obj != null, "EventInfo was null but was prechecked");
+            self.SerializeEventInfo(state, obj, false);
+            state.Stages.PopStages(state);
+        }
+
+        private static void Serialize_Pickler(Pickler self, PicklerSerializationState state, Pickler? obj, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (WriteObjectOperation(state, obj))
+                {
+                    return;
+                }
+            }
+
+            System.Diagnostics.Debug.Assert(obj != null, "Pickler was null but was prechecked");
+
+            // TODO: We should work out how to serialize Pickler itself, but for now skip it.
+            //Serialize_Object(self, state, obj.AssemblyLoadContext, false);
+            //Serialize_Object(self, state, obj._assemblyPickleMode, false);
+            //Serialize_Object(self, state, obj._reducers.Values.ToArray(), false);
+            AddMemo(state, obj);
+        }
+        #endregion
 
         public void Serialize(Stream stream, object? rootObject)
         {
@@ -2589,7 +3095,7 @@ namespace Ibasa.Pikala
             state.Writer.Write7BitEncodedInt(Environment.Version.Major);
             state.Writer.Write7BitEncodedInt(Environment.Version.Minor);
 
-            Serialize(state, rootObject, typeof(object));
+            Serialize_Object(this, state, rootObject, false);
             state.Stages.AssertEmpty();
         }
     }

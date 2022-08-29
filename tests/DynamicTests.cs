@@ -48,12 +48,13 @@ namespace Ibasa.Pikala.Tests
             var module = assembly.DefineDynamicModule("main");
             var type = module.DefineType("test");
             // We haven't created this type so we can't load it
+            // We should try to fix this so we can write TypeBuilders
             var exc = Assert.Throws<Exception>(() =>
             {
                 var _ = RoundTrip.Do<Type>(pickler, type);
             });
 
-            Assert.Contains("Type 'System.Reflection.Emit.TypeBuilder' is not automaticly serializable as it inherits from Type.", exc.Message);
+            Assert.Contains("Could not load type 'test' from module '<In Memory Module>'", exc.Message);
         }
 
         [Fact]

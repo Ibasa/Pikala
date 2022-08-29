@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace Ibasa.Pikala.Tests
 {
@@ -25,6 +26,42 @@ namespace Ibasa.Pikala.Tests
             public override int GetHashCode()
             {
                 return HashCode.Combine(X, Y, Z);
+            }
+        }
+
+        public abstract class BaseClassWithPrivateFields
+        {
+            private int _x;
+
+            public BaseClassWithPrivateFields(int x)
+            {
+                _x = x;
+            }
+
+            public int X => _x;
+        }
+
+        public sealed class DerivedClassWithPrivateFields : BaseClassWithPrivateFields
+        {
+            private int _x;
+
+            public DerivedClassWithPrivateFields(int x, int y) : base(y)
+            {
+                _x = x;
+            }
+
+            public override bool Equals(object obj)
+            {
+                if (obj is DerivedClassWithPrivateFields other)
+                {
+                    return X == other.X && _x == other._x;
+                }
+                return false;
+            }
+
+            public override int GetHashCode()
+            {
+                return HashCode.Combine(_x, X);
             }
         }
 

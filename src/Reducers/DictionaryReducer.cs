@@ -15,8 +15,9 @@ namespace Ibasa.Pikala.Reducers
 
         public Type Type => _dictionary;
 
-        public (MethodBase, object?, object[]) Reduce(Type type, object obj)
+        public (MethodBase, object?, object[]) Reduce(object obj)
         {
+            var type = obj.GetType();
             var getComparer = type.GetMethod("get_Comparer");
             var getEnumerator = type.GetMethod("GetEnumerator");
             var getCount = type.GetProperty("Count").GetGetMethod();

@@ -2,6 +2,7 @@
 using System.Reflection;
 using System.Reflection.Emit;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Ibasa.Pikala.Tests
 {
@@ -404,8 +405,50 @@ namespace Ibasa.Pikala.Tests
             }
 
             // This should fail
-            var exc = Assert.Throws<Exception>(() => RoundTrip.Do<Assembly>(pickler, typeAssembly));
+            var exc = Assert.Throws<MissingFieldException>(() => RoundTrip.Do<Assembly>(pickler, typeAssembly));
             Assert.Contains("Could not load field 'Tag' from type 'MyAttribute'", exc.Message);
+        }
+
+        [Fact]
+        public void TestModuleField()
+        {
+            var pickler = Utils.CreateIsolatedPickler();
+
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestModuleField"), AssemblyBuilderAccess.RunAndCollect);
+            var module = assembly.DefineDynamicModule("main");
+
+            var moduleField = module.DefineInitializedData("field", new byte[] { 1, 2 }, FieldAttributes.Public);
+            module.CreateGlobalFunctions();
+
+            var fieldInfo = module.GetField("field");
+            Assert.NotNull(fieldInfo);
+
+            var rebuiltField = RoundTrip.Do(pickler, fieldInfo);
+            Assert.Equal("field", rebuiltField.Name);
+            Assert.Equal(FieldAttributes.Public | FieldAttributes.Static | FieldAttributes.HasFieldRVA, rebuiltField.Attributes);
+        }
+
+        [Fact(Skip="Not yet working")]
+        public void TestModuleMethod()
+        {
+            var pickler = Utils.CreateIsolatedPickler();
+
+            var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("TestModuleMethod"), AssemblyBuilderAccess.RunAndCollect);
+            var module = assembly.DefineDynamicModule("main");
+
+            var moduleMethod = module.DefineGlobalMethod("method", MethodAttributes.Public | MethodAttributes.Static, typeof(int), null);
+            var getgen = moduleMethod.GetILGenerator();
+            getgen.Emit(OpCodes.Newobj, typeof(int));
+            getgen.Emit(OpCodes.Ret);
+
+            module.CreateGlobalFunctions();
+
+            // Get the methodInfo
+            var methodInfo = module.GetMethod("method");
+            Assert.NotNull(methodInfo);
+
+            var rebuiltMethod = RoundTrip.Do(pickler, methodInfo);
+            Assert.Equal("method", rebuiltMethod.Name);
         }
     }
 }

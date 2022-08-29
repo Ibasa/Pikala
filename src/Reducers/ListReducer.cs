@@ -15,8 +15,9 @@ namespace Ibasa.Pikala.Reducers
 
         public Type Type => _list;
 
-        public (MethodBase, object?, object[]) Reduce(Type type, object obj)
+        public (MethodBase, object?, object[]) Reduce(object obj)
         {
+            var type = obj.GetType();
             var toArray = type.GetMethod("ToArray");
 
             var genericParameters = type.GetGenericArguments();
