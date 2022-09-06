@@ -46,14 +46,14 @@ namespace Ibasa.Pikala
 
     public sealed class MissingFieldException : System.Exception
     {
-        public MissingFieldException(Module declaringModule, string field) 
+        public MissingFieldException(Module declaringModule, string field)
             : base($"Could not load field '{field}' from module '{declaringModule}'")
         {
             Module = declaringModule;
             Field = field;
         }
 
-        public MissingFieldException(Type declaringType, string field) 
+        public MissingFieldException(Type declaringType, string field)
             : base($"Could not load field '{field}' from type '{declaringType}'")
         {
             Module = declaringType.Module;

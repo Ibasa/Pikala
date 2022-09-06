@@ -428,7 +428,7 @@ namespace Ibasa.Pikala.Tests
             Assert.Equal(FieldAttributes.Public | FieldAttributes.Static | FieldAttributes.HasFieldRVA, rebuiltField.Attributes);
         }
 
-        [Fact(Skip="Not yet working")]
+        [Fact(Skip = "Not yet working")]
         public void TestModuleMethod()
         {
             var pickler = Utils.CreateIsolatedPickler();

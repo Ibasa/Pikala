@@ -312,9 +312,9 @@ namespace Ibasa.Pikala
                 var serializeMethodInfoMethod = typeof(Pickler).GetMethod("Serialize_MethodInfo", BindingFlags.NonPublic | BindingFlags.Static);
                 System.Diagnostics.Debug.Assert(serializeMethodInfoMethod != null, "Could not lookup Serialize_MethodInfo method");
                 _serializationMethods.Add(runtimeMethodInfoType, serializeMethodInfoMethod);
-                
+
                 var serializeDynamicMethodMethod = typeof(Pickler).GetMethod("Serialize_DynamicMethod", BindingFlags.NonPublic | BindingFlags.Static);
-                System.Diagnostics.Debug.Assert(serializeDynamicMethodMethod != null, "Could not lookup Serialize_DynamicMethod method");                
+                System.Diagnostics.Debug.Assert(serializeDynamicMethodMethod != null, "Could not lookup Serialize_DynamicMethod method");
                 _serializationMethods.Add(typeof(DynamicMethod), serializeDynamicMethodMethod);
 
                 var serializeConstructorInfoMethod = typeof(Pickler).GetMethod("Serialize_ConstructorInfo", BindingFlags.NonPublic | BindingFlags.Static);
@@ -336,7 +336,7 @@ namespace Ibasa.Pikala
 
                 var serializePicklerMethod = typeof(Pickler).GetMethod("Serialize_Pickler", BindingFlags.NonPublic | BindingFlags.Static);
                 System.Diagnostics.Debug.Assert(serializePicklerMethod != null, "Could not lookup Serialize_Pickler method");
-                _serializationMethods.Add(typeof(Pickler), serializePicklerMethod);                
+                _serializationMethods.Add(typeof(Pickler), serializePicklerMethod);
             }
         }
 
@@ -355,7 +355,7 @@ namespace Ibasa.Pikala
             {
                 var fields = t.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
                 // Sort the fields by name so we serialise in deterministic order
-                foreach(var field in fields.OrderBy(field => field.Name))
+                foreach (var field in fields.OrderBy(field => field.Name))
                 {
                     // Skip literal fields
                     if (field.IsLiteral) continue;

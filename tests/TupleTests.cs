@@ -28,6 +28,11 @@ namespace Ibasa.Pikala.Tests
                 }
                 return false;
             }
+
+            public override int GetHashCode()
+            {
+                throw new NotImplementedException();
+            }
         }
 
 

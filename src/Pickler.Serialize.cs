@@ -1933,17 +1933,17 @@ namespace Ibasa.Pikala
             // Or (Pickler, PicklerSerializationState, T, object?) for value types.
             // Where the object? parameter is non-null if the value type is boxed.
             Type[] dynamicParameters;
-            if (type.Type.IsValueType) 
+            if (type.Type.IsValueType)
             {
                 dynamicParameters = new Type[] { typeof(Pickler), typeof(PicklerSerializationState), type.Type, typeof(object) };
-            } 
-            else 
+            }
+            else
             {
                 dynamicParameters = new Type[] { typeof(Pickler), typeof(PicklerSerializationState), type.Type, typeof(bool) };
             }
 
             // All other types we build a dynamic method for it.
-            var dynamicMethod = new DynamicMethod("Serialize_" + type.Type.Name,typeof(void),dynamicParameters,typeof(Pickler));
+            var dynamicMethod = new DynamicMethod("Serialize_" + type.Type.Name, typeof(void), dynamicParameters, typeof(Pickler));
             _serializationMethods.Add(type.Type, dynamicMethod);
 
             var il = dynamicMethod.GetILGenerator();
@@ -1960,7 +1960,7 @@ namespace Ibasa.Pikala
             System.Diagnostics.Debug.Assert(writeObjectTypeMethod != null, "Could not lookup WriteObjectType method");
 
             // All methods need the memo methods (yes even value types because they could have been boxed)
-            var addMemoMethod = typeof(Pickler).GetMethod("AddMemo", BindingFlags.NonPublic | BindingFlags.Static, new Type[] { typeof(PicklerSerializationState), typeof(object)});
+            var addMemoMethod = typeof(Pickler).GetMethod("AddMemo", BindingFlags.NonPublic | BindingFlags.Static, new Type[] { typeof(PicklerSerializationState), typeof(object) });
             System.Diagnostics.Debug.Assert(addMemoMethod != null, "Could not lookup AddMemo method");
             var maybeWriteMemoMethod = typeof(Pickler).GetMethod("MaybeWriteMemo", BindingFlags.NonPublic | BindingFlags.Static, new Type[] { typeof(PicklerSerializationState), typeof(object) });
             System.Diagnostics.Debug.Assert(maybeWriteMemoMethod != null, "Could not lookup MaybeWriteMemo method");
@@ -2659,7 +2659,7 @@ namespace Ibasa.Pikala
             {
                 throw new Exception($"Unhandled built-in type: {type.Type}");
             }
-            else 
+            else
             {
                 #region Object
                 // Must be an object, try and dump all it's fields
@@ -2877,7 +2877,7 @@ namespace Ibasa.Pikala
                 // Serialise the sub-objects may recurse and serialise this delegate so early out if that's the case
                 if (state.MaybeWriteMemo(obj, null)) return;
                 state.Writer.Write15BitEncodedLong(0);
-                
+
                 Serialize_MethodInfo(this, state, invocationList[0].Method, false);
                 if (state.MaybeWriteMemo(obj, null)) return;
                 state.Writer.Write15BitEncodedLong(0);
