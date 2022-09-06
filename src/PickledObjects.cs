@@ -21,9 +21,8 @@ namespace Ibasa.Pikala
         IsEnum = 0,
         IsDelegate = 1,
         IsReduced = 2,
-        IsAutoSerialisedObject = 4,
-
-        IsReflectionObject = 256,
+        IsAutoSerialisedObject = 3,
+        IsError = 4,
     }
 
     struct GenericTypeContext

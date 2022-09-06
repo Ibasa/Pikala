@@ -1791,14 +1791,14 @@ namespace Ibasa.Pikala
 
             state.Writer.Write((byte)ObjectOperation.Object);
 
+            SerializeType(state, methodBase.GetType(), null, null);
+
             if (methodBase is MethodInfo methodInfo)
             {
-                SerializeType(state, typeof(MethodInfo), null, null);
                 SerializeMethodInfo(state, methodInfo, false);
             }
             else if (methodBase is ConstructorInfo constructorInfo)
             {
-                SerializeType(state, typeof(ConstructorInfo), null, null);
                 SerializeConstructorInfo(state, constructorInfo, false);
             }
             else
@@ -1821,34 +1821,30 @@ namespace Ibasa.Pikala
 
             state.Writer.Write((byte)ObjectOperation.Object);
 
+            SerializeType(state, memberInfo.GetType(), null, null);
+
             if (memberInfo is MethodInfo methodInfo)
             {
-                SerializeType(state, typeof(MethodInfo), null, null);
                 SerializeMethodInfo(state, methodInfo, false);
             }
             else if (memberInfo is ConstructorInfo constructorInfo)
             {
-                SerializeType(state, typeof(ConstructorInfo), null, null);
                 SerializeConstructorInfo(state, constructorInfo, false);
             }
             else if (memberInfo is FieldInfo fieldInfo)
             {
-                SerializeType(state, typeof(FieldInfo), null, null);
                 SerializeFieldInfo(state, fieldInfo, false);
             }
             else if (memberInfo is PropertyInfo propertyInfo)
             {
-                SerializeType(state, typeof(PropertyInfo), null, null);
                 SerializePropertyInfo(state, propertyInfo, false);
             }
             else if (memberInfo is EventInfo eventInfo)
             {
-                SerializeType(state, typeof(EventInfo), null, null);
                 SerializeEventInfo(state, eventInfo, false);
             }
             else if (memberInfo is Type type)
             {
-                SerializeType(state, typeof(Type), null, null);
                 SerializeType(state, type, null, null, false);
             }
             else
@@ -1870,12 +1866,16 @@ namespace Ibasa.Pikala
                 state.Writer.Write((byte)(mode << 4 | flags));
             }
 
-            if (info.Mode == PickledTypeMode.IsEnum)
+            if (info.Mode == PickledTypeMode.IsError)
+            {
+                state.Writer.Write(info.Error!);
+            }
+            else if (info.Mode == PickledTypeMode.IsEnum)
             {
                 // If it's an enum write out the typecode, we need to ensure we read back the same type code size
                 state.Writer.Write((byte)info.TypeCode);
             }
-            if (info.Mode == PickledTypeMode.IsAutoSerialisedObject)
+            else if (info.Mode == PickledTypeMode.IsAutoSerialisedObject)
             {
                 System.Diagnostics.Debug.Assert(info.SerialisedFields != null, "Mode was IsAutoSerialisedObject but SerialisedFields was null");
 
@@ -1890,7 +1890,7 @@ namespace Ibasa.Pikala
             }
 
             // Array, Nullable and Tuple need their subtypes written out
-            if (info.Element != null)
+            else if (info.Element != null)
             {
                 MaybeWriteTypeInfo(state, info.Element);
             }
@@ -2742,10 +2742,6 @@ namespace Ibasa.Pikala
                 }
                 else
                 {
-                    // We're calling a method like Serialize_Tuple`2 here but we now know that 
-                    // A) obj is not null, or memo'd
-                    // B) Is exactly a Tuple`2
-                    // So we pass true for the prechecked
                     serializationMethod.Invoke(null, new[] { this, state, obj, prechecked });
                 }
             }
@@ -2810,6 +2806,10 @@ namespace Ibasa.Pikala
             // else dynamic dispatch to the correct type but tell it headers are already set
             if (expectedType.HasValue && runtimeType == expectedType.Value) return false;
 
+            // We're calling a method like Deserialize_Tuple`2 here but we now know that 
+            // A) obj is not null, or memo'd
+            // B) Is exactly a Tuple`2
+            // So we pass true for the prechecked
             InvokeSerializationMethod(typeInfo, state, obj, obj, true);
             return true;
         }
