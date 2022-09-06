@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.29806.167
+# Visual Studio Version 17
+VisualStudioVersion = 17.3.32819.101
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Ibasa.Pikala", "src\Ibasa.Pikala.csproj", "{C2EAA9E7-EB2A-4C73-AA39-65F284B79954}"
 EndProject
@@ -18,6 +18,11 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{14D4FC7A-4E2D-4CE2-8B9C-9E5DF109A075}"
 	ProjectSection(SolutionItems) = preProject
 		.github\workflows\dotnetcore.yml = .github\workflows\dotnetcore.yml
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".devcontainer", ".devcontainer", "{0918ADC4-1F4B-4FA4-B1A2-CF7183F5A587}"
+	ProjectSection(SolutionItems) = preProject
+		.devcontainer\Dockerfile = .devcontainer\Dockerfile
 	EndProjectSection
 EndProject
 Global
@@ -41,6 +46,7 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{2265D6DD-2250-4856-9AA8-B1E4C84B55D5} = {A7394B44-62D7-4E61-BFDE-2960DCCDF1D7}
 		{14D4FC7A-4E2D-4CE2-8B9C-9E5DF109A075} = {2265D6DD-2250-4856-9AA8-B1E4C84B55D5}
+		{0918ADC4-1F4B-4FA4-B1A2-CF7183F5A587} = {A7394B44-62D7-4E61-BFDE-2960DCCDF1D7}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D7EB2E54-3B51-45A9-8B71-E61981D3DAB4}

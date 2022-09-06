@@ -1,0 +1,16 @@
+{
+  "name": "Pikala",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csharp"
+      ]
+    }
+  },
+
+  "remoteUser": "vscode"
+}
