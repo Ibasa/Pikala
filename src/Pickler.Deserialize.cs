@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Reflection.Metadata;
+using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 using System.Xml.Linq;
 
@@ -11,6 +14,27 @@ namespace Ibasa.Pikala
 {
     public sealed partial class Pickler
     {
+        /// <summary>
+        /// This is used for codegen
+        /// </summary>
+        [return: NotNull]
+        private static T AddMemo<T>([DisallowNull] T value, PicklerDeserializationState state, bool memo)
+        {
+            if (memo)
+            {
+                object obj = value;
+                System.Diagnostics.Debug.Assert(ShouldMemo(obj), "Tried to call AddMemo for an object that shouldn't be memoised");
+                state.AddMemo(obj);
+            }
+            return value;
+        }
+
+        private static void AddMemo(PicklerDeserializationState state, object obj)
+        {
+            System.Diagnostics.Debug.Assert(ShouldMemo(obj), "Tried to call AddMemo for an object that shouldn't be memoised");
+            state.AddMemo(obj);
+        }
+
         private static object ReadEnumerationValue(BinaryReader reader, TypeCode typeCode)
         {
             switch (typeCode)
@@ -414,7 +438,7 @@ namespace Ibasa.Pikala
 
                     case OperandType.InlineField:
                         {
-                            var fieldInfo = DeserializeFieldInfo(state);
+                            var fieldInfo = DeserializeFieldInfo(state, false);
                             ilGenerator.Emit(opCode, fieldInfo.FieldInfo);
                             break;
                         }
@@ -572,7 +596,7 @@ namespace Ibasa.Pikala
         {
             var typeContext = new GenericTypeContext(constructingType.GenericParameters);
 
-            state.SetMemo(true, constructingType);
+            AddMemo(state, constructingType);
 
             state.Stages.PushStage2(state =>
             {
@@ -822,7 +846,7 @@ namespace Ibasa.Pikala
                             }
 
                             var typeInfo = GetOrReadSerialisedObjectTypeInfo(state, fieldInfo.FieldType);
-                            var fieldValue = Deserialize(state, fieldInfo.FieldType);
+                            var fieldValue = InvokeDeserializationMethod(typeInfo, state, false);
                             fieldInfo.SetValue(null, fieldValue);
                         }
                     });
@@ -874,7 +898,7 @@ namespace Ibasa.Pikala
                     enumerationField.SetConstant(value);
                 }
 
-                state.SetMemo(true, constructingType);
+                AddMemo(state, constructingType);
 
                 state.Stages.PushStage2(state =>
                 {
@@ -937,7 +961,7 @@ namespace Ibasa.Pikala
                 }
                 constructingType.Methods = new PickledMethodInfoDef[] { constructingMethod };
 
-                state.SetMemo(true, constructingType);
+                AddMemo(state, constructingType);
 
                 state.Stages.PushStage2(state =>
                 {
@@ -963,8 +987,20 @@ namespace Ibasa.Pikala
             }
         }
 
-        private PickledFieldInfo DeserializeFieldRef(PicklerDeserializationState state)
+        private PickledFieldInfo DeserializeFieldInfo(PicklerDeserializationState state, bool prechecked)
         {
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<PickledFieldInfo>(state, false, out var obj))
+                {
+                    if (obj == null)
+                    {
+                        throw new Exception("FieldInfo was null");
+                    }
+                    return obj;
+                }
+            }
+
             var name = state.Reader.ReadString();
             // Fields can be on modules or types
             var typeField = state.Reader.ReadBoolean();
@@ -972,42 +1008,100 @@ namespace Ibasa.Pikala
             {
                 var type = DeserializeType(state, default);
                 state.Stages.PopStages(state, 2);
-                return state.SetMemo(true, type.GetField(name));
+                var result = type.GetField(name);
+                AddMemo(state, result);
+                return result;
             }
             else
             {
-                var module = DeserializeModule(state, default);
+                var module = DeserializeModule(state);
                 state.Stages.PopStages(state, 2);
-                return state.SetMemo(true, module.GetField(name));
+                var result = module.GetField(name);
+                AddMemo(state, result);
+                return result;
             }
         }
 
-        private PickledPropertyInfo DeserializePropertyRef(PicklerDeserializationState state)
+        private PickledPropertyInfo DeserializePropertyInfo(PicklerDeserializationState state, bool prechecked)
         {
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<PickledPropertyInfo>(state, false, out var obj))
+                {
+                    if (obj == null)
+                    {
+                        throw new Exception("PropertyInfo was null");
+                    }
+                    return obj;
+                }
+            }
+
             var signature = DeserializeSignature(state);
             var type = DeserializeType(state, default);
             state.Stages.PopStages(state, 2);
-            return state.SetMemo(true, type.GetProperty(signature));
+            var result = type.GetProperty(signature);
+            AddMemo(state, result);
+            return result;
         }
 
-        private PickledEventInfo DeserializeEventRef(PicklerDeserializationState state)
+        private PickledEventInfo DeserializeEventInfo(PicklerDeserializationState state, bool prechecked)
         {
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<PickledEventInfo>(state, false, out var obj))
+                {
+                    if (obj == null)
+                    {
+                        throw new Exception("EventInfo was null");
+                    }
+                    return obj;
+                }
+            }
+
             var name = state.Reader.ReadString();
             var type = DeserializeType(state, default);
             state.Stages.PopStages(state, 2);
-            return state.SetMemo(true, type.GetEvent(name));
+            var result = type.GetEvent(name);
+            AddMemo(state, result);
+            return result;
         }
 
-        private PickledConstructorInfo DeserializeConstructorRef(PicklerDeserializationState state)
+        private PickledConstructorInfo DeserializeConstructorInfo(PicklerDeserializationState state, bool prechecked)
         {
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<PickledConstructorInfo>(state, false, out var obj))
+                {
+                    if (obj == null)
+                    {
+                        throw new Exception("ConstructorInfo was null");
+                    }
+                    return obj;
+                }
+            }
+
             var signature = DeserializeSignature(state);
             var type = DeserializeType(state, default);
             state.Stages.PopStages(state, 2);
-            return state.SetMemo(true, type.GetConstructor(signature));
+            var result = type.GetConstructor(signature);
+            AddMemo(state, result);
+            return result;
         }
 
-        private PickledMethodInfo DeserializeMethodRef(PicklerDeserializationState state)
+        private PickledMethodInfo DeserializeMethodInfo(PicklerDeserializationState state, bool prechecked)
         {
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<PickledMethodInfo>(state, false, out var obj))
+                {
+                    if (obj == null)
+                    {
+                        throw new Exception("MethodInfo was null");
+                    }
+                    return obj;
+                }
+            }
+
             var signature = DeserializeSignature(state);
             var genericArgumentCount = state.Reader.Read7BitEncodedInt();
             PickledTypeInfo[]? genericArguments = null;
@@ -1031,53 +1125,29 @@ namespace Ibasa.Pikala
             }
             else
             {
-                var module = DeserializeModule(state, default);
+                var module = DeserializeModule(state);
                 state.Stages.PopStages(state, 2);
                 methodInfo = module.GetMethod(signature);
             }
 
             if (genericArguments != null)
             {
-                return state.SetMemo(true, new ConstructingGenericMethod(methodInfo, genericArguments));
+                methodInfo = new ConstructingGenericMethod(methodInfo, genericArguments);
             }
-            return state.SetMemo(true, methodInfo);
+            AddMemo(state, methodInfo);
+            return methodInfo;
         }
 
-        private object? MaybeReadMemo(PicklerDeserializationState state)
+        private static bool MaybeReadMemo<T>(PicklerDeserializationState state, [NotNullWhen(true)] out T? result)
         {
             var offset = state.Reader.Read15BitEncodedLong();
-            if (offset == 0) return null;
-            return state.GetMemo(offset);
-        }
-
-        private object DeserializeDelegate(PicklerDeserializationState state, Type delegateType)
-        {
-            object? earlyResult;
-            var invocationCount = state.Reader.Read7BitEncodedInt();
-            if (invocationCount == 1)
+            if (offset == 0)
             {
-                var target = Deserialize(state, typeof(object));
-                earlyResult = MaybeReadMemo(state);
-                if (earlyResult != null) return earlyResult;
-
-                var pickledMethod = Deserialize(state, runtimeMethodInfoType);
-                var method = pickledMethod as MethodInfo;
-                earlyResult = MaybeReadMemo(state);
-                if (earlyResult != null) return earlyResult;
-
-                return state.SetMemo(true, Delegate.CreateDelegate(delegateType, target, method));
+                result = default;
+                return false;
             }
-            else
-            {
-                var invocationList = new Delegate[invocationCount];
-                for (int i = 0; i < invocationList.Length; ++i)
-                {
-                    invocationList[i] = (Delegate)Deserialize(state, typeof(Delegate))!;
-                    earlyResult = MaybeReadMemo(state);
-                    if (earlyResult != null) return earlyResult;
-                }
-                return state.SetMemo(true, Delegate.Combine(invocationList)!);
-            }
+            result = (T)state.GetMemo(offset);
+            return true;
         }
 
         private PickledAssemblyRef DeserializeAsesmblyRef(PicklerDeserializationState state)
@@ -1101,7 +1171,9 @@ namespace Ibasa.Pikala
             {
                 assembly = AssemblyLoadContext.LoadFromAssemblyName(assemblyName);
             }
-            return state.SetMemo(ShouldMemo(assembly), new PickledAssemblyRef(assembly));
+            var result = new PickledAssemblyRef(assembly);
+            AddMemo(state, result);
+            return result;
         }
 
         private void ReadCustomAttributes(PicklerDeserializationState state, Action<ConstructorInfo, byte[]> setCustomAttribute)
@@ -1585,7 +1657,8 @@ namespace Ibasa.Pikala
                 throw new Exception($"Could not define assembly '{assemblyName}'");
             }
 
-            var assemblyDef = state.SetMemo(true, new PickledAssemblyDef(assemblyBuilder));
+            var assemblyDef = new PickledAssemblyDef(assemblyBuilder);
+            AddMemo(state, assemblyDef);
             state.Stages.PushStage2(state =>
             {
                 ReadCustomAttributesTypes(state);
@@ -1599,28 +1672,32 @@ namespace Ibasa.Pikala
             return assemblyDef;
         }
 
-        private PickledModuleRef DeserializeManifestModuleRef(PicklerDeserializationState state, GenericTypeContext typeContext)
+        private PickledModuleRef DeserializeManifestModuleRef(PicklerDeserializationState state)
         {
-            var assembly = DeserializeAssembly(state, typeContext);
-            return state.SetMemo(true, new PickledModuleRef(assembly.Assembly.ManifestModule));
+            var assembly = DeserializeAssembly(state);
+            var result = new PickledModuleRef(assembly.Assembly.ManifestModule);
+            AddMemo(state, result);
+            return result;
         }
 
-        private PickledModuleRef DeserializeModuleRef(PicklerDeserializationState state, GenericTypeContext typeContext)
+        private PickledModuleRef DeserializeModuleRef(PicklerDeserializationState state)
         {
             var name = state.Reader.ReadString();
-            var assembly = DeserializeAssembly(state, typeContext);
+            var assembly = DeserializeAssembly(state);
             var module = assembly.Assembly.GetModule(name);
             if (module == null)
             {
                 throw new Exception($"Could not load module '{name}' from assembly '{assembly}'");
             }
-            return state.SetMemo(true, new PickledModuleRef(module));
+            var result = new PickledModuleRef(module);
+            AddMemo(state, result);
+            return result;
         }
 
-        private PickledModuleDef DeserializeModuleDef(PicklerDeserializationState state, GenericTypeContext typeContext)
+        private PickledModuleDef DeserializeModuleDef(PicklerDeserializationState state)
         {
             var name = state.Reader.ReadString();
-            var assembly = DeserializeAssembly(state, typeContext);
+            var assembly = DeserializeAssembly(state);
 
             var assemblyDef = (PickledAssemblyDef)assembly;
             var assemblyBuilder = assemblyDef.AssemblyBuilder;
@@ -1630,7 +1707,7 @@ namespace Ibasa.Pikala
                 throw new Exception($"Could not create module '{name}' in assembly '{assembly}'");
             }
             var moduleDef = new PickledModuleDef(module);
-            state.SetMemo(true, moduleDef);
+            AddMemo(state, moduleDef);
             state.Stages.PushStage2(state =>
             {
                 ReadCustomAttributesTypes(state);
@@ -1700,7 +1777,9 @@ namespace Ibasa.Pikala
             {
                 genericArguments[i] = DeserializeType(state, typeContext);
             }
-            return state.SetMemo(true, new PickledGenericType(genericType, genericArguments));
+            var result = new PickledGenericType(genericType, genericArguments);
+            AddMemo(state, result);
+            return result;
         }
 
         private PickledTypeInfo DeserializeGenericParameter(PicklerDeserializationState state, bool isTypeParam)
@@ -1714,10 +1793,11 @@ namespace Ibasa.Pikala
             }
             else
             {
-                var method = DeserializeMethodInfo(state);
+                var method = DeserializeMethodInfo(state, false);
                 genericParameter = method.GetGenericArgument(genericParameterPosition);
             }
-            return state.SetMemo(true, genericParameter);
+            AddMemo(state, genericParameter);
+            return genericParameter;
         }
 
         private PickledTypeInfoRef DeserializeTypeRef(PicklerDeserializationState state, GenericTypeContext typeContext)
@@ -1739,7 +1819,7 @@ namespace Ibasa.Pikala
             }
             else
             {
-                var module = DeserializeModule(state, typeContext);
+                var module = DeserializeModule(state);
                 var type = module.Module.GetType(typeName);
                 if (type == null)
                 {
@@ -1749,7 +1829,7 @@ namespace Ibasa.Pikala
                 result = new PickledTypeInfoRef(type);
             }
 
-            state.SetMemo(true, result);
+            AddMemo(state, result);
 
             return result;
         }
@@ -1787,7 +1867,7 @@ namespace Ibasa.Pikala
             }
             else
             {
-                var module = DeserializeModule(state, typeContext);
+                var module = DeserializeModule(state);
                 var moduleDef = (PickledModuleDef)module;
                 constructingType = ConstructingTypeForTypeDef(typeDef, typeName, typeAttributes, null, moduleDef.ModuleBuilder.DefineType);
             }
@@ -1808,14 +1888,14 @@ namespace Ibasa.Pikala
             return constructingType;
         }
 
-        private PickledAssembly DeserializeAssembly(PicklerDeserializationState state, GenericTypeContext typeContext)
+        private PickledAssembly DeserializeAssembly(PicklerDeserializationState state)
         {
             var operation = (AssemblyOperation)state.Reader.ReadByte();
 
             switch (operation)
             {
                 case AssemblyOperation.Memo:
-                    return (PickledAssembly)state.GetMemo();
+                    return (PickledAssembly)state.ReadMemo();
 
                 case AssemblyOperation.MscorlibAssembly:
                     // We don't memo mscorlib, it's cheaper to just have the single byte token
@@ -1831,27 +1911,27 @@ namespace Ibasa.Pikala
             throw new Exception($"Unexpected operation '{operation}' for Assembly");
         }
 
-        private PickledModule DeserializeModule(PicklerDeserializationState state, GenericTypeContext typeContext)
+        private PickledModule DeserializeModule(PicklerDeserializationState state)
         {
             var operation = (ModuleOperation)state.Reader.ReadByte();
 
             switch (operation)
             {
                 case ModuleOperation.Memo:
-                    return (PickledModule)state.GetMemo();
+                    return (PickledModule)state.ReadMemo();
 
                 case ModuleOperation.MscorlibModule:
                     // We don't memo mscorlib, it's cheaper to just have the single byte token
                     return new PickledModuleRef(mscorlib.ManifestModule);
 
                 case ModuleOperation.ManifestModuleRef:
-                    return DeserializeManifestModuleRef(state, typeContext);
+                    return DeserializeManifestModuleRef(state);
 
                 case ModuleOperation.ModuleRef:
-                    return DeserializeModuleRef(state, typeContext);
+                    return DeserializeModuleRef(state);
 
                 case ModuleOperation.ModuleDef:
-                    return DeserializeModuleDef(state, typeContext);
+                    return DeserializeModuleDef(state);
             }
 
             throw new Exception($"Unexpected operation '{operation}' for Module");
@@ -1865,7 +1945,7 @@ namespace Ibasa.Pikala
             {
                 case TypeOperation.Memo:
                     {
-                        var memo = state.GetMemo();
+                        var memo = state.ReadMemo();
                         return (PickledTypeInfo)memo;
                     }
 
@@ -1873,19 +1953,25 @@ namespace Ibasa.Pikala
                     {
                         var rank = state.Reader.ReadByte();
                         var elementType = DeserializeType(state, typeContext);
-                        return state.SetMemo(true, new PickledArrayType(elementType, rank));
+                        var result = new PickledArrayType(elementType, rank);
+                        AddMemo(state, result);
+                        return result;
                     }
 
                 case TypeOperation.ByRefType:
                     {
                         var elementType = DeserializeType(state, typeContext);
-                        return state.SetMemo(true, new PickledByRefType(elementType));
+                        var result = new PickledByRefType(elementType);
+                        AddMemo(state, result);
+                        return result;
                     }
 
                 case TypeOperation.PointerType:
                     {
                         var elementType = DeserializeType(state, typeContext);
-                        return state.SetMemo(true, new PickledPointerType(elementType));
+                        var result = new PickledPointerType(elementType);
+                        AddMemo(state, result);
+                        return result;
                     }
 
                 case TypeOperation.GenericInstantiation:
@@ -1902,7 +1988,9 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an MVar operation without a current method context");
                         }
-                        return state.SetMemo(true, typeContext.GenericMethodParameters[genericParameterPosition]);
+                        var result = typeContext.GenericMethodParameters[genericParameterPosition];
+                        AddMemo(state, result);
+                        return result;
                     }
 
                 case TypeOperation.TVar:
@@ -1912,7 +2000,9 @@ namespace Ibasa.Pikala
                         {
                             throw new Exception("Encountered an TVar operation without a current type context");
                         }
-                        return state.SetMemo(true, typeContext.GenericTypeParameters[genericParameterPosition]);
+                        var result = typeContext.GenericTypeParameters[genericParameterPosition];
+                        AddMemo(state, result);
+                        return result;
                     }
 
                 case TypeOperation.TypeRef:
@@ -1933,69 +2023,6 @@ namespace Ibasa.Pikala
             throw new Exception($"Unexpected operation '{operation}' for Type");
         }
 
-        private PickledFieldInfo DeserializeFieldInfo(PicklerDeserializationState state)
-        {
-            var objectOperation = (ObjectOperation)state.Reader.ReadByte();
-            switch (objectOperation)
-            {
-                case ObjectOperation.Null:
-                    throw new Exception($"Unexpected null for FieldInfo");
-
-                case ObjectOperation.Memo:
-                    return (PickledFieldInfo)state.GetMemo();
-
-                case ObjectOperation.Object:
-                    break;
-
-                default:
-                    throw new Exception($"Unexpected operation '{objectOperation}' for FieldInfo");
-            }
-
-            return DeserializeFieldRef(state);
-        }
-
-        private PickledConstructorInfo DeserializeConstructorInfo(PicklerDeserializationState state)
-        {
-            var objectOperation = (ObjectOperation)state.Reader.ReadByte();
-            switch (objectOperation)
-            {
-                case ObjectOperation.Null:
-                    throw new Exception($"Unexpected null for ConstructorInfo");
-
-                case ObjectOperation.Memo:
-                    return (PickledConstructorInfo)state.GetMemo();
-
-                case ObjectOperation.Object:
-                    break;
-
-                default:
-                    throw new Exception($"Unexpected operation '{objectOperation}' for ConstructorInfo");
-            }
-
-            return DeserializeConstructorRef(state);
-        }
-
-        private PickledMethodInfo DeserializeMethodInfo(PicklerDeserializationState state)
-        {
-            var objectOperation = (ObjectOperation)state.Reader.ReadByte();
-            switch (objectOperation)
-            {
-                case ObjectOperation.Null:
-                    throw new Exception($"Unexpected null for MethodInfo");
-
-                case ObjectOperation.Memo:
-                    return (PickledMethodInfo)state.GetMemo();
-
-                case ObjectOperation.Object:
-                    break;
-
-                default:
-                    throw new Exception($"Unexpected operation '{objectOperation}' for MethodInfo");
-            }
-
-            return DeserializeMethodRef(state);
-        }
-
         private PickledMethodBase DeserializeMethodBase(PicklerDeserializationState state)
         {
             var objectOperation = (ObjectOperation)state.Reader.ReadByte();
@@ -2005,7 +2032,7 @@ namespace Ibasa.Pikala
                     throw new Exception($"Unexpected null for MethodBase");
 
                 case ObjectOperation.Memo:
-                    return (PickledMethodBase)state.GetMemo();
+                    return (PickledMethodBase)state.ReadMemo();
 
                 case ObjectOperation.Object:
                     break;
@@ -2018,13 +2045,13 @@ namespace Ibasa.Pikala
 
             System.Diagnostics.Debug.Assert(runtimeType.IsAssignableTo(typeof(MethodBase)), "Expected a MethodBase type");
 
-            if (runtimeType == typeof(MethodInfo))
+            if (runtimeType.IsAssignableTo(typeof(MethodInfo)))
             {
-                return DeserializeMethodRef(state);
+                return DeserializeMethodInfo(state, true);
             }
-            else if (runtimeType == typeof(ConstructorInfo))
+            else if (runtimeType.IsAssignableTo(typeof(ConstructorInfo)))
             {
-                return DeserializeConstructorRef(state);
+                return DeserializeConstructorInfo(state, true);
             }
 
             throw new Exception($"Unexpected type '{runtimeType}' for MethodBase");
@@ -2039,7 +2066,7 @@ namespace Ibasa.Pikala
                     throw new Exception($"Unexpected null for MemberInfo");
 
                 case ObjectOperation.Memo:
-                    return (PickledMemberInfo)state.GetMemo();
+                    return (PickledMemberInfo)state.ReadMemo();
 
                 case ObjectOperation.Object:
                     break;
@@ -2052,200 +2079,32 @@ namespace Ibasa.Pikala
 
             System.Diagnostics.Debug.Assert(runtimeType.IsAssignableTo(typeof(MemberInfo)), "Expected a MemberInfo type");
 
-            if (runtimeType == typeof(FieldInfo))
+            if (runtimeType.IsAssignableTo(typeof(FieldInfo)))
             {
-                return DeserializeFieldRef(state);
+                return DeserializeFieldInfo(state, true);
             }
-            else if (runtimeType == typeof(PropertyInfo))
+            else if (runtimeType.IsAssignableTo(typeof(PropertyInfo)))
             {
-                return DeserializePropertyRef(state);
+                return DeserializePropertyInfo(state, true);
             }
-            else if (runtimeType == typeof(EventInfo))
+            else if (runtimeType.IsAssignableTo(typeof(EventInfo)))
             {
-                return DeserializeEventRef(state);
+                return DeserializeEventInfo(state, true);
             }
-            else if (runtimeType == typeof(MethodInfo))
+            else if (runtimeType.IsAssignableTo(typeof(MethodInfo)))
             {
-                return DeserializeMethodRef(state);
+                return DeserializeMethodInfo(state, true);
             }
-            else if (runtimeType == typeof(ConstructorInfo))
+            else if (runtimeType.IsAssignableTo(typeof(ConstructorInfo)))
             {
-                return DeserializeConstructorRef(state);
+                return DeserializeConstructorInfo(state, true);
             }
-            else if (runtimeType == typeof(Type))
+            else if (runtimeType.IsAssignableTo(typeof(Type)))
             {
                 return DeserializeType(state, default);
             }
 
             throw new Exception($"Unexpected type '{runtimeType}' for MemberInfo");
-        }
-
-        private Array DeserializeArray(PicklerDeserializationState state, Type arrayType)
-        {
-            var elementType = arrayType.GetElementType();
-            System.Diagnostics.Debug.Assert(elementType != null, "GetElementType returned null for an array type");
-
-            Array array;
-            if (arrayType.IsSZArray)
-            {
-                var length = state.Reader.Read7BitEncodedInt();
-                array = Array.CreateInstance(elementType, length);
-                state.SetMemo(true, array);
-            }
-            else
-            {
-                var rank = arrayType.GetArrayRank();
-                var lengths = new int[rank];
-                var lowerBounds = new int[rank];
-                for (int dimension = 0; dimension < rank; ++dimension)
-                {
-                    lengths[dimension] = state.Reader.Read7BitEncodedInt();
-                    lowerBounds[dimension] = state.Reader.Read7BitEncodedInt();
-                }
-                array = Array.CreateInstance(elementType, lengths, lowerBounds);
-                state.SetMemo(true, array);
-            }
-
-            if (arrayType.IsSZArray)
-            {
-                for (int index = 0; index < array.Length; ++index)
-                {
-                    array.SetValue(Deserialize(state, elementType), index);
-                }
-            }
-            else
-            {
-                var indices = new int[array.Rank];
-                bool isEmpty = false;
-                for (int dimension = 0; dimension < array.Rank; ++dimension)
-                {
-                    indices[dimension] = array.GetLowerBound(dimension);
-                    isEmpty |= array.GetLength(dimension) == 0;
-                }
-
-                // If the array is empty (any length == 0) no need to loop
-                if (!isEmpty)
-                {
-                    var didBreak = true;
-                    while (didBreak)
-                    {
-                        // The first time we call into Iterate we know the array is non-empty, and indices is equal to lowerBounds (i.e the first element)
-                        // If we reach the last element we don't call back into Iterate
-
-                        var item = Deserialize(state, elementType);
-                        array.SetValue(item, indices);
-
-                        // Increment indices to the next position, we work through the dimensions backwards because that matches the order that GetEnumerator returns when we serialise out the items
-                        didBreak = false;
-                        for (int dimension = array.Rank - 1; dimension >= 0; --dimension)
-                        {
-                            var next = indices[dimension] + 1;
-                            if (next < array.GetLowerBound(dimension) + array.GetLength(dimension))
-                            {
-                                indices[dimension] = next;
-                                didBreak = true;
-                                break;
-                            }
-                            else
-                            {
-                                indices[dimension] = array.GetLowerBound(dimension);
-                            }
-                        }
-                    }
-                }
-            }
-            return array;
-        }
-
-        private object DeserializeTuple(PicklerDeserializationState state, bool shouldMemo, Type runtimeType)
-        {
-            Type[] genericArguments = runtimeType.GetGenericArguments();
-
-            // if length == null short circuit to just return a new ValueTuple
-            if (genericArguments.Length == 0)
-            {
-                System.Diagnostics.Debug.Assert(runtimeType == typeof(ValueTuple), "Tuple length was zero but it wasn't a value tuple");
-                return new ValueTuple();
-            }
-
-            var items = new object?[genericArguments.Length];
-            for (int i = 0; i < genericArguments.Length; ++i)
-            {
-                items[i] = Deserialize(state, genericArguments[i]);
-
-                // Don't want to spam memo lookups if this is a ValueType
-                if (shouldMemo)
-                {
-                    var earlyResult = MaybeReadMemo(state);
-                    if (earlyResult != null) return earlyResult;
-                }
-            }
-
-            var genericParameters = new Type[genericArguments.Length];
-            for (int i = 0; i < genericArguments.Length; ++i)
-            {
-                genericParameters[i] = Type.MakeGenericMethodParameter(i);
-            }
-
-            var tupleType = runtimeType.IsValueType ? typeof(System.ValueTuple) : typeof(System.Tuple);
-            var openCreateMethod = tupleType.GetMethod("Create", genericArguments.Length, genericParameters);
-            System.Diagnostics.Debug.Assert(openCreateMethod != null, "GetMethod for Tuple.Create returned null");
-            var closedCreateMethod = openCreateMethod.MakeGenericMethod(genericArguments);
-            var tupleObject = closedCreateMethod.Invoke(null, items);
-            System.Diagnostics.Debug.Assert(tupleObject != null, "Tuple.Create returned null");
-
-            return state.SetMemo(shouldMemo, tupleObject);
-        }
-
-        private object DeserializeReducer(PicklerDeserializationState state)
-        {
-            var method = DeserializeMethodBase(state);
-
-            object? target;
-            if (method is PickledConstructorInfo)
-            {
-                target = null;
-            }
-            else if (method is PickledMethodInfo)
-            {
-                target = Deserialize(state, typeof(object));
-            }
-            else
-            {
-                throw new Exception($"Invalid reduction MethodBase was '{method}'.");
-            }
-
-            var args = new object?[state.Reader.Read7BitEncodedInt()];
-            for (int i = 0; i < args.Length; ++i)
-            {
-                var arg = Deserialize(state, typeof(object));
-                args[i] = arg;
-            }
-
-            var result = method.Invoke(target, args);
-            if (result == null)
-            {
-                throw new Exception($"Invalid reducer method, '{method}' returned null.");
-            }
-            return result;
-        }
-
-        private object DeserializeObject(PicklerDeserializationState state, bool shouldMemo, Type objectType, SerialisedObjectTypeInfo typeInfo)
-        {
-            var uninitalizedObject = state.SetMemo(shouldMemo, System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(objectType));
-
-            System.Diagnostics.Debug.Assert(typeInfo.SerialisedFields != null, "Error was null, but so was Fields");
-
-            for (int i = 0; i < typeInfo.SerialisedFields.Length; ++i)
-            {
-                var (fieldType, toSet) = typeInfo.SerialisedFields[i];
-
-                object? value = Deserialize(state, fieldType.Type);
-
-                toSet.SetValue(uninitalizedObject, value);
-            }
-
-            return uninitalizedObject;
         }
 
         private SerialisedObjectTypeInfo GetOrReadSerialisedObjectTypeInfo(PicklerDeserializationState state, Type type)
@@ -2256,20 +2115,21 @@ namespace Ibasa.Pikala
                 return info;
             }
 
+            // If this is a well known type we need to ensure we get the same ref
+            if (_wellKnownTypes.ContainsKey(type) ||
+                type == typeof(AssemblyBuilder) ||
+                type == typeof(ModuleBuilder) ||
+                type == typeof(TypeBuilder) ||
+                type == typeof(Pickler))
+            {
+                return GetCachedTypeInfo(type);
+            }
+
             info = new SerialisedObjectTypeInfo(type);
             state.AddSeenType(type, info);
 
             // If this is a builtin type there's no need to even write out type flags
-            if (!IsBuiltinType(type))
-            {
-                var infoByte = state.Reader.ReadByte();
-                var flags = (PickledTypeFlags)(infoByte & 0xF);
-                var mode = (PickledTypeMode)(infoByte >> 4);
-
-                info.Flags = flags;
-                info.Mode = mode;
-            }
-            else
+            if (IsBuiltinType(type))
             {
                 info.Flags =
                     (type.IsValueType ? PickledTypeFlags.IsValueType : 0) |
@@ -2278,6 +2138,21 @@ namespace Ibasa.Pikala
                     (type.HasElementType ? PickledTypeFlags.HasElementType : 0);
 
                 // Assume builtin, we'll type check and change that below.
+                info.Mode = PickledTypeMode.IsBuiltin;
+            }
+            else
+            {
+                var infoByte = state.Reader.ReadByte();
+                var flags = (PickledTypeFlags)(infoByte & 0xF);
+                var mode = (PickledTypeMode)(infoByte >> 4);
+
+                info.Flags = flags;
+                info.Mode = mode;
+            }
+
+            // Fix up abstracts
+            if (info.IsAbstract)
+            {
                 info.Mode = PickledTypeMode.IsBuiltin;
             }
 
@@ -2289,8 +2164,11 @@ namespace Ibasa.Pikala
                 info.Error = $"Can not deserialise {type} expected it to be a {expected} but was a {actual}";
             }
 
-
-            if (info.Mode == PickledTypeMode.IsAutoSerialisedObject)
+            if (info.Mode == PickledTypeMode.IsError)
+            {
+                info.Error = state.Reader.ReadString();
+            }
+            else if (info.Mode == PickledTypeMode.IsAutoSerialisedObject)
             {
                 var currentFields = GetSerializedFields(type);
 
@@ -2309,14 +2187,13 @@ namespace Ibasa.Pikala
                     PickledFieldInfo? fieldInfo;
                     try
                     {
-                        fieldInfo = DeserializeFieldInfo(state);
+                        fieldInfo = DeserializeFieldInfo(state, false);
                     }
                     catch (MissingFieldException exc)
                     {
                         errors.Add($"could not find expected field '{exc.Field}'");
                         fieldInfo = null;
                     }
-
 
                     var fieldType = DeserializeType(state, default).CompleteType;
                     var fieldTypeInfo = GetOrReadSerialisedObjectTypeInfo(state, fieldType);
@@ -2362,7 +2239,7 @@ namespace Ibasa.Pikala
                 }
             }
 
-            if (IsNullableType(type, out var elementType))
+            else if (IsNullableType(type, out var elementType))
             {
                 info.IsNullable = true;
                 info.Element = GetOrReadSerialisedObjectTypeInfo(state, elementType);
@@ -2380,281 +2257,1223 @@ namespace Ibasa.Pikala
             return info;
         }
 
-        private object? Deserialize(PicklerDeserializationState state, Type staticType)
-        {
-            //System.Diagnostics.Debug.Assert(SanatizeType(staticType, true) == staticType, "Static type didn't match sanatized static type");
+        // This can't change once a type is loaded, so it's safe to cache across multiple Deserialize methods.
+        // TODO: This need to be parallel safe
+        private Dictionary<SerialisedObjectTypeInfo, MethodInfo> _deserializationMethods = new Dictionary<SerialisedObjectTypeInfo, MethodInfo>();
 
-            var staticInfo = GetOrReadSerialisedObjectTypeInfo(state, staticType);
-            if (IsNullableType(staticType, out var nullableInnerType))
+        private MethodInfo GetDeserializationMethod(SerialisedObjectTypeInfo type)
+        {
+            if (_deserializationMethods.TryGetValue(type, out var method))
             {
-                // Nullable<T> always works the same, if the 
-                var hasValue = state.Reader.ReadBoolean();
-                if (hasValue)
-                {
-                    return Deserialize(state, nullableInnerType);
-                }
-                return null;
+                return method;
             }
 
-            var shouldMemo = !staticInfo.Flags.HasFlag(PickledTypeFlags.IsValueType);
+            return BuildDeserializationMethod(type);
+        }
 
-            var runtimeType = staticType;
-            var runtimeInfo = staticInfo;
-            if (shouldMemo)
+        private MethodInfo BuildDeserializationMethod(SerialisedObjectTypeInfo type)
+        {
+            // Deserialization methods are either (Pickler, PicklerDeserializationState, bool) for reference types.
+            // Where the bool parameter is true to say that the null/memo & type has already been checked.
+            // Or (Pickler, PicklerDeserializationState, bool) for value types where the bool is if this was a boxed value.
+            var dynamicParameters = new Type[] { typeof(Pickler), typeof(PicklerDeserializationState), typeof(bool) };
+
+            // All other types we build a dynamic method for it.
+            var dynamicMethod = new DynamicMethod("Deserialize_" + type.Type.Name, type.Type, dynamicParameters, typeof(Pickler));
+            _deserializationMethods.Add(type, dynamicMethod);
+
+            var il = dynamicMethod.GetILGenerator();
+            // Nearly every type needs access to the Reader property
+            var binaryReaderProperty = typeof(PicklerDeserializationState).GetProperty("Reader");
+            System.Diagnostics.Debug.Assert(binaryReaderProperty != null, "Could not lookup Reader property");
+            var binaryReaderPropertyGet = binaryReaderProperty.GetMethod;
+            System.Diagnostics.Debug.Assert(binaryReaderPropertyGet != null, "Reader property had no get method");
+
+
+            // Most objects need MaybeReadMemo
+            var maybeReadMemoMethod = typeof(Pickler).GetMethod(
+                "MaybeReadMemo",
+                BindingFlags.NonPublic | BindingFlags.Static,
+                new Type[] { typeof(PicklerDeserializationState), Type.MakeGenericMethodParameter(0).MakeByRefType() });
+            System.Diagnostics.Debug.Assert(maybeReadMemoMethod != null, "Could not lookup MaybeReadMemo method");
+
+            // All object based methods need the ReadObjectOperation, ReadObjectType and AddMemo methods
+            MethodInfo? readObjectOperationMethod = null;
+            MethodInfo? readObjectTypeMethod = null;
+            MethodInfo? addMemoMethod = null;
+            if (!type.IsValueType && type.Error == null)
             {
-                var objectOperation = (ObjectOperation)state.Reader.ReadByte();
-                switch (objectOperation)
+                readObjectOperationMethod = typeof(Pickler).GetMethod("ReadObjectOperation", BindingFlags.NonPublic | BindingFlags.Static);
+                System.Diagnostics.Debug.Assert(readObjectOperationMethod != null, "Could not lookup ReadObjectOperation method");
+                readObjectOperationMethod = readObjectOperationMethod.MakeGenericMethod(type.Type);
+
+                readObjectTypeMethod = typeof(Pickler).GetMethod("ReadObjectType", BindingFlags.NonPublic | BindingFlags.Instance);
+                System.Diagnostics.Debug.Assert(readObjectTypeMethod != null, "Could not lookup ReadObjectType method");
+                readObjectTypeMethod = readObjectTypeMethod.MakeGenericMethod(type.Type);
+
+                addMemoMethod = typeof(Pickler).GetMethod(
+                    "AddMemo",
+                    BindingFlags.NonPublic | BindingFlags.Static,
+                    new Type[] { Type.MakeGenericMethodParameter(0), typeof(PicklerDeserializationState), typeof(bool) });
+                System.Diagnostics.Debug.Assert(addMemoMethod != null, "Could not lookup AddMemo method");
+                addMemoMethod = addMemoMethod.MakeGenericMethod(type.Type);
+            }
+
+            if (type.Error == null)
+            {
+                maybeReadMemoMethod = maybeReadMemoMethod.MakeGenericMethod(type.Type);
+            }
+
+            if (type.Error != null)
+            {
+                // This type isn't actually serialisable, if it's null we're ok but otherwise throw.
+
+                var exceptionConstructor = typeof(Exception).GetConstructor(new Type[] { typeof(string) });
+                System.Diagnostics.Debug.Assert(exceptionConstructor != null, "Could not lookup Exception constructor");
+
+                var readMethod = typeof(BinaryReader).GetMethod("ReadByte");
+                System.Diagnostics.Debug.Assert(readMethod != null, "Could not lookup read method");
+
+                var earlyReturn = il.DefineLabel();
+
+                // We _might_ have to write out object headers here
+                if (!type.IsValueType)
                 {
-                    case ObjectOperation.Null:
-                        return null;
+                    var prechecked = il.DefineLabel();
+                    il.Emit(OpCodes.Ldarg_2);
+                    il.Emit(OpCodes.Brtrue, prechecked);
+                    il.Emit(OpCodes.Ldarg_2);
+                    // All we care about is nullness, for which we'll write ObjectOperation.Null
+                    il.Emit(OpCodes.Brtrue, prechecked);
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Callvirt, binaryReaderPropertyGet);
+                    il.Emit(OpCodes.Callvirt, readMethod);
+                    il.Emit(OpCodes.Ldc_I4, (int)ObjectOperation.Null);
+                    il.Emit(OpCodes.Ceq);
+                    il.Emit(OpCodes.Brtrue, earlyReturn);
+                    il.MarkLabel(prechecked);
+                }
 
-                    case ObjectOperation.Memo:
-                        {
-                            var obj = state.GetMemo();
-                            if (obj is PickledObject pickledObject)
-                            {
-                                return pickledObject.Get();
-                            }
-                            return obj;
-                        }
+                // Throw the erorr
+                il.Emit(OpCodes.Ldstr, type.Error);
+                il.Emit(OpCodes.Newobj, exceptionConstructor);
+                il.Emit(OpCodes.Throw);
 
-                    case ObjectOperation.Object:
+                il.MarkLabel(earlyReturn);
+                il.Emit(OpCodes.Ldnull);
+                il.Emit(OpCodes.Ret);
+            }
+            else if (type.Type == typeof(DBNull))
+            {
+                // DBNull is easy, just push DBNull.Value
+                var valueField = typeof(DBNull).GetField("Value");
+                System.Diagnostics.Debug.Assert(valueField != null, "Could not lookup DBNull.Value field");
+
+                il.Emit(OpCodes.Ldsfld, valueField);
+                il.Emit(OpCodes.Ret);
+            }
+            else if (type.Type == typeof(UIntPtr))
+            {
+                // UIntPtr (and IntPtr) just read their 64 bit value
+                var readMethod = typeof(BinaryReader).GetMethod("ReadUInt64");
+                System.Diagnostics.Debug.Assert(readMethod != null, "Could not lookup read method");
+
+                var constructor = typeof(UIntPtr).GetConstructor(new Type[] { typeof(ulong) });
+                System.Diagnostics.Debug.Assert(constructor != null, "Could not lookup UInt64 constructor");
+
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Callvirt, binaryReaderPropertyGet);
+                il.Emit(OpCodes.Callvirt, readMethod);
+                il.Emit(OpCodes.Newobj, constructor);
+
+                il.Emit(OpCodes.Ret);
+            }
+            else if (type.Type == typeof(IntPtr))
+            {
+                // UIntPtr (and IntPtr) just read their 64 bit value
+                var readMethod = typeof(BinaryReader).GetMethod("ReadInt64");
+                System.Diagnostics.Debug.Assert(readMethod != null, "Could not lookup read method");
+
+                var constructor = typeof(IntPtr).GetConstructor(new Type[] { typeof(long) });
+                System.Diagnostics.Debug.Assert(constructor != null, "Could not lookup Int64 constructor");
+
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Callvirt, binaryReaderPropertyGet);
+                il.Emit(OpCodes.Callvirt, readMethod);
+                il.Emit(OpCodes.Newobj, constructor);
+
+                il.Emit(OpCodes.Ret);
+            }
+            else if (type.Type.IsPrimitive || type.Type == typeof(decimal))
+            {
+                // Lookup the read method for this type
+                var readMethod = typeof(BinaryReader).GetMethod("Read" + type.Type.Name, Type.EmptyTypes);
+                System.Diagnostics.Debug.Assert(readMethod != null, "Could not lookup read method");
+
+                // Primitive type like bool
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Callvirt, binaryReaderPropertyGet);
+                il.Emit(OpCodes.Callvirt, readMethod);
+
+                il.Emit(OpCodes.Ret);
+            }
+            else if (type.TypeCode != null)
+            {
+                #region Enumeration
+                // This is an enum, lookup the write method for the inner type
+                Type enumType;
+                switch (type.TypeCode)
+                {
+                    case TypeCode.SByte:
+                        enumType = typeof(sbyte);
+                        break;
+                    case TypeCode.Int16:
+                        enumType = typeof(short);
+                        break;
+                    case TypeCode.Int32:
+                        enumType = typeof(int);
+                        break;
+                    case TypeCode.Int64:
+                        enumType = typeof(long);
+                        break;
+
+                    case TypeCode.Byte:
+                        enumType = typeof(byte);
+                        break;
+                    case TypeCode.UInt16:
+                        enumType = typeof(ushort);
+                        break;
+                    case TypeCode.UInt32:
+                        enumType = typeof(uint);
+                        break;
+                    case TypeCode.UInt64:
+                        enumType = typeof(ulong);
                         break;
 
                     default:
-                        throw new Exception($"Unhandled ObjectOperation '{objectOperation}'");
+                        throw new NotSupportedException($"Invalid type code '{type.TypeCode}' for enumeration");
                 }
 
-                var rootElementType = GetRootElementType(staticInfo);
+                var readMethod = typeof(BinaryReader).GetMethod("Read" + enumType.Name);
+                System.Diagnostics.Debug.Assert(readMethod != null, "Could not lookup read method");
 
-                var isSealed = rootElementType.Flags.HasFlag(PickledTypeFlags.IsSealed) || rootElementType.Flags.HasFlag(PickledTypeFlags.IsValueType);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Callvirt, binaryReaderPropertyGet);
+                il.Emit(OpCodes.Callvirt, readMethod);
 
-                if (!isSealed)
+                il.Emit(OpCodes.Ret);
+                #endregion
+            }
+            else if (type.Type == typeof(string))
+            {
+                #region String
+                var earlyReturn = il.DefineLabel();
+                var resultLocal = il.DeclareLocal(typeof(string));
+
+                // We _might_ have to write out object headers here
+                var prechecked = il.DefineLabel();
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Brtrue, prechecked);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Ldloca, resultLocal);
+                il.Emit(OpCodes.Call, readObjectOperationMethod);
+                il.Emit(OpCodes.Brtrue, earlyReturn);
+                il.MarkLabel(prechecked);
+
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Callvirt, binaryReaderPropertyGet);
+                var readMethod = typeof(BinaryReader).GetMethod("ReadString");
+                System.Diagnostics.Debug.Assert(readMethod != null, "Could not lookup read method");
+                il.Emit(OpCodes.Callvirt, readMethod);
+
+                // Memoize
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Call, addMemoMethod);
+                il.Emit(OpCodes.Stloc, resultLocal);
+
+                il.MarkLabel(earlyReturn);
+                il.Emit(OpCodes.Ldloc, resultLocal);
+                il.Emit(OpCodes.Ret);
+                #endregion
+            }
+            else if (type.IsNullable)
+            {
+                #region Nullable
+                // Nullable<T> always writes the same way
+                var innerTypeInfo = type.Element;
+                System.Diagnostics.Debug.Assert(innerTypeInfo != null, $"{type.Type} was nullable but Element was null");
+                var innerMethod = GetDeserializationMethod(innerTypeInfo);
+
+                var readMethod = typeof(BinaryReader).GetMethod("ReadBoolean");
+                System.Diagnostics.Debug.Assert(readMethod != null, "Could not lookup read method");
+
+                var constructor = type.Type.GetConstructor(new Type[] { innerTypeInfo.Type });
+                System.Diagnostics.Debug.Assert(constructor != null, "Could not lookup constructor");
+
+                var nullReturn = il.DefineLabel();
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Callvirt, binaryReaderPropertyGet);
+                il.Emit(OpCodes.Callvirt, readMethod);
+                il.Emit(OpCodes.Brfalse, nullReturn);
+
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Call, innerMethod);
+                il.Emit(OpCodes.Newobj, constructor);
+                il.Emit(OpCodes.Ret);
+
+                il.MarkLabel(nullReturn);
+                var nullNullable = il.DeclareLocal(type.Type);
+                il.Emit(OpCodes.Ldloca, nullNullable);
+                il.Emit(OpCodes.Initobj, type.Type);
+                il.Emit(OpCodes.Ldloc, nullNullable);
+                il.Emit(OpCodes.Ret);
+                #endregion
+            }
+            else if (type.IsArray)
+            {
+                #region Array
+                // This is an array, write the type then loop over each item.
+                // Theres a performance optimisation we could do here with value types,
+                // we we fetch the handler only once.
+
+                var elementType = type.Element;
+                System.Diagnostics.Debug.Assert(elementType != null, "Element returned null for an array type");
+                var innerMethod = GetDeserializationMethod(elementType);
+
+                // Special case szarray (i.e. Rank 1, lower bound 0)
+                var isSZ = type.Type.IsSZArray;
+
+                var read7BitMethod = typeof(BinaryReader).GetMethod("Read7BitEncodedInt");
+                System.Diagnostics.Debug.Assert(read7BitMethod != null, "Could not lookup Read7BitEncodedInt method");
+
+                var earlyReturn = il.DefineLabel();
+                var resultLocal = il.DeclareLocal(type.Type);
+
+                // We _might_ have to write out object headers here
+                var prechecked = il.DefineLabel();
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Brtrue, prechecked);
+
+                // If not pre-checked we _always_ need to do a memo/null check
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Ldloca, resultLocal);
+                il.Emit(OpCodes.Call, readObjectOperationMethod);
+                il.Emit(OpCodes.Brtrue, earlyReturn);
+
+                // But we only need to do a type check if this array could be variant.
+                // e.g. an int[] location always holds an int[] runtime value, but an object[] location could hold a string[].
+                // Unexpectedly a Type[] _must_ contain a Type[] because we don't allow other static type.
+                if (!elementType.IsValueType && !elementType.IsSealed)
                 {
-                    // TODO We'd like to use CompleteType elsewhere in this repo but ReadCustomAttributes currently relies on this method which means types might still be constructing.
-                    var pickledType = DeserializeType(state, default);
+                    il.Emit(OpCodes.Ldarg_0);
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Ldloca, resultLocal);
+                    il.Emit(OpCodes.Callvirt, readObjectTypeMethod);
+                    il.Emit(OpCodes.Brtrue, earlyReturn);
+                }
 
-                    state.Stages.PopStages(state, 3);
-                    runtimeType = pickledType.CompleteType;
-                    runtimeInfo = GetOrReadSerialisedObjectTypeInfo(state, runtimeType);
-                    state.Stages.PopStages(state, 4);
-                    var earlyResult = MaybeReadMemo(state);
-                    if (earlyResult != null) return earlyResult;
+                il.MarkLabel(prechecked);
+
+                // If we get here we know we are trying to write an array of exactly this type.
+
+                LocalBuilder? szLengthLocal = null;
+                var dimensions = 1;
+                if (isSZ)
+                {
+                    szLengthLocal = il.DeclareLocal(typeof(int));
+
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Callvirt, binaryReaderPropertyGet);
+                    il.Emit(OpCodes.Callvirt, read7BitMethod);
+                    il.Emit(OpCodes.Stloc, szLengthLocal);
+
+                    il.Emit(OpCodes.Ldloc, szLengthLocal);
+                    il.Emit(OpCodes.Newarr, elementType.Type);
+                }
+                else
+                {
+                    // This might just be rank 1 but with non-normal bounds
+                    dimensions = type.Type.GetArrayRank();
+
+                    // We need to call Array.CreateInstance(elementType, length, lowerBounds)
+                    var lengths = il.DeclareLocal(typeof(int[]));
+                    il.Emit(OpCodes.Ldc_I4, dimensions);
+                    il.Emit(OpCodes.Newarr, typeof(int));
+                    il.Emit(OpCodes.Stloc, lengths);
+
+                    var lowerBounds = il.DeclareLocal(typeof(int[]));
+                    il.Emit(OpCodes.Ldc_I4, dimensions);
+                    il.Emit(OpCodes.Newarr, typeof(int));
+                    il.Emit(OpCodes.Stloc, lowerBounds);
+
+                    for (int dimension = 0; dimension < dimensions; ++dimension)
+                    {
+                        il.Emit(OpCodes.Ldloc, lengths);
+                        il.Emit(OpCodes.Ldc_I4, dimension);
+                        il.Emit(OpCodes.Ldarg_1);
+                        il.Emit(OpCodes.Callvirt, binaryReaderPropertyGet);
+                        il.Emit(OpCodes.Callvirt, read7BitMethod);
+                        il.Emit(OpCodes.Stelem, typeof(int));
+
+                        il.Emit(OpCodes.Ldloc, lowerBounds);
+                        il.Emit(OpCodes.Ldc_I4, dimension);
+                        il.Emit(OpCodes.Ldarg_1);
+                        il.Emit(OpCodes.Callvirt, binaryReaderPropertyGet);
+                        il.Emit(OpCodes.Callvirt, read7BitMethod);
+                        il.Emit(OpCodes.Stelem, typeof(int));
+                    }
+
+                    var createInstance = typeof(Array).GetMethod("CreateInstance", new Type[] { typeof(Type), typeof(int[]), typeof(int[]) });
+                    System.Diagnostics.Debug.Assert(createInstance != null, "Could not lookup CreateInstance method");
+
+                    var getTypeFromHandle = typeof(Type).GetMethod("GetTypeFromHandle");
+                    System.Diagnostics.Debug.Assert(getTypeFromHandle != null, "Could not lookup GetTypeFromHandle method");
+
+                    il.Emit(OpCodes.Ldtoken, elementType.Type);
+                    il.Emit(OpCodes.Call, getTypeFromHandle);
+                    il.Emit(OpCodes.Ldloc, lengths);
+                    il.Emit(OpCodes.Ldloc, lowerBounds);
+                    il.Emit(OpCodes.Call, createInstance);
+                }
+
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Call, addMemoMethod);
+                il.Emit(OpCodes.Stloc, resultLocal);
+
+                // Iterate all the items
+                if (isSZ)
+                {
+                    System.Diagnostics.Debug.Assert(szLengthLocal != null, "Length local was not declared for sz array");
+
+                    var startOfLoop = il.DefineLabel();
+                    var endOfLoop = il.DefineLabel();
+                    var indexLocal = il.DeclareLocal(typeof(int));
+
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Stloc, indexLocal);
+
+                    il.MarkLabel(startOfLoop);
+
+                    il.Emit(OpCodes.Ldloc, szLengthLocal);
+                    il.Emit(OpCodes.Ldloc, indexLocal);
+                    il.Emit(OpCodes.Ceq);
+                    il.Emit(OpCodes.Brtrue, endOfLoop);
+
+                    // Read and store the next item
+                    il.Emit(OpCodes.Ldloc, resultLocal);
+                    il.Emit(OpCodes.Ldloc, indexLocal);
+                    // Read
+                    il.Emit(OpCodes.Ldarg_0);
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Call, innerMethod);
+                    // Store
+                    il.Emit(OpCodes.Stelem, elementType.Type);
+                    // Increment
+                    il.Emit(OpCodes.Ldloc, indexLocal);
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    il.Emit(OpCodes.Add);
+                    il.Emit(OpCodes.Stloc, indexLocal);
+
+                    il.Emit(OpCodes.Br, startOfLoop);
+                    il.MarkLabel(endOfLoop);
+                }
+                else
+                {
+                    var getLowerBoundMethod = type.Type.GetMethod("GetLowerBound");
+                    System.Diagnostics.Debug.Assert(getLowerBoundMethod != null, "Could not lookup GetLowerBound method");
+
+                    var getUpperBoundMethod = type.Type.GetMethod("GetUpperBound");
+                    System.Diagnostics.Debug.Assert(getUpperBoundMethod != null, "Could not lookup GetUpperBound method");
+
+                    var setMethod = type.Type.GetMethod("Set");
+                    System.Diagnostics.Debug.Assert(setMethod != null, "Could not lookup Set method");
+
+                    // Copy values dimension by dimension
+                    var variables = new (Label, Label, LocalBuilder, LocalBuilder)[dimensions];
+                    for (int dimension = 0; dimension < dimensions; ++dimension)
+                    {
+                        var startOfLoop = il.DefineLabel();
+                        var endOfLoop = il.DefineLabel();
+                        var indexLocal = il.DeclareLocal(typeof(int));
+                        var upperBoundLocal = il.DeclareLocal(typeof(int));
+
+                        il.Emit(OpCodes.Ldloc, resultLocal);
+                        il.Emit(OpCodes.Ldc_I4, dimension);
+                        il.Emit(OpCodes.Callvirt, getUpperBoundMethod);
+                        il.Emit(OpCodes.Stloc, upperBoundLocal);
+
+                        variables[dimension] = (startOfLoop, endOfLoop, indexLocal, upperBoundLocal);
+                    }
+
+                    for (int dimension = 0; dimension < dimensions; ++dimension)
+                    {
+                        var (startOfLoop, endOfLoop, indexLocal, upperBoundLocal) = variables[dimension];
+
+                        // Set the index back to the lower bound for this dimension
+                        il.Emit(OpCodes.Ldloc, resultLocal);
+                        il.Emit(OpCodes.Ldc_I4, dimension);
+                        il.Emit(OpCodes.Callvirt, getLowerBoundMethod);
+                        il.Emit(OpCodes.Stloc, indexLocal);
+
+                        // And start interating until index is greater than the upper bound and then break out the loop
+                        il.MarkLabel(startOfLoop);
+
+                        // Jump to end if index greater than upperbound, i.e. loop while index <= upperBound
+                        il.Emit(OpCodes.Ldloc, indexLocal);
+                        il.Emit(OpCodes.Ldloc, upperBoundLocal);
+                        il.Emit(OpCodes.Cgt);
+                        il.Emit(OpCodes.Brtrue, endOfLoop);
+                    }
+
+                    // Read and store the next item
+                    il.Emit(OpCodes.Ldloc, resultLocal);
+                    for (int dimension = 0; dimension < dimensions; ++dimension)
+                    {
+                        var (_, _, indexLocal, _) = variables[dimension];
+                        il.Emit(OpCodes.Ldloc, indexLocal);
+                    }
+                    // Read
+                    il.Emit(OpCodes.Ldarg_0);
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Call, innerMethod);
+                    // Store
+                    il.Emit(OpCodes.Callvirt, setMethod);
+
+                    for (int dimension = dimensions - 1; dimension >= 0; --dimension)
+                    {
+                        var (startOfLoop, endOfLoop, indexLocal, _) = variables[dimension];
+
+                        // Add one to the index and jump back to the start
+                        il.Emit(OpCodes.Ldloc, indexLocal);
+                        il.Emit(OpCodes.Ldc_I4_1);
+                        il.Emit(OpCodes.Add);
+                        il.Emit(OpCodes.Stloc, indexLocal);
+                        il.Emit(OpCodes.Br, startOfLoop);
+
+                        il.MarkLabel(endOfLoop);
+                    }
+                }
+
+                il.MarkLabel(earlyReturn);
+                il.Emit(OpCodes.Ldloc, resultLocal);
+                il.Emit(OpCodes.Ret);
+                #endregion
+            }
+            else if (type.TupleArguments != null)
+            {
+                #region Tuple
+                // This is either Tuple or ValueTuple
+                // N.B This isn't for any ITuple as there might be user defined types that inherit from Tuple and it's not safe to pass them in here.
+
+                // Special case ValueTuple
+                if (type.TupleArguments.Length == 0)
+                {
+                    var valueTuple = il.DeclareLocal(typeof(ValueTuple));
+                    il.Emit(OpCodes.Ldloca, valueTuple);
+                    il.Emit(OpCodes.Initobj, typeof(ValueTuple));
+                    il.Emit(OpCodes.Ldloc, valueTuple);
+                    il.Emit(OpCodes.Ret);
+                }
+                else
+                {
+
+                    var resultLocal = il.DeclareLocal(type.Type);
+
+                    var earlyReturn = il.DefineLabel();
+                    if (!type.Type.IsValueType)
+                    {
+                        // We _might_ have to write out object headers here
+                        var prechecked = il.DefineLabel();
+                        il.Emit(OpCodes.Ldarg_2);
+                        il.Emit(OpCodes.Brtrue, prechecked);
+
+                        il.Emit(OpCodes.Ldarg_1);
+                        il.Emit(OpCodes.Ldc_I4_1);
+                        il.Emit(OpCodes.Ldloca, resultLocal);
+                        il.Emit(OpCodes.Call, readObjectOperationMethod);
+                        il.Emit(OpCodes.Brtrue, earlyReturn);
+
+                        il.Emit(OpCodes.Ldarg_0);
+                        il.Emit(OpCodes.Ldarg_1);
+                        il.Emit(OpCodes.Ldloca, resultLocal);
+                        il.Emit(OpCodes.Callvirt, readObjectTypeMethod);
+                        il.Emit(OpCodes.Brtrue, earlyReturn);
+
+                        il.MarkLabel(prechecked);
+                    }
+
+                    var items = new LocalBuilder[type.TupleArguments.Length];
+                    var types = new Type[type.TupleArguments.Length];
+                    for (int i = 0; i < type.TupleArguments.Length; i++)
+                    {
+                        types[i] = type.TupleArguments[i].Type;
+                        items[i] = il.DeclareLocal(types[i]);
+                        var innerMethod = GetDeserializationMethod(type.TupleArguments[i]);
+
+                        il.Emit(OpCodes.Ldarg_0);
+                        il.Emit(OpCodes.Ldarg_1);
+                        il.Emit(OpCodes.Ldc_I4_0);
+                        il.Emit(OpCodes.Call, innerMethod);
+                        il.Emit(OpCodes.Stloc, items[i]);
+
+                        // If this is a reference to a tuple (i.e. Tuple, or boxed ValueTuple) then serialising the fields may serialise the tuple itself.
+                        var skipMemo = il.DefineLabel();
+                        if (type.IsValueType)
+                        {
+                            il.Emit(OpCodes.Ldarg_2);
+                            il.Emit(OpCodes.Brfalse, skipMemo);
+                        }
+                        il.Emit(OpCodes.Ldarg_1);
+                        il.Emit(OpCodes.Ldloca, resultLocal);
+                        il.Emit(OpCodes.Call, maybeReadMemoMethod);
+                        il.Emit(OpCodes.Brtrue, earlyReturn);
+                        il.MarkLabel(skipMemo);
+
+                    }
+
+                    for (int i = 0; i < items.Length; i++)
+                    {
+                        il.Emit(OpCodes.Ldloc, items[i]);
+                    }
+                    var constructor = type.Type.GetConstructor(types);
+                    System.Diagnostics.Debug.Assert(constructor != null, $"Could not lookup {type.Type} constructor");
+                    il.Emit(OpCodes.Newobj, constructor);
+
+                    // Memoize the result
+                    if (!type.IsValueType)
+                    {
+                        il.Emit(OpCodes.Ldarg_1);
+                        if (type.Type.IsValueType)
+                        {
+                            il.Emit(OpCodes.Ldarg_2);
+                        }
+                        else
+                        {
+                            il.Emit(OpCodes.Ldc_I4_1);
+                        }
+                        il.Emit(OpCodes.Call, addMemoMethod);
+                        il.Emit(OpCodes.Stloc, resultLocal);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Stloc, resultLocal);
+                    }
+
+
+                    il.MarkLabel(earlyReturn);
+                    il.Emit(OpCodes.Ldloc, resultLocal);
+                    il.Emit(OpCodes.Ret);
+                }
+                #endregion
+            }
+            else if (type.Mode == PickledTypeMode.IsDelegate)
+            {
+                #region Delegate
+                // Delegates are always reference objects, so no worry about boxing here.
+                var readDelegateMethod = typeof(Pickler).GetMethod("ReadDelegate", BindingFlags.NonPublic | BindingFlags.Instance);
+                System.Diagnostics.Debug.Assert(readDelegateMethod != null, "Could not lookup ReadDelegate method");
+
+
+                var earlyReturn = il.DefineLabel();
+                var resultLocal = il.DeclareLocal(type.Type);
+
+                // We _might_ have to write out object headers here
+                var prechecked = il.DefineLabel();
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Brtrue, prechecked);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Ldloca, resultLocal);
+                il.Emit(OpCodes.Call, readObjectOperationMethod);
+                il.Emit(OpCodes.Brtrue, earlyReturn);
+                il.MarkLabel(prechecked);
+
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldtoken, type.Type);
+                il.Emit(OpCodes.Callvirt, readDelegateMethod);
+                il.Emit(OpCodes.Stloc, resultLocal);
+
+                il.MarkLabel(earlyReturn);
+                il.Emit(OpCodes.Ldloc, resultLocal);
+                il.Emit(OpCodes.Ret);
+                #endregion
+            }
+            else if (type.IsAbstract)
+            {
+                #region Abstract
+                // Abstract types must do dynamic dispatch
+                var earlyReturn = il.DefineLabel();
+                var resultLocal = il.DeclareLocal(type.Type);
+
+                var exceptionConstructor = typeof(Exception).GetConstructor(new Type[] { typeof(string) });
+                System.Diagnostics.Debug.Assert(exceptionConstructor != null, "Could not lookup Exception constructor");
+
+                // If this say's it's prechecked that's a bug!
+                var prechecked = il.DefineLabel();
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Brfalse, prechecked);
+                il.Emit(OpCodes.Ldstr, "Abstract type was called as prechecked");
+                il.Emit(OpCodes.Newobj, exceptionConstructor);
+                il.Emit(OpCodes.Throw);
+                il.MarkLabel(prechecked);
+
+                // We always need to do a null/memo check here
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Ldloca, resultLocal);
+                il.Emit(OpCodes.Call, readObjectOperationMethod);
+                il.Emit(OpCodes.Brtrue, earlyReturn);
+                // And a type check because this type is abstract
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldloca, resultLocal);
+                il.Emit(OpCodes.Callvirt, readObjectTypeMethod);
+                il.Emit(OpCodes.Brtrue, earlyReturn);
+
+                // If we get here something has gone very wrong
+                il.Emit(OpCodes.Ldstr, "Tried to serialize an abstract type");
+                il.Emit(OpCodes.Newobj, exceptionConstructor);
+                il.Emit(OpCodes.Throw);
+
+                il.MarkLabel(earlyReturn);
+                il.Emit(OpCodes.Ldloc, resultLocal);
+                il.Emit(OpCodes.Ret);
+                #endregion
+            }
+            else if (type.Mode == PickledTypeMode.IsReduced)
+            {
+                #region IReducer
+                // Use of an IReducer causes boxing anyway so just cast up to object.
+                var readReducerMethod = typeof(Pickler).GetMethod("ReadReducer", BindingFlags.NonPublic | BindingFlags.Instance);
+                System.Diagnostics.Debug.Assert(readReducerMethod != null, "Could not lookup ReadReducer method");
+
+                var earlyReturn = il.DefineLabel();
+                var resultLocal = il.DeclareLocal(type.Type);
+
+                if (!type.IsValueType)
+                {
+                    // We _might_ have to write out object headers here
+                    var prechecked = il.DefineLabel();
+                    il.Emit(OpCodes.Ldarg_2);
+                    il.Emit(OpCodes.Brtrue, prechecked);
+
+                    // We always need to do a null/memo check here
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    il.Emit(OpCodes.Ldloca, resultLocal);
+                    il.Emit(OpCodes.Call, readObjectOperationMethod);
+                    il.Emit(OpCodes.Brtrue, earlyReturn);
+
+                    // But we only need to do a type check if the type is not sealed
+                    if (!type.IsSealed)
+                    {
+                        il.Emit(OpCodes.Ldarg_0);
+                        il.Emit(OpCodes.Ldarg_1);
+                        il.Emit(OpCodes.Ldloca, resultLocal);
+                        il.Emit(OpCodes.Callvirt, readObjectTypeMethod);
+                        il.Emit(OpCodes.Brtrue, earlyReturn);
+                    }
+
+                    il.MarkLabel(prechecked);
+                }
+
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Callvirt, readReducerMethod);
+                if (type.IsValueType)
+                {
+                    il.Emit(OpCodes.Unbox, type.Type);
+                }
+                else
+                {
+                    il.Emit(OpCodes.Castclass, type.Type);
+                }
+
+                // Now memoize the object
+                if (!type.IsValueType)
+                {
+                    il.Emit(OpCodes.Ldarg_1);
+                    if (type.IsValueType)
+                    {
+                        il.Emit(OpCodes.Ldarg_2);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Ldc_I4_1);
+                    }
+                    il.Emit(OpCodes.Call, addMemoMethod);
+                    il.Emit(OpCodes.Stloc, resultLocal);
+                }
+                else
+                {
+                    il.Emit(OpCodes.Stloc, resultLocal);
+                }
+
+                il.MarkLabel(earlyReturn);
+                il.Emit(OpCodes.Ldloc, resultLocal);
+                il.Emit(OpCodes.Ret);
+                #endregion
+            }
+            else if (type.Mode == PickledTypeMode.IsBuiltin)
+            {
+                throw new Exception($"Unhandled built-in type: {type.Type}");
+            }
+            else
+            {
+                #region Object
+                // Must be an object, try and dump all it's fields
+                System.Diagnostics.Debug.Assert(type.SerialisedFields != null, "SerialisedFields was null");
+
+                var earlyReturn = il.DefineLabel();
+                var resultLocal = il.DeclareLocal(type.Type);
+
+                if (!type.IsValueType)
+                {
+                    // We _might_ have to write out object headers here
+                    var prechecked = il.DefineLabel();
+                    il.Emit(OpCodes.Ldarg_2);
+                    il.Emit(OpCodes.Brtrue, prechecked);
+
+                    // We always need to do a null/memo check here
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    il.Emit(OpCodes.Ldloca, resultLocal);
+                    il.Emit(OpCodes.Call, readObjectOperationMethod);
+                    il.Emit(OpCodes.Brtrue, earlyReturn);
+
+                    // But we only need to do a type check if the type is not sealed
+                    if (!type.IsSealed)
+                    {
+                        il.Emit(OpCodes.Ldarg_0);
+                        il.Emit(OpCodes.Ldarg_1);
+                        il.Emit(OpCodes.Ldloca, resultLocal);
+                        il.Emit(OpCodes.Callvirt, readObjectTypeMethod);
+                        il.Emit(OpCodes.Brtrue, earlyReturn);
+                    }
+
+                    il.MarkLabel(prechecked);
+                }
+
+                // If this is a value type we can just use initobj, else we need to use System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject
+                if (type.Type.IsValueType)
+                {
+                    il.Emit(OpCodes.Ldloca, resultLocal);
+                    il.Emit(OpCodes.Initobj, type.Type);
+                    il.Emit(OpCodes.Ldloc, resultLocal);
+                }
+                else
+                {
+                    var getUninitializedObject = typeof(RuntimeHelpers).GetMethod("GetUninitializedObject");
+                    System.Diagnostics.Debug.Assert(getUninitializedObject != null, "Could not lookup GetUninitializedObject method");
+
+                    var getTypeFromHandle = typeof(Type).GetMethod("GetTypeFromHandle");
+                    System.Diagnostics.Debug.Assert(getTypeFromHandle != null, "Could not lookup GetTypeFromHandle method");
+
+                    il.Emit(OpCodes.Ldtoken, type.Type);
+                    il.Emit(OpCodes.Call, getTypeFromHandle);
+                    il.Emit(OpCodes.Call, getUninitializedObject);
+                }
+
+                // Now memoize the object
+                if (!type.IsValueType)
+                {
+                    il.Emit(OpCodes.Ldarg_1);
+                    if (type.IsValueType)
+                    {
+                        il.Emit(OpCodes.Ldarg_2);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Ldc_I4_1);
+                    }
+                    il.Emit(OpCodes.Call, addMemoMethod);
+                    il.Emit(OpCodes.Stloc, resultLocal);
+                }
+                else
+                {
+                    il.Emit(OpCodes.Stloc, resultLocal);
+                }
+
+                foreach (var (fieldType, field) in type.SerialisedFields)
+                {
+                    var innerMethod = GetDeserializationMethod(fieldType);
+
+                    if (type.Type.IsValueType)
+                    {
+                        il.Emit(OpCodes.Ldloca, resultLocal);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Ldloc, resultLocal);
+                    }
+                    il.Emit(OpCodes.Ldarg_0);
+                    il.Emit(OpCodes.Ldarg_1);
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Call, innerMethod);
+                    il.Emit(OpCodes.Stfld, field);
+                }
+
+                il.MarkLabel(earlyReturn);
+                il.Emit(OpCodes.Ldloc, resultLocal);
+                il.Emit(OpCodes.Ret);
+                #endregion
+            }
+
+            return dynamicMethod;
+        }
+
+        private object? InvokeDeserializationMethod(SerialisedObjectTypeInfo typeInfo, PicklerDeserializationState state, bool prechecked)
+        {
+            var deserializationMethod = GetDeserializationMethod(typeInfo);
+            try
+            {
+                if (typeInfo.IsValueType)
+                {
+                    var value = deserializationMethod.Invoke(null, new object[] { this, state, prechecked });
+                    System.Diagnostics.Debug.Assert(value != null, "value type was null");
+                    if (prechecked)
+                    {
+                        // if prechecked is true this is being called as part of parsing an Object, and so the value should be boxed
+                        AddMemo(state, value);
+                    }
+                    return value;
+                }
+                else
+                {
+                    return deserializationMethod.Invoke(null, new object[] { this, state, prechecked });
+                }
+            }
+            catch (TargetInvocationException exc)
+            {
+                System.Diagnostics.Debug.Assert(exc.InnerException != null, "TargetInvocationException.InnerException was null");
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(exc.InnerException);
+                return null; // Unreachable
+            }
+        }
+
+        /// <summary>
+        /// ReadObjectOperation deals with the common logic that all reference types need to deal with, that is if it's null or memo'd.
+        /// </summary>
+        private static bool ReadObjectOperation<T>(PicklerDeserializationState state, bool unpickle, out T? obj)
+        {
+            var objectOperation = (ObjectOperation)state.Reader.ReadByte();
+
+            switch (objectOperation)
+            {
+                case ObjectOperation.Null:
+                    {
+                        obj = default(T);
+                        return true;
+                    }
+
+                case ObjectOperation.Memo:
+                    {
+                        var memo = state.ReadMemo();
+                        if (unpickle && memo is PickledObject pickled)
+                        {
+                            memo = pickled.Get();
+                        }
+                        obj = (T)memo;
+                        return true;
+                    }
+
+                case ObjectOperation.Object:
+                    break;
+
+                default:
+                    throw new Exception($"Unhandled ObjectOperation '{objectOperation}'");
+            }
+
+            obj = default(T);
+            return false;
+        }
+
+        /// <summary>
+        /// ReadObjectType gets the runtime type of obj, read the TypeInfo for it if needed, rechecks the memo state,
+        /// and then checks if it's the expected type. If not it dynamic dispatchs to correct method.
+        /// </summary>
+        private bool ReadObjectType<T>(PicklerDeserializationState state, [NotNullWhen(true)] out T? obj)
+        {
+            var pickledType = DeserializeType(state, default);
+            state.Stages.PopStages(state, 3);
+            var type = pickledType.CompleteType;
+            var typeInfo = GetOrReadSerialisedObjectTypeInfo(state, type);
+            state.Stages.PopStages(state, 4);
+
+            if (MaybeReadMemo(state, out obj)) return true;
+
+            // If runtimeType == expected then return that this expected type needs reading,
+            // else dynamic dispatch to the correct type but tell it headers are already set
+            if (type == typeof(T))
+            {
+                obj = default(T);
+                return false;
+            }
+
+            obj = (T)InvokeDeserializationMethod(typeInfo, state, true)!;
+            return true;
+        }
+
+        private object ReadReducer(PicklerDeserializationState state)
+        {
+            var method = DeserializeMethodBase(state);
+
+            object? target;
+            if (method is PickledConstructorInfo)
+            {
+                target = null;
+            }
+            else if (method is PickledMethodInfo)
+            {
+                target = Deserialize_Object(this, state, false);
+            }
+            else
+            {
+                throw new Exception($"Invalid reduction MethodBase was '{method}'.");
+            }
+
+            var args = new object?[state.Reader.Read7BitEncodedInt()];
+            for (int i = 0; i < args.Length; ++i)
+            {
+                var arg = Deserialize_Object(this, state, false);
+                args[i] = arg;
+            }
+
+            var result = method.Invoke(target, args);
+            if (result == null)
+            {
+                throw new Exception($"Invalid reducer method, '{method}' returned null.");
+            }
+            return result;
+        }
+
+        private Delegate ReadDelegate(PicklerDeserializationState state, RuntimeTypeHandle delegateType)
+        {
+            Delegate? earlyResult;
+            var invocationCount = state.Reader.Read7BitEncodedInt();
+            if (invocationCount == 1)
+            {
+                var target = Deserialize_Object(this, state, false);
+                if (MaybeReadMemo(state, out earlyResult)) return earlyResult;
+
+                var method = Deserialize_MethodInfo(this, state, false);
+                if (MaybeReadMemo(state, out earlyResult)) return earlyResult;
+
+                var result = Delegate.CreateDelegate(Type.GetTypeFromHandle(delegateType), target, method);
+                AddMemo(state, result);
+                return result;
+            }
+            else
+            {
+                var invocationList = new Delegate[invocationCount];
+                for (int i = 0; i < invocationList.Length; ++i)
+                {
+                    invocationList[i] = Deserialize_Delegate(this, state, false)!;
+                    if (MaybeReadMemo(state, out earlyResult)) return earlyResult;
+                }
+
+                var result = Delegate.Combine(invocationList)!;
+                AddMemo(state, result);
+                return result;
+            }
+        }
+
+        #region Built in serialization methods
+        private static object? Deserialize_Object(Pickler self, PicklerDeserializationState state, bool prechecked)
+        {
+            // It's known that this IS a System.Object and it's not null or memo'd
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<object>(state, true, out var obj))
+                {
+                    return obj;
+                }
+                if (self.ReadObjectType(state, out obj))
+                {
+                    return obj;
+                }
+            }
+            // Don't need to actually read anything for System.Object
+            var result = new object();
+            AddMemo(state, result);
+            return result;
+        }
+
+        private static Delegate? Deserialize_Delegate(Pickler self, PicklerDeserializationState state, bool prechecked)
+        {
+            System.Diagnostics.Debug.Assert(!prechecked, "Deserialize_Delegate was called as prechecked");
+
+            if (ReadObjectOperation<Delegate>(state, true, out var obj))
+            {
+                return obj;
+            }
+            if (self.ReadObjectType(state, out obj))
+            {
+                return obj;
+            }
+
+            throw new Exception("Tried to serialize an abstract Delegate");
+        }
+
+        private static Type? Deserialize_Type(Pickler self, PicklerDeserializationState state, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<Type>(state, true, out var obj))
+                {
+                    return obj;
                 }
             }
 
-            if (runtimeInfo.Error != null)
-            {
-                throw new Exception(runtimeInfo.Error);
-            }
-
-            if (runtimeType.IsEnum)
-            {
-                System.Diagnostics.Debug.Assert(runtimeInfo.TypeCode != null, "Expected enumeration type to have a TypeCode");
-
-                var result = Enum.ToObject(runtimeType, ReadEnumerationValue(state.Reader, runtimeInfo.TypeCode.Value));
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-
-            else if (runtimeType.IsArray)
-            {
-                return DeserializeArray(state, runtimeType);
-            }
-
-            else if (runtimeType.IsAssignableTo(typeof(FieldInfo)))
-            {
-                var fieldRef = DeserializeFieldRef(state);
-                state.Stages.PopStages(state);
-                return fieldRef.FieldInfo;
-            }
-            else if (runtimeType.IsAssignableTo(typeof(PropertyInfo)))
-            {
-                var propertyRef = DeserializePropertyRef(state);
-                state.Stages.PopStages(state);
-                return propertyRef.PropertyInfo;
-            }
-            else if (runtimeType.IsAssignableTo(typeof(EventInfo)))
-            {
-                var eventRef = DeserializeEventRef(state);
-                state.Stages.PopStages(state);
-                return eventRef.EventInfo;
-            }
-            else if (runtimeType.IsAssignableTo(typeof(MethodInfo)))
-            {
-                var methodRef = DeserializeMethodRef(state);
-                state.Stages.PopStages(state);
-                return methodRef.MethodInfo;
-            }
-            else if (runtimeType.IsAssignableTo(typeof(ConstructorInfo)))
-            {
-                var constructorRef = DeserializeConstructorRef(state);
-                state.Stages.PopStages(state);
-                return constructorRef.ConstructorInfo;
-            }
-
-            // TODO we want to do this via info flags eventually but due to the dumb way we handle arrays it easier to do this for now
-            else if (runtimeType.IsAssignableTo(typeof(MulticastDelegate)))
-            {
-                return DeserializeDelegate(state, runtimeType);
-            }
-
-            else if (IsTupleType(runtimeType))
-            {
-                return DeserializeTuple(state, shouldMemo, runtimeType);
-            }
-
-            else if (runtimeType == typeof(object))
-            {
-                var result = new object();
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-
-            else if (runtimeType == typeof(bool))
-            {
-                var result = (object)state.Reader.ReadBoolean();
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(char))
-            {
-                var result = (object)state.Reader.ReadChar();
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(byte))
-            {
-                var result = (object)state.Reader.ReadByte();
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(ushort))
-            {
-                var result = (object)state.Reader.ReadUInt16();
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(uint))
-            {
-                var result = (object)state.Reader.ReadUInt32();
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(ulong))
-            {
-                var result = (object)state.Reader.ReadUInt64();
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(sbyte))
-            {
-                var result = (object)state.Reader.ReadSByte();
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(short))
-            {
-                var result = (object)state.Reader.ReadInt16();
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(int))
-            {
-                var result = (object)state.Reader.ReadInt32();
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(long))
-            {
-                var result = (object)state.Reader.ReadInt64();
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(float))
-            {
-                var result = (object)state.Reader.ReadSingle();
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(double))
-            {
-                var result = (object)state.Reader.ReadDouble();
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(decimal))
-            {
-                var result = (object)state.Reader.ReadDecimal();
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(DBNull))
-            {
-                var result = (object)DBNull.Value;
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(string))
-            {
-                var result = (object)state.Reader.ReadString();
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(UIntPtr))
-            {
-                var result = (object)new UIntPtr(state.Reader.ReadUInt64());
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-            else if (runtimeType == typeof(IntPtr))
-            {
-                var result = (object)new IntPtr(state.Reader.ReadInt64());
-                state.SetMemo(shouldMemo, result);
-                return result;
-            }
-
-            else if (runtimeType.IsAssignableTo(typeof(Assembly)))
-            {
-                var assembly = DeserializeAssembly(state, default);
-                state.Stages.PopStages(state);
-                return assembly.Assembly;
-            }
-            else if (runtimeType.IsAssignableTo(typeof(Module)))
-            {
-                var module = DeserializeModule(state, default);
-                state.Stages.PopStages(state);
-                return module.Module;
-            }
-            else if (runtimeType.IsAssignableTo(typeof(Type)))
-            {
-                var type = DeserializeType(state, default);
-                state.Stages.PopStages(state);
-                return type.CompleteType;
-            }
-
-            else if (runtimeType == typeof(Pickler))
-            {
-                // Pickler caches _a lot_ of runtime information but all we care about is alc and the reducers assigned to it.
-                //var assemblyLoadContext = Deserialize(state, typeof(object)) as AssemblyLoadContext;
-                //var assemblyPickleMode = Deserialize(state, typeof(object)) as Func<Assembly, AssemblyPickleMode>;
-                //var reducers = Deserialize(state, typeof(object)) as IReducer[];
-
-                var pickler = new Pickler(null, null);
-                //foreach(var reducer in reducers)
-                //{
-                //    pickler.RegisterReducer(reducer);
-                //}
-                return state.SetMemo(shouldMemo, pickler);
-            }
-
-            else if (runtimeInfo.Mode == PickledTypeMode.IsReduced)
-            {
-                return state.SetMemo(shouldMemo, DeserializeReducer(state));
-            }
-
-            return DeserializeObject(state, shouldMemo, runtimeType, runtimeInfo);
+            var pickledType = self.DeserializeType(state, default);
+            state.Stages.PopStages(state);
+            return pickledType.CompleteType;
         }
+
+        private static Module? Deserialize_Module(Pickler self, PicklerDeserializationState state, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<Module>(state, true, out var obj))
+                {
+                    return obj;
+                }
+            }
+
+            var pickledModule = self.DeserializeModule(state);
+            state.Stages.PopStages(state);
+            return pickledModule.Module;
+        }
+
+        private static Assembly? Deserialize_Assembly(Pickler self, PicklerDeserializationState state, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<Assembly>(state, true, out var obj))
+                {
+                    return obj;
+                }
+            }
+
+            var pickledAssembly = self.DeserializeAssembly(state);
+            state.Stages.PopStages(state);
+            return pickledAssembly.Assembly;
+        }
+
+        private static MethodInfo? Deserialize_MethodInfo(Pickler self, PicklerDeserializationState state, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<MethodInfo>(state, true, out var obj))
+                {
+                    return obj;
+                }
+            }
+
+            var pickledMethodInfo = self.DeserializeMethodInfo(state, true);
+            state.Stages.PopStages(state);
+            return pickledMethodInfo.MethodInfo;
+        }
+
+        private static DynamicMethod? Deserialize_DynamicMethod(Pickler self, PicklerDeserializationState state, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<DynamicMethod>(state, true, out var obj))
+                {
+                    return obj;
+                }
+            }
+
+            var pickledDynamicMethod = self.DeserializeMethodInfo(state, true);
+            state.Stages.PopStages(state);
+            return pickledDynamicMethod.MethodInfo as DynamicMethod;
+        }
+
+        private static ConstructorInfo? Deserialize_ConstructorInfo(Pickler self, PicklerDeserializationState state, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<ConstructorInfo>(state, true, out var obj))
+                {
+                    return obj;
+                }
+            }
+
+            var pickledConstructorInfo = self.DeserializeConstructorInfo(state, true);
+            state.Stages.PopStages(state);
+            return pickledConstructorInfo.ConstructorInfo;
+        }
+
+        private static FieldInfo? Deserialize_FieldInfo(Pickler self, PicklerDeserializationState state, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<FieldInfo>(state, true, out var obj))
+                {
+                    return obj;
+                }
+            }
+
+            var pickledFieldInfo = self.DeserializeFieldInfo(state, true);
+            state.Stages.PopStages(state);
+            return pickledFieldInfo.FieldInfo;
+        }
+
+        private static PropertyInfo? Deserialize_PropertyInfo(Pickler self, PicklerDeserializationState state, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<PropertyInfo>(state, true, out var obj))
+                {
+                    return obj;
+                }
+            }
+
+            var pickledPropertyInfo = self.DeserializePropertyInfo(state, true);
+            state.Stages.PopStages(state);
+            return pickledPropertyInfo.PropertyInfo;
+        }
+
+        private static EventInfo? Deserialize_EventInfo(Pickler self, PicklerDeserializationState state, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<EventInfo>(state, true, out var obj))
+                {
+                    return obj;
+                }
+            }
+
+            var pickledEventInfo = self.DeserializeEventInfo(state, true);
+            state.Stages.PopStages(state);
+            return pickledEventInfo.EventInfo;
+        }
+
+        private static Pickler? Deserialize_Pickler(Pickler self, PicklerDeserializationState state, bool prechecked)
+        {
+            if (!prechecked)
+            {
+                if (ReadObjectOperation<Pickler>(state, true, out var obj))
+                {
+                    return obj;
+                }
+            }
+
+            var result = new Pickler();
+            AddMemo(state, result);
+            return result;
+        }
+        #endregion
 
         public object? Deserialize(Stream stream)
         {
@@ -2676,7 +3495,7 @@ namespace Ibasa.Pikala
             var runtimeMajor = state.Reader.Read7BitEncodedInt();
             var runtimeMinor = state.Reader.Read7BitEncodedInt();
 
-            var result = Deserialize(state, typeof(object));
+            var result = Deserialize_Object(this, state, false);
             state.Stages.AssertEmpty();
             return result;
         }

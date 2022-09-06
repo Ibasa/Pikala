@@ -338,6 +338,64 @@ namespace Ibasa.Pikala
                 System.Diagnostics.Debug.Assert(serializePicklerMethod != null, "Could not lookup Serialize_Pickler method");
                 _serializationMethods.Add(typeof(Pickler), serializePicklerMethod);
             }
+
+            // And for deserialization 
+            {
+                var deserializeObjectMethod = typeof(Pickler).GetMethod("Deserialize_Object", BindingFlags.NonPublic | BindingFlags.Static);
+                System.Diagnostics.Debug.Assert(deserializeObjectMethod != null, "Could not lookup Deserialize_Object method");
+                _deserializationMethods.Add(GetCachedTypeInfo(typeof(object)), deserializeObjectMethod);
+
+                var deserializeDelegateMethod = typeof(Pickler).GetMethod("Deserialize_Delegate", BindingFlags.NonPublic | BindingFlags.Static);
+                System.Diagnostics.Debug.Assert(deserializeDelegateMethod != null, "Could not lookup Deserialize_Delegate method");
+                // Delegate and MulticastDelegate can both use Deserialize_Delegate
+                _deserializationMethods.Add(GetCachedTypeInfo(typeof(Delegate)), deserializeDelegateMethod);
+                _deserializationMethods.Add(GetCachedTypeInfo(typeof(MulticastDelegate)), deserializeDelegateMethod);
+
+                var deserializeTypeMethod = typeof(Pickler).GetMethod("Deserialize_Type", BindingFlags.NonPublic | BindingFlags.Static);
+                System.Diagnostics.Debug.Assert(deserializeTypeMethod != null, "Could not lookup Deserialize_Type method");
+                // TypeBuilders/ModuleBuilder/AssemblyBuilder can use the same method as their non-builder variants.
+                _deserializationMethods.Add(GetCachedTypeInfo(runtimeTypeType), deserializeTypeMethod);
+                _deserializationMethods.Add(GetCachedTypeInfo(typeof(TypeBuilder)), deserializeTypeMethod);
+
+                var deserializeModuleMethod = typeof(Pickler).GetMethod("Deserialize_Module", BindingFlags.NonPublic | BindingFlags.Static);
+                System.Diagnostics.Debug.Assert(deserializeModuleMethod != null, "Could not lookup Deserialize_Module method");
+                _deserializationMethods.Add(GetCachedTypeInfo(runtimeModuleType), deserializeModuleMethod);
+                _deserializationMethods.Add(GetCachedTypeInfo(typeof(ModuleBuilder)), deserializeModuleMethod);
+
+                var deserializeAssemblyMethod = typeof(Pickler).GetMethod("Deserialize_Assembly", BindingFlags.NonPublic | BindingFlags.Static);
+                System.Diagnostics.Debug.Assert(deserializeAssemblyMethod != null, "Could not lookup Deserialize_Assembly method");
+                _deserializationMethods.Add(GetCachedTypeInfo(runtimeAssemblyType), deserializeAssemblyMethod);
+                _deserializationMethods.Add(GetCachedTypeInfo(typeof(AssemblyBuilder)), deserializeAssemblyMethod);
+
+                var deserializeMethodInfoMethod = typeof(Pickler).GetMethod("Deserialize_MethodInfo", BindingFlags.NonPublic | BindingFlags.Static);
+                System.Diagnostics.Debug.Assert(deserializeMethodInfoMethod != null, "Could not lookup Deserialize_MethodInfo method");
+                _deserializationMethods.Add(GetCachedTypeInfo(runtimeMethodInfoType), deserializeMethodInfoMethod);
+
+                var deserializeDynamicMethodMethod = typeof(Pickler).GetMethod("Deserialize_DynamicMethod", BindingFlags.NonPublic | BindingFlags.Static);
+                System.Diagnostics.Debug.Assert(deserializeDynamicMethodMethod != null, "Could not lookup Deserialize_DynamicMethod method");
+                _deserializationMethods.Add(GetCachedTypeInfo(typeof(DynamicMethod)), deserializeDynamicMethodMethod);
+
+                var deserializeConstructorInfoMethod = typeof(Pickler).GetMethod("Deserialize_ConstructorInfo", BindingFlags.NonPublic | BindingFlags.Static);
+                System.Diagnostics.Debug.Assert(deserializeConstructorInfoMethod != null, "Could not lookup Deserialize_ConstructorInfo method");
+                _deserializationMethods.Add(GetCachedTypeInfo(runtimeConstructorInfoType), deserializeConstructorInfoMethod);
+
+                var deserializeFieldInfoMethod = typeof(Pickler).GetMethod("Deserialize_FieldInfo", BindingFlags.NonPublic | BindingFlags.Static);
+                System.Diagnostics.Debug.Assert(deserializeFieldInfoMethod != null, "Could not lookup Deserialize_FieldInfo method");
+                _deserializationMethods.Add(GetCachedTypeInfo(runtimeRtFieldInfoType), deserializeFieldInfoMethod);
+                _deserializationMethods.Add(GetCachedTypeInfo(runtimeMdFieldInfoType), deserializeFieldInfoMethod);
+
+                var deserializePropertyInfoMethod = typeof(Pickler).GetMethod("Deserialize_PropertyInfo", BindingFlags.NonPublic | BindingFlags.Static);
+                System.Diagnostics.Debug.Assert(deserializePropertyInfoMethod != null, "Could not lookup Deserialize_PropertyInfo method");
+                _deserializationMethods.Add(GetCachedTypeInfo(runtimePropertyInfoType), deserializePropertyInfoMethod);
+
+                var deserializeEventInfoMethod = typeof(Pickler).GetMethod("Deserialize_EventInfo", BindingFlags.NonPublic | BindingFlags.Static);
+                System.Diagnostics.Debug.Assert(deserializeEventInfoMethod != null, "Could not lookup Deserialize_EventInfo method");
+                _deserializationMethods.Add(GetCachedTypeInfo(runtimeEventInfoType), deserializeEventInfoMethod);
+
+                var deserializePicklerMethod = typeof(Pickler).GetMethod("Deserialize_Pickler", BindingFlags.NonPublic | BindingFlags.Static);
+                System.Diagnostics.Debug.Assert(deserializePicklerMethod != null, "Could not lookup Deserialize_Pickler method");
+                _deserializationMethods.Add(GetCachedTypeInfo(typeof(Pickler)), deserializePicklerMethod);
+            }
         }
 
         public bool RegisterReducer(IReducer reducer)
@@ -415,6 +473,9 @@ namespace Ibasa.Pikala
             if (IsNullableType(type, out var _)) return true;
             if (IsTupleType(type)) return true;
             if (type == typeof(Pickler)) return true;
+            if (type == typeof(AssemblyBuilder)) return true;
+            if (type == typeof(ModuleBuilder)) return true;
+            if (type == typeof(TypeBuilder)) return true;
 
             return false;
         }
@@ -461,6 +522,7 @@ namespace Ibasa.Pikala
                 // Work out what sort of operation this type needs
                 if (type.IsPointer || type == typeof(Pointer))
                 {
+                    info.Mode = PickledTypeMode.IsError;
                     info.Error = $"Pointer types are not serializable: '{type}'";
                 }
 
@@ -487,6 +549,7 @@ namespace Ibasa.Pikala
                 {
                     if (!type.IsAssignableTo(runtimeAssemblyType) && type != typeof(AssemblyBuilder))
                     {
+                        info.Mode = PickledTypeMode.IsError;
                         info.Error = $"Type '{type}' is not automaticly serializable as it inherits from Assembly.";
                     }
                 }
@@ -494,6 +557,7 @@ namespace Ibasa.Pikala
                 {
                     if (!type.IsAssignableTo(runtimeModuleType) && type != typeof(ModuleBuilder))
                     {
+                        info.Mode = PickledTypeMode.IsError;
                         info.Error = $"Type '{type}' is not automaticly serializable as it inherits from Module.";
                     }
                 }
@@ -503,6 +567,7 @@ namespace Ibasa.Pikala
                     {
                         if (!type.IsAssignableTo(runtimeTypeType) && type != typeof(TypeBuilder))
                         {
+                            info.Mode = PickledTypeMode.IsError;
                             info.Error = $"Type '{type}' is not automaticly serializable as it inherits from Type.";
                         }
                     }
@@ -510,6 +575,7 @@ namespace Ibasa.Pikala
                     {
                         if (!type.IsAssignableTo(runtimeFieldInfoType) && type != typeof(FieldBuilder))
                         {
+                            info.Mode = PickledTypeMode.IsError;
                             info.Error = $"Type '{type}' is not automaticly serializable as it inherits from FieldInfo.";
                         }
                     }
@@ -517,6 +583,7 @@ namespace Ibasa.Pikala
                     {
                         if (!type.IsAssignableTo(runtimePropertyInfoType) && type != typeof(PropertyBuilder))
                         {
+                            info.Mode = PickledTypeMode.IsError;
                             info.Error = $"Type '{type}' is not automaticly serializable as it inherits from PropertyInfo.";
                         }
                     }
@@ -524,6 +591,7 @@ namespace Ibasa.Pikala
                     {
                         if (!type.IsAssignableTo(runtimeEventInfoType) && type != typeof(EventBuilder))
                         {
+                            info.Mode = PickledTypeMode.IsError;
                             info.Error = $"Type '{type}' is not automaticly serializable as it inherits from EventInfo.";
                         }
                     }
@@ -533,6 +601,7 @@ namespace Ibasa.Pikala
                         {
                             if (!type.IsAssignableTo(runtimeConstructorInfoType) && type != typeof(ConstructorBuilder))
                             {
+                                info.Mode = PickledTypeMode.IsError;
                                 info.Error = $"Type '{type}' is not automaticly serializable as it inherits from ConstructorInfo.";
                             }
                         }
@@ -540,16 +609,19 @@ namespace Ibasa.Pikala
                         {
                             if (!type.IsAssignableTo(runtimeMethodInfoType) && type != typeof(MethodBuilder) && type != typeof(DynamicMethod))
                             {
+                                info.Mode = PickledTypeMode.IsError;
                                 info.Error = $"Type '{type}' is not automaticly serializable as it inherits from MethodInfo.";
                             }
                         }
                         else if (type != typeof(MethodBase))
                         {
+                            info.Mode = PickledTypeMode.IsError;
                             info.Error = $"Type '{type}' is not automaticly serializable as it inherits from MethodBase.";
                         }
                     }
                     else if (type != typeof(MemberInfo))
                     {
+                        info.Mode = PickledTypeMode.IsError;
                         info.Error = $"Type '{type}' is not automaticly serializable as it inherits from MemberInfo.";
                     }
                 }
@@ -578,6 +650,7 @@ namespace Ibasa.Pikala
 
                 else if (type.IsAssignableTo(typeof(MarshalByRefObject)))
                 {
+                    info.Mode = PickledTypeMode.IsError;
                     info.Error = $"Type '{type}' is not automaticly serializable as it inherits from MarshalByRefObject.";
                 }
 

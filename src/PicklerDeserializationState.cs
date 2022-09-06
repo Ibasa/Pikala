@@ -125,14 +125,8 @@ namespace Ibasa.Pikala
             }
         }
 
-        [return: NotNull]
-        public T SetMemo<T>(bool shouldMemo, [DisallowNull] T value)
+        public void AddMemo(object value)
         {
-            if (!shouldMemo)
-            {
-                return value;
-            }
-
             memo.Add(memo.Count + 1, value);
 #if DEBUG
             // In debug mode we do a sanity check that we haven't possibly screwed up memoisation by checking that every value stored in
@@ -140,10 +134,9 @@ namespace Ibasa.Pikala
             var set = new HashSet<object>(memo.Values, ReferenceEqualityComparer.Instance);
             System.Diagnostics.Debug.Assert(set.Count == memo.Count, "Two identical objects tried to memoise to different position");
 #endif
-            return value;
         }
 
-        public object GetMemo()
+        public object ReadMemo()
         {
             var id = Reader.Read15BitEncodedLong();
             return GetMemo(id);

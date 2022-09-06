@@ -21,9 +21,8 @@ namespace Ibasa.Pikala
         IsEnum = 0,
         IsDelegate = 1,
         IsReduced = 2,
-        IsAutoSerialisedObject = 4,
-
-        IsReflectionObject = 256,
+        IsAutoSerialisedObject = 3,
+        IsError = 4,
     }
 
     struct GenericTypeContext
@@ -1040,6 +1039,11 @@ namespace Ibasa.Pikala
         {
             GenericType = genericType;
             GenericArguments = genericArguments;
+
+            if (genericType.Type.GetGenericArguments().Length != genericArguments.Length)
+            {
+                throw new ArgumentException($"The number of generic arguments provided doesn't equal the arity of the generic type definition.");
+            }
         }
 
         public PickledTypeInfo GenericType { get; }
