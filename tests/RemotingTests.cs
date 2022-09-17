@@ -696,11 +696,41 @@ namespace Ibasa.Pikala.Tests
         }
 
         [Fact]
+        public void TestRoundtripChangingFieldTypeCompatibly()
+        {
+            // Test that if we serialise an object with a custom type, then reload that object in a new domain where
+            // it shouldn't deserialize that we don't error if it's just null.
+
+            var scriptA = string.Join('\n', new[]
+            {
+                ScriptHeader_PickleByReference,
+                "type Frober = { Foo : int; Bar : double }",
+                "let frob = Unchecked.defaultof<Frober>",
+                "let value = System.Tuple.Create<Frober> frob",
+                "let base64 = serializeBase64 value",
+                "printf \"%s\" base64",
+            });
+
+            var pickledbase64 = RunFsi(scriptA);
+
+            var scriptB = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "type Frober = { Foo : int64; }",
+                "let obj = deserializeBase64 \"" + pickledbase64 + "\" :?> System.Tuple<Frober>",
+                "printf \"%O\" obj",
+            });
+
+            var output = RunFsi(scriptB);
+
+            Assert.Equal("()", output);
+        }
+
+        [Fact]
         public void TestRoundtripChangingFieldTypeIncompatibly()
         {
             // Test that if we serialise an object with a custom type, then reload that object in a new domain where we've changed
-            // the type of the fields thar we get a sensible error
-
+            // the type of the fields that we get a sensible error
 
             var scriptA = string.Join('\n', new[]
             {
@@ -723,7 +753,68 @@ namespace Ibasa.Pikala.Tests
 
             var exception = Assert.Throws<Exception>(() => RunFsi(scriptB));
 
-            Assert.Contains("Object of type 'System.Double' cannot be converted to type 'System.Single'", exception.Message);
+            Assert.Contains("Can not deserialize type 'FSI_0001+Frober', field 'Bar@' was expected to be a 'System.Double' but was 'System.Single', field 'Foo@' was expected to be a 'System.Int32' but was 'System.Int64'", exception.Message);
+        }
+
+        [Fact]
+        public void TestRoundtripAddingField()
+        {
+            // Test that if we serialise an object with a custom type, then reload that object in a new domain where we've added
+            // the a new field that we get a sensible error
+
+
+            var scriptA = string.Join('\n', new[]
+            {
+                ScriptHeader_PickleByReference,
+                "type Frober = { Foo : int; }",
+                "let frob = { Foo = 3; }",
+                "let base64 = serializeBase64 frob",
+                "printf \"%s\" base64",
+            });
+
+            var pickledbase64 = RunFsi(scriptA);
+
+            var scriptB = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "type Frober = { Foo : int64; Bar : single }",
+                "let obj = deserializeBase64 \"" + pickledbase64 + "\" :?> Frober",
+                "printf \"%O\" obj",
+            });
+
+            var exception = Assert.Throws<Exception>(() => RunFsi(scriptB));
+
+            Assert.Contains("Can not deserialize type 'FSI_0001+Frober', serialised 1 fields but type expects 2, field 'Foo@' was expected to be a 'System.Int32' but was 'System.Int64'", exception.Message);
+        }
+
+        [Fact]
+        public void TestRoundtripRemovingField()
+        {
+            // Test that if we serialise an object with a custom type, then reload that object in a new domain where we've removed
+            // a field that we get a sensible error
+
+            var scriptA = string.Join('\n', new[]
+            {
+                ScriptHeader_PickleByReference,
+                "type Frober = { Foo : int; Bar : double }",
+                "let frob = { Foo = 3; Bar = 2.3}",
+                "let base64 = serializeBase64 frob",
+                "printf \"%s\" base64",
+            });
+
+            var pickledbase64 = RunFsi(scriptA);
+
+            var scriptB = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "type Frober = { Foo : int64; }",
+                "let obj = deserializeBase64 \"" + pickledbase64 + "\" :?> Frober",
+                "printf \"%O\" obj",
+            });
+
+            var exception = Assert.Throws<Exception>(() => RunFsi(scriptB));
+
+            Assert.Contains("Can not deserialize type 'FSI_0001+Frober', ", exception.Message);
         }
 
         [Fact]

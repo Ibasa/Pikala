@@ -2301,9 +2301,10 @@ namespace Ibasa.Pikala
                 var currentFields = GetSerializedFields(type);
 
                 var writtenLength = state.Reader.Read7BitEncodedInt();
+                var errors = new List<string>();
                 if (currentFields.Length != writtenLength)
                 {
-                    throw new Exception($"Can not deserialize type '{type}', serialised {writtenLength} fields but type expects {currentFields.Length}");
+                    errors.Add($"serialised {writtenLength} fields but type expects {currentFields.Length}");
                 }
 
                 // We still need to read the fields we have written otherwise nothing else can deserialise. And hell we might not even try and read one of these types, it might just 
@@ -2311,21 +2312,35 @@ namespace Ibasa.Pikala
                 info.SerialisedFields = new (SerialisedObjectTypeInfo, FieldInfo)[writtenLength];
                 for (int i = 0; i < writtenLength; ++i)
                 {
-                    PickledFieldInfo fieldInfo;
+                    PickledFieldInfo? fieldInfo;
                     try
                     {
                         fieldInfo = DeserializeFieldInfo(state);
                     }
                     catch (MissingFieldException exc)
                     {
-                        throw new Exception($"Can not deserialize type '{type}', could not find expected field '{exc.Field}'");
+                        errors.Add($"could not find expected field '{exc.Field}'");
+                        fieldInfo = null;
                     }
 
 
                     var fieldType = DeserializeType(state, default).CompleteType;
                     var fieldTypeInfo = GetOrReadSerialisedObjectTypeInfo(state, fieldType);
 
-                    info.SerialisedFields[i] = (fieldTypeInfo, fieldInfo.FieldInfo);
+                    if (fieldInfo != null)
+                    {
+                        if (fieldInfo.FieldInfo.FieldType != fieldType)
+                        {
+                            errors.Add($"field '{fieldInfo.Name}' was expected to be a '{fieldType}' but was '{fieldInfo.FieldInfo.FieldType}'");
+                        }
+                        info.SerialisedFields[i] = (fieldTypeInfo, fieldInfo.FieldInfo);
+                    }
+                }
+
+                if (errors.Count > 0)
+                {
+                    info.Error = $"Can not deserialize type '{type}', {string.Join(", ", errors)}";
+                    info.SerialisedFields = null;
                 }
             }
             else if (info.Mode == PickledTypeMode.IsEnum)
@@ -2430,6 +2445,11 @@ namespace Ibasa.Pikala
                     var earlyResult = MaybeReadMemo(state);
                     if (earlyResult != null) return earlyResult;
                 }
+            }
+
+            if (runtimeInfo.Error != null)
+            {
+                throw new Exception(runtimeInfo.Error);
             }
 
             if (runtimeType.IsEnum)
