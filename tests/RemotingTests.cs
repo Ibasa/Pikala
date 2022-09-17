@@ -946,7 +946,7 @@ namespace Ibasa.Pikala.Tests
             Assert.Contains("Can not deserialise FSI_0001+Test expected it to be an enumeration type", exception.Message);
         }
 
-        [Fact]
+        [Fact(Skip = "Change of ref to value is more complex than thought, so we've disabled this for now")]
         public void TestChangeFromClassTypeMemosCorrectly()
         {
             // Test that if we serialise an object type it memoizes, if we then
@@ -991,6 +991,37 @@ namespace Ibasa.Pikala.Tests
             result = RunFsi(scriptC);
 
             Assert.Equal("({ Value = 1 }, { Value = 1 })", result);
+        }
+
+        [Fact]
+        public void TestChangeFromClassTypeErrors()
+        {
+            // Test that if we serialise an object type and then
+            // change to a value type we error
+
+            var scriptA = string.Join('\n', new[]
+            {
+                ScriptHeader_PickleByReference,
+                "type Test = { Value : int }",
+                "let value = { Value = 1 }",
+                "let tuple = struct (value, value)",
+                "let base64 = serializeBase64 tuple",
+                "printf \"%s\" base64",
+            });
+
+            var pickledbase64 = RunFsi(scriptA);
+
+            var scriptB = string.Join('\n', new[]
+            {
+                ScriptHeader,
+                "[<Struct>]",
+                "type Test = { Value : int }",
+                "let t = deserializeBase64 \"" + pickledbase64 + "\"",
+                "printf \"%O\" t",
+            });
+
+            var exception = Assert.Throws<Exception>(() => RunFsi(scriptB));
+            Assert.Contains("Can not deserialise FSI_0001+Test expected it to be a reference type but was a value type", exception.Message);
         }
 
         [Fact]

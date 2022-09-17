@@ -2281,20 +2281,14 @@ namespace Ibasa.Pikala
                 info.Mode = PickledTypeMode.IsBuiltin;
             }
 
-            if (info.Mode == PickledTypeMode.IsEnum)
+            if(info.IsValueType != type.IsValueType)
             {
-                if (!type.IsEnum)
-                {
-                    throw new Exception($"Can not deserialise {type} expected it to be an enumeration type");
-                }
+                var expected = info.IsValueType ? "value type" : "reference type"; 
+                var actual = type.IsValueType ? "value type" : "reference type";
+
+                info.Error = $"Can not deserialise {type} expected it to be a {expected} but was a {actual}";
             }
-            else if (info.Mode == PickledTypeMode.IsDelegate)
-            {
-                if (!type.IsAssignableTo(typeof(MulticastDelegate)))
-                {
-                    throw new Exception($"Can not deserialise {type} expected it to be a delegate type");
-                }
-            }
+
 
             if (info.Mode == PickledTypeMode.IsAutoSerialisedObject)
             {
@@ -2349,20 +2343,22 @@ namespace Ibasa.Pikala
 
                 if (!type.IsEnum)
                 {
-                    throw new Exception($"Can not deserialise {type} expected it to be an enumeration type");
+                    info.Error = $"Can not deserialise {type} expected it to be an enumeration type";
                 }
-
-                var typeCode = Type.GetTypeCode(type);
-                if (info.TypeCode != typeCode)
+                else
                 {
-                    throw new Exception($"Can not deserialise {type} expected it to be an enumeration of {info.TypeCode} but was {typeCode}");
+                    var typeCode = Type.GetTypeCode(type);
+                    if (info.TypeCode != typeCode)
+                    {
+                        info.Error = $"Can not deserialise {type} expected it to be an enumeration of {info.TypeCode} but was {typeCode}";
+                    }
                 }
             }
             else if (info.Mode == PickledTypeMode.IsDelegate)
             {
                 if (!type.IsAssignableTo(typeof(MulticastDelegate)))
                 {
-                    throw new Exception($"Can not deserialise {type} expected it to be a delegate type");
+                    info.Error = $"Can not deserialise {type} expected it to be a delegate type";
                 }
             }
 
