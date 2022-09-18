@@ -2281,9 +2281,9 @@ namespace Ibasa.Pikala
                 info.Mode = PickledTypeMode.IsBuiltin;
             }
 
-            if(info.IsValueType != type.IsValueType)
+            if (info.IsValueType != type.IsValueType)
             {
-                var expected = info.IsValueType ? "value type" : "reference type"; 
+                var expected = info.IsValueType ? "value type" : "reference type";
                 var actual = type.IsValueType ? "value type" : "reference type";
 
                 info.Error = $"Can not deserialise {type} expected it to be a {expected} but was a {actual}";
