@@ -1868,7 +1868,7 @@ namespace Ibasa.Pikala
 
             if (info.Mode == PickledTypeMode.IsError)
             {
-                state.Writer.Write(info.Error!);
+                // Don't need to write anything for error types, just mark them as such so the deserialiser knows not to expect anything.
             }
             else if (info.Mode == PickledTypeMode.IsEnum)
             {

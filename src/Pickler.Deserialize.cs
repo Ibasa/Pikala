@@ -2156,17 +2156,10 @@ namespace Ibasa.Pikala
                 info.Mode = PickledTypeMode.IsBuiltin;
             }
 
-            if (info.IsValueType != type.IsValueType)
-            {
-                var expected = info.IsValueType ? "value type" : "reference type";
-                var actual = type.IsValueType ? "value type" : "reference type";
-
-                info.Error = $"Can not deserialise {type} expected it to be a {expected} but was a {actual}";
-            }
-
             if (info.Mode == PickledTypeMode.IsError)
             {
-                info.Error = state.Reader.ReadString();
+                // This type is tagged as Error so we shouldn't actually see any instances of it.
+                info.Error = $"{type} was marked unserialisable but was encountered in the pikala stream";
             }
             else if (info.Mode == PickledTypeMode.IsAutoSerialisedObject)
             {
@@ -2174,6 +2167,15 @@ namespace Ibasa.Pikala
 
                 var writtenLength = state.Reader.Read7BitEncodedInt();
                 var errors = new List<string>();
+
+                // Error out if value/refness has changed.
+                if (info.IsValueType != type.IsValueType)
+                {
+                    var expected = info.IsValueType ? "value type" : "reference type";
+                    var actual = type.IsValueType ? "value type" : "reference type";
+                    errors.Add($"expected it to be a {expected} but was a {actual}");
+                }
+
                 if (currentFields.Length != writtenLength)
                 {
                     errors.Add($"serialised {writtenLength} fields but type expects {currentFields.Length}");
@@ -2220,14 +2222,14 @@ namespace Ibasa.Pikala
 
                 if (!type.IsEnum)
                 {
-                    info.Error = $"Can not deserialise {type} expected it to be an enumeration type";
+                    info.Error = $"Can not deserialize type '{type}' expected it to be an enumeration type";
                 }
                 else
                 {
                     var typeCode = Type.GetTypeCode(type);
                     if (info.TypeCode != typeCode)
                     {
-                        info.Error = $"Can not deserialise {type} expected it to be an enumeration of {info.TypeCode} but was {typeCode}";
+                        info.Error = $"Can not deserialize type '{type}' expected it to be an enumeration of {info.TypeCode} but was {typeCode}";
                     }
                 }
             }
@@ -2235,7 +2237,7 @@ namespace Ibasa.Pikala
             {
                 if (!type.IsAssignableTo(typeof(MulticastDelegate)))
                 {
-                    info.Error = $"Can not deserialise {type} expected it to be a delegate type";
+                    info.Error = $"Can not deserialize type '{type}' expected it to be a delegate type";
                 }
             }
 

@@ -383,7 +383,7 @@ namespace Ibasa.Pikala.Tests
             var rebuiltAttr = Assert.Single(rebuiltAssembly.CustomAttributes);
             Assert.Equal(1, (int)rebuiltAttr.NamedArguments[0].TypedValue.Value);
 
-            // Now recreate the ALC and try to deserialise the pikala stream with a different attribute
+            // Now recreate the ALC and try to deserialize the pikala stream with a different attribute
             pickler = Utils.CreateIsolatedPickler(assembly =>
             {
                 if (assembly.FullName.Contains("TestChangeOfAttribute_Attr"))

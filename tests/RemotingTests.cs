@@ -890,6 +890,7 @@ namespace Ibasa.Pikala.Tests
             var scriptA = string.Join('\n', new[]
             {
                 ScriptHeader_PickleByReference,
+                "[<Struct>]",
                 "type Test = { Value : int }",
                 "let value = [| { Value = 1 }; { Value = 2 } |]",
                 "let base64 = serializeBase64 value",
@@ -943,7 +944,7 @@ namespace Ibasa.Pikala.Tests
 
             var exception = Assert.Throws<Exception>(() => RunFsi(scriptB));
 
-            Assert.Contains("Can not deserialise FSI_0001+Test expected it to be an enumeration type", exception.Message);
+            Assert.Contains("Can not deserialize type 'FSI_0001+Test' expected it to be an enumeration type", exception.Message);
         }
 
         [Fact(Skip = "Change of ref to value is more complex than thought, so we've disabled this for now")]
@@ -1021,7 +1022,7 @@ namespace Ibasa.Pikala.Tests
             });
 
             var exception = Assert.Throws<Exception>(() => RunFsi(scriptB));
-            Assert.Contains("Can not deserialise FSI_0001+Test expected it to be a reference type but was a value type", exception.Message);
+            Assert.Contains("Can not deserialize type 'FSI_0001+Test', expected it to be a reference type but was a value type", exception.Message);
         }
 
         [Fact]
@@ -1057,7 +1058,7 @@ namespace Ibasa.Pikala.Tests
             });
 
             var exception = Assert.Throws<Exception>(() => RunFsi(scriptB));
-            Assert.Contains("Can not deserialise FSI_0001+Test expected it to be an enumeration of UInt16 but was UInt32", exception.Message);
+            Assert.Contains("Can not deserialize type 'FSI_0001+Test' expected it to be an enumeration of UInt16 but was UInt32", exception.Message);
 
             // Try a smaller typecode
             var scriptC = string.Join('\n', new[]
@@ -1072,7 +1073,7 @@ namespace Ibasa.Pikala.Tests
             });
 
             exception = Assert.Throws<Exception>(() => RunFsi(scriptC));
-            Assert.Contains("Can not deserialise FSI_0001+Test expected it to be an enumeration of UInt16 but was Byte", exception.Message);
+            Assert.Contains("Can not deserialize type 'FSI_0001+Test' expected it to be an enumeration of UInt16 but was Byte", exception.Message);
         }
     }
 }
