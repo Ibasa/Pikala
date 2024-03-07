@@ -728,82 +728,78 @@ namespace Ibasa.Pikala
 
         private void WriteConstant(PicklerSerializationState state, object? value, Type constantType)
         {
-            if (constantType == typeof(object))
-            {
-                // This has to be null
-                return;
-            }
-            else if (constantType == typeof(string))
+            if (constantType == typeof(string))
             {
                 state.Writer.WriteNullableString((string?)value);
                 return;
             }
 
-            if (value == null)
+            if (constantType.IsValueType)
             {
-                throw new ArgumentNullException(nameof(value));
+                if (constantType.IsEnum)
+                {
+                    WriteEnumerationValue(state.Writer, Type.GetTypeCode(constantType), value);
+                }
+                else if (constantType == typeof(bool))
+                {
+                    state.Writer.Write((bool)value);
+                }
+                else if (constantType == typeof(char))
+                {
+                    state.Writer.Write((char)value);
+                }
+                else if (constantType == typeof(byte))
+                {
+                    state.Writer.Write((byte)value);
+                }
+                else if (constantType == typeof(sbyte))
+                {
+                    state.Writer.Write((sbyte)value);
+                }
+                else if (constantType == typeof(short))
+                {
+                    state.Writer.Write((short)value);
+                }
+                else if (constantType == typeof(ushort))
+                {
+                    state.Writer.Write((ushort)value);
+                }
+                else if (constantType == typeof(int))
+                {
+                    state.Writer.Write((int)value);
+                }
+                else if (constantType == typeof(uint))
+                {
+                    state.Writer.Write((uint)value);
+                }
+                else if (constantType == typeof(long))
+                {
+                    state.Writer.Write((long)value);
+                }
+                else if (constantType == typeof(ulong))
+                {
+                    state.Writer.Write((ulong)value);
+                }
+                else if (constantType == typeof(float))
+                {
+                    state.Writer.Write((float)value);
+                }
+                else if (constantType == typeof(double))
+                {
+                    state.Writer.Write((double)value);
+                }
+                else if (constantType == typeof(decimal))
+                {
+                    state.Writer.Write((decimal)value);
+                }
+                else
+                {
+                    throw new NotImplementedException($"Unrecognized type '{constantType}' for constant");
+                }
             }
 
-            if (constantType.IsEnum)
-            {
-                WriteEnumerationValue(state.Writer, Type.GetTypeCode(constantType), value);
-            }
-            else if (constantType == typeof(bool))
-            {
-                state.Writer.Write((bool)value);
-            }
-            else if (constantType == typeof(char))
-            {
-                state.Writer.Write((char)value);
-            }
-            else if (constantType == typeof(byte))
-            {
-                state.Writer.Write((byte)value);
-            }
-            else if (constantType == typeof(sbyte))
-            {
-                state.Writer.Write((sbyte)value);
-            }
-            else if (constantType == typeof(short))
-            {
-                state.Writer.Write((short)value);
-            }
-            else if (constantType == typeof(ushort))
-            {
-                state.Writer.Write((ushort)value);
-            }
-            else if (constantType == typeof(int))
-            {
-                state.Writer.Write((int)value);
-            }
-            else if (constantType == typeof(uint))
-            {
-                state.Writer.Write((uint)value);
-            }
-            else if (constantType == typeof(long))
-            {
-                state.Writer.Write((long)value);
-            }
-            else if (constantType == typeof(ulong))
-            {
-                state.Writer.Write((ulong)value);
-            }
-            else if (constantType == typeof(float))
-            {
-                state.Writer.Write((float)value);
-            }
-            else if (constantType == typeof(double))
-            {
-                state.Writer.Write((double)value);
-            }
-            else if (constantType == typeof(decimal))
-            {
-                state.Writer.Write((decimal)value);
-            }
-            else
-            {
-                throw new NotImplementedException($"Unrecognized type '{constantType}' for constant");
-            }
+            // This must be a class type and _must_ be null because string was dealt with above
+            return;
         }
 
         private void WriteCustomAttributes(PicklerSerializationState state, CustomAttributeData[] attributes)

@@ -520,12 +520,7 @@ namespace Ibasa.Pikala
 
         private object? ReadConstant(PicklerDeserializationState state, Type constantType)
         {
-            if (constantType == typeof(object))
-            {
-                // This has to be null
-                return null;
-            }
-            else if (constantType == typeof(string))
+            if (constantType == typeof(string))
             {
                 return state.Reader.ReadNullableString();
             }
@@ -588,7 +583,7 @@ namespace Ibasa.Pikala
             }
             else
             {
-                throw new NotImplementedException($"Unrecognized type '{constantType}' for constant");
+                return null;
             }
         }
 

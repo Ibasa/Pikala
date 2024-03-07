@@ -17,7 +17,8 @@ namespace Ibasa.Pikala.Tests
             var assemblyPickleMode = new Func<System.Reflection.Assembly, AssemblyPickleMode>(assembly => {
                 // Don't pikle standard repos like pikla and xunit
                 if (assembly == typeof(IReducer).Assembly ||
-                    assembly == typeof(FactAttribute).Assembly)
+                    assembly == typeof(FactAttribute).Assembly ||
+                    assembly == typeof(Assert).Assembly)
                 {
                     return AssemblyPickleMode.PickleByReference;
                 }

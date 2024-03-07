@@ -399,22 +399,26 @@ namespace Ibasa.Pikala.Tests
             var type = typeof(TestTypes.ClassWithDefaults);
             var resultType = RoundTrip.Do<Type>(pickler, type);
 
-            var defaultStringMethod = resultType.GetMethod("Defaults");
+            var defaultsMethod = resultType.GetMethod("Defaults");
 
-            var defaultIntParam = defaultStringMethod.GetParameters()[0];
+            var defaultIntParam = defaultsMethod.GetParameters()[0];
             Assert.True(defaultIntParam.HasDefaultValue);
             Assert.Equal(2, defaultIntParam.DefaultValue);
 
-            var defaultStringParam = defaultStringMethod.GetParameters()[1];
+            var defaultStringParam = defaultsMethod.GetParameters()[1];
             Assert.True(defaultStringParam.HasDefaultValue);
             Assert.Equal("hi", defaultStringParam.DefaultValue);
 
-            var defaultNullStringParam = defaultStringMethod.GetParameters()[2];
+            var defaultNullStringParam = defaultsMethod.GetParameters()[2];
             Assert.True(defaultNullStringParam.HasDefaultValue);
             Assert.Null(defaultNullStringParam.DefaultValue);
+        
+            var defaultNullIComparerParam = defaultsMethod.GetParameters()[3];
+            Assert.True(defaultNullIComparerParam.HasDefaultValue);
+            Assert.Null(defaultNullIComparerParam.DefaultValue);
         }
 
-        [Fact]
+    [Fact]
         public void TestLiterals()
         {
             var pickler = CreatePickler();

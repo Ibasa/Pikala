@@ -621,7 +621,7 @@ namespace Ibasa.Pikala.Tests
 
         public sealed class ClassWithDefaults
         {
-            public void Defaults(int i = 2, string x = "hi", string y = null)
+            public void Defaults(int i = 2, string x = "hi", string y = null, IComparer z = null)
             {
 
             }
