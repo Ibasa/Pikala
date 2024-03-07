@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Ibasa.Pikala.Tests
 {
@@ -621,7 +622,7 @@ namespace Ibasa.Pikala.Tests
 
         public sealed class ClassWithDefaults
         {
-            public void Defaults(int i = 2, string x = "hi", string y = null, IComparer z = null)
+            public void Defaults(int i = 2, string x = "hi", string y = null, IComparer z = null, CancellationToken w = default)
             {
 
             }

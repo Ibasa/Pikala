@@ -412,10 +412,14 @@ namespace Ibasa.Pikala.Tests
             var defaultNullStringParam = defaultsMethod.GetParameters()[2];
             Assert.True(defaultNullStringParam.HasDefaultValue);
             Assert.Null(defaultNullStringParam.DefaultValue);
-        
+
             var defaultNullIComparerParam = defaultsMethod.GetParameters()[3];
             Assert.True(defaultNullIComparerParam.HasDefaultValue);
             Assert.Null(defaultNullIComparerParam.DefaultValue);
+
+            var defaultCancellationTokenParam = defaultsMethod.GetParameters()[4];
+            Assert.True(defaultCancellationTokenParam.HasDefaultValue);
+            Assert.Null(defaultCancellationTokenParam.DefaultValue);
         }
 
     [Fact]
