@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace Ibasa.Pikala.Tests
@@ -45,6 +46,26 @@ namespace Ibasa.Pikala.Tests
             Assert.Equal(2, split.Length);
             Assert.NotEmpty(split[0]);
             Assert.NotEmpty(split[1]);
+        }
+
+        /// <summary>
+        /// Test for https://github.com/pulumi/pulumi-dotnet/issues/63#issuecomment-1982124649
+        /// </summary>
+        [Fact]
+        public void TestTask()
+        {
+            var pickler = CreatePickler();
+            var taskFunc = () =>
+            {
+                return Task.FromResult(123);
+            };
+
+            var result = RoundTrip.Do(pickler, taskFunc);
+
+            var task = result();
+            Assert.NotNull(task);
+            var number = task.Result;
+            Assert.Equal(123, number);
         }
     }
 }
