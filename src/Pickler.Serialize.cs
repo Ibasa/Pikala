@@ -790,7 +790,7 @@ namespace Ibasa.Pikala
             {
                 state.Writer.Write((decimal)value);
             }
-            
+
             // This must be null
             return;
         }

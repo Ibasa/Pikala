@@ -416,7 +416,7 @@ namespace Ibasa.Pikala.Tests
             compareParameter(3);
         }
 
-    [Fact]
+        [Fact]
         public void TestLiterals()
         {
             var pickler = CreatePickler();
