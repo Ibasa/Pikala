@@ -35,16 +35,20 @@ jobs:
                 {
                     version: "6.0",
                     moniker: "net6.0"
+                },
+                {
+                    version: "8.0",
+                    moniker: "net8.0"
                 }
             ]
 
     steps:
     - uses: actions/checkout@v2
 
-    - name: Setup .NET Core 6.0
+    - name: Setup .NET Core
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 6.0.x
+        dotnet-version: ${{ matrix.dotnet.version }}.x
 
     - name: Build with dotnet
       run: dotnet build --configuration Release
