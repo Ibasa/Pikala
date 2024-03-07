@@ -397,29 +397,23 @@ namespace Ibasa.Pikala.Tests
             var pickler = CreatePickler();
 
             var type = typeof(TestTypes.ClassWithDefaults);
+            var defaultsMethod = type.GetMethod("Defaults");
+
             var resultType = RoundTrip.Do<Type>(pickler, type);
+            var resultDefaultsMethod = resultType.GetMethod("Defaults");
 
-            var defaultsMethod = resultType.GetMethod("Defaults");
+            var compareParameter = new Action<int>((i) =>
+            {
+                var expected = defaultsMethod.GetParameters()[i];
+                var actual = resultDefaultsMethod.GetParameters()[i];
+                Assert.Equal(expected.HasDefaultValue, actual.HasDefaultValue);
+                Assert.Equal(expected.DefaultValue, actual.DefaultValue);
+            });
 
-            var defaultIntParam = defaultsMethod.GetParameters()[0];
-            Assert.True(defaultIntParam.HasDefaultValue);
-            Assert.Equal(2, defaultIntParam.DefaultValue);
-
-            var defaultStringParam = defaultsMethod.GetParameters()[1];
-            Assert.True(defaultStringParam.HasDefaultValue);
-            Assert.Equal("hi", defaultStringParam.DefaultValue);
-
-            var defaultNullStringParam = defaultsMethod.GetParameters()[2];
-            Assert.True(defaultNullStringParam.HasDefaultValue);
-            Assert.Null(defaultNullStringParam.DefaultValue);
-
-            var defaultNullIComparerParam = defaultsMethod.GetParameters()[3];
-            Assert.True(defaultNullIComparerParam.HasDefaultValue);
-            Assert.Null(defaultNullIComparerParam.DefaultValue);
-
-            var defaultCancellationTokenParam = defaultsMethod.GetParameters()[4];
-            Assert.True(defaultCancellationTokenParam.HasDefaultValue);
-            Assert.Null(defaultCancellationTokenParam.DefaultValue);
+            compareParameter(0);
+            compareParameter(1);
+            compareParameter(2);
+            compareParameter(3);
         }
 
     [Fact]
