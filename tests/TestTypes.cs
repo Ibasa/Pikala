@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Threading;
 
@@ -673,6 +674,31 @@ namespace Ibasa.Pikala.Tests
             where W : new()
         {
             public U Method(T a, ref V b, ref W c);
+        }
+
+        public interface IIsDisposed : IDisposable
+        {
+            bool IsDisposed();
+        }
+
+        public sealed class InterfaceInheritance : IIsDisposed
+        {
+            bool disposed;
+
+            public void Dispose()
+            {
+                disposed = true;
+            }
+
+            public bool IsDisposed()
+            {
+                return disposed;
+            }
+
+            public override string ToString()
+            {
+                return disposed.ToString();
+            }
         }
     }
 }

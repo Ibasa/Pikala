@@ -442,5 +442,20 @@ namespace Ibasa.Pikala.Tests
             Assert.Equal(System.Reflection.GenericParameterAttributes.ReferenceTypeConstraint, genericParams[2].GenericParameterAttributes);
             Assert.Equal(System.Reflection.GenericParameterAttributes.DefaultConstructorConstraint, genericParams[3].GenericParameterAttributes);
         }
+
+        [Fact]
+        public void TestInterfaceInheritance()
+        {
+            var pickler = CreatePickler();
+
+            var obj = new TestTypes.InterfaceInheritance();
+            var result = RoundTrip.Do<object>(pickler, obj);
+
+            var disposable = Assert.IsAssignableFrom<IDisposable>(result);
+
+            Assert.Equal("false", disposable.ToString());
+            disposable.Dispose();
+            Assert.Equal("true", disposable.ToString());
+        }
     }
 }

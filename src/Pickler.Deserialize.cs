@@ -618,6 +618,12 @@ namespace Ibasa.Pikala
                     baseTypes.Add(interfaceType);
                     typeBuilder.AddInterfaceImplementation(interfaceType.Type);
 
+                    // If this is an interface we don't need the method map
+                    if (isInterface)
+                    {
+                        continue;
+                    }
+
                     var mapCount = state.Reader.Read7BitEncodedInt();
                     for (int j = 0; j < mapCount; ++j)
                     {

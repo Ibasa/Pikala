@@ -558,6 +558,12 @@ namespace Ibasa.Pikala
                 {
                     SerializeType(state, interfaceType, genericParameters, null);
 
+                    // If this is an interface itself we don't need the method map
+                    if (type.IsInterface)
+                    {
+                        continue;
+                    }
+
                     var interfaceMap = type.GetInterfaceMap(interfaceType);
                     var mappedMethods = new List<(Signature, Signature)>();
                     for (int i = 0; i < interfaceMap.InterfaceMethods.Length; ++i)
