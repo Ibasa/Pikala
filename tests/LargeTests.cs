@@ -29,10 +29,11 @@ namespace Ibasa.Pikala.Tests
             {
                 Y Write()
                 {
-                    var value = generator();
-
                     var _ = Directory.CreateDirectory(directory);
                     using var fileStream = File.OpenWrite(file);
+
+                    var value = generator();
+
                     var pickler = new Pickler();
                     pickler.Serialize(fileStream, value);
 
