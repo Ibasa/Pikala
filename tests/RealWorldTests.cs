@@ -1,10 +1,5 @@
 ﻿using FsCheck;
-using FsCheck.Xunit;
 using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.IO;
-using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -32,10 +27,40 @@ namespace Ibasa.Pikala.Tests
             return new Pickler(assemblyPickleMode, assemblyLoadContext);
         }
 
+        /*
+        [Fact]
+        public void TestRSACryptoServiceProvider()
+        {
+            var pickler = CreatePickler();
+            var rsaFunc = () =>
+            {
+                var csp = new System.Security.Cryptography.RSACryptoServiceProvider(1024);
+                var parameters = csp.ExportParameters(includePrivateParameters: true);
+                var memory = new System.IO.MemoryStream();
+                memory.Write(parameters.Modulus);
+                memory.Write(parameters.Exponent);
+                memory.Write(parameters.D);
+                memory.Write(parameters.P);
+                memory.Write(parameters.Q);
+                memory.Write(parameters.DP);
+                memory.Write(parameters.DQ);
+                memory.Write(parameters.InverseQ);
+                return System.Convert.ToBase64String(memory.ToArray());
+            };
+
+            var result = RoundTrip.Do(pickler, rsaFunc);
+
+            var str = result();
+            Assert.NotNull(str);
+            Assert.Equal(772, str.Length);
+        }
+        */
+
         /// <summary>
         /// Test for https://github.com/pulumi/pulumi-dotnet/issues/63#issuecomment-1982124649
         /// </summary>
-        [Fact(Skip = "Failing now we pickle by value")]
+        /*
+        [Fact]
         public void TestSshKeyGeneration()
         {
             var pickler = CreatePickler();
@@ -57,11 +82,12 @@ namespace Ibasa.Pikala.Tests
             Assert.NotEmpty(split[0]);
             Assert.NotEmpty(split[1]);
         }
+        */
 
         /// <summary>
         /// Test for https://github.com/pulumi/pulumi-dotnet/issues/63#issuecomment-1982124649
         /// </summary>
-        [Fact(Skip = "Failing now we pickle by value")]
+        [Fact]
         public void TestTask()
         {
             var pickler = CreatePickler();
