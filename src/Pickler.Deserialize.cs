@@ -1122,7 +1122,7 @@ namespace Ibasa.Pikala
                         });
                     });
                 });
-            } 
+            }
             else if (constructingType.TypeDef == TypeDef.Interface)
             {
                 DeserializeInterfaceDef(state, constructingType);
