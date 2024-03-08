@@ -457,5 +457,23 @@ namespace Ibasa.Pikala.Tests
             disposable.Dispose();
             Assert.Equal("True", disposable.ToString());
         }
+
+        [Fact]
+        public void TestInlineIntegers()
+        {
+            var pickler = CreatePickler();
+
+            var func = new Func<ulong>(() =>
+            {
+                byte i = 127;
+                short j = 32767;
+                int k = 2147483647;
+                long l = 9223372036854775807;
+                return (ulong)(i + j + k + l);
+            });
+
+            var result = RoundTrip.Do(pickler, func);
+            Assert.Equal(9223372034707325052ul, result());
+        }
     }
 }

@@ -393,6 +393,12 @@ namespace Ibasa.Pikala
                             break;
                         }
 
+                    case OperandType.InlineI8:
+                        {
+                            state.Writer.Write(ilReader.ReadInt64());
+                            break;
+                        }
+
                     case OperandType.ShortInlineR:
                         {
                             state.Writer.Write(ilReader.ReadSingle());
