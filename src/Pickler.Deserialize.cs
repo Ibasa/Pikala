@@ -587,6 +587,155 @@ namespace Ibasa.Pikala
             }
         }
 
+
+        private void DeserializeInterfaceDef(PicklerDeserializationState state, PickledTypeInfoDef constructingType)
+        {
+            var typeContext = new GenericTypeContext(constructingType.GenericParameters);
+
+            AddMemo(state, constructingType);
+
+            state.Stages.PushStage2(state =>
+            {
+                var typeBuilder = constructingType.TypeBuilder;
+
+                var baseTypes = new List<PickledTypeInfo>();
+
+                ReadCustomAttributesTypes(state);
+
+                var interfaceCount = state.Reader.Read7BitEncodedInt();
+                var interfaceMap = new List<(PickledMethodInfo, Signature)>();
+                for (int i = 0; i < interfaceCount; ++i)
+                {
+                    var interfaceType = DeserializeType(state, typeContext);
+                    baseTypes.Add(interfaceType);
+                    typeBuilder.AddInterfaceImplementation(interfaceType.Type);
+                }
+
+                constructingType.BaseTypes = baseTypes.ToArray();
+
+                var methodCount = state.Reader.Read7BitEncodedInt();
+                constructingType.Methods = new PickledMethodInfoDef[methodCount];
+                for (int i = 0; i < methodCount; ++i)
+                {
+                    ReadCustomAttributesTypes(state);
+                    DeserializeMethodHeader(state, constructingType.GenericParameters, constructingType, ref constructingType.Methods[i]);
+                }
+
+                MethodBuilder GetMethod(Signature signature)
+                {
+                    var info = constructingType.GetMethod(signature);
+                    // If we had covariant returns this cast wouldn't be needed.
+                    var def = (PickledMethodInfoDef)info;
+                    return def.MethodBuilder;
+                }
+
+                var propertyCount = state.Reader.Read7BitEncodedInt();
+                constructingType.Properties = new PickledPropertyInfoDef[propertyCount];
+                for (int i = 0; i < propertyCount; ++i)
+                {
+                    ReadCustomAttributesTypes(state);
+                    var propertyName = state.Reader.ReadString();
+                    var propertyAttributes = (PropertyAttributes)state.Reader.ReadInt32();
+                    var propertySignature = DeserializeSignature(state);
+
+                    var (returnType, returnTypeRequiredCustomModifiers, returnTypeOptionalCustomModifiers) = propertySignature.ReturnType.Reify(typeContext);
+                    var parameterTypes = new Type[propertySignature.Parameters.Length];
+                    var parameterTypeRequiredCustomModifiers = new Type[propertySignature.Parameters.Length][];
+                    var parameterTypeOptionalCustomModifiers = new Type[propertySignature.Parameters.Length][];
+                    for (int j = 0; j < propertySignature.Parameters.Length; ++j)
+                    {
+                        var (type, reqmods, optmods) = propertySignature.Parameters[j].Reify(typeContext);
+                        parameterTypes[j] = type;
+                        parameterTypeRequiredCustomModifiers[j] = reqmods;
+                        parameterTypeOptionalCustomModifiers[j] = optmods;
+                    }
+
+                    var propertyBuilder = typeBuilder.DefineProperty(
+                        propertyName, propertyAttributes, propertySignature.CallingConvention,
+                        returnType, returnTypeRequiredCustomModifiers, returnTypeOptionalCustomModifiers,
+                        parameterTypes, parameterTypeRequiredCustomModifiers, parameterTypeOptionalCustomModifiers);
+                    constructingType.Properties[i] = new PickledPropertyInfoDef(constructingType, propertyBuilder, propertySignature);
+
+                    var count = state.Reader.Read7BitEncodedInt();
+                    var hasGetter = (count & 0x1) != 0;
+                    var hasSetter = (count & 0x2) != 0;
+                    var otherCount = count >> 2;
+
+                    if (hasGetter)
+                    {
+                        propertyBuilder.SetGetMethod(GetMethod(DeserializeSignature(state)));
+                    }
+                    if (hasSetter)
+                    {
+                        propertyBuilder.SetSetMethod(GetMethod(DeserializeSignature(state)));
+                    }
+                    for (var j = 0; j < otherCount; ++j)
+                    {
+                        propertyBuilder.AddOtherMethod(GetMethod(DeserializeSignature(state)));
+                    }
+                }
+
+                var eventCount = state.Reader.Read7BitEncodedInt();
+                constructingType.Events = new PickledEventInfoDef[eventCount];
+                for (int i = 0; i < eventCount; ++i)
+                {
+                    ReadCustomAttributesTypes(state);
+                    var eventName = state.Reader.ReadString();
+                    var eventAttributes = (EventAttributes)state.Reader.ReadInt32();
+                    var eventType = DeserializeType(state, typeContext);
+
+
+                    var eventBuilder = typeBuilder.DefineEvent(eventName, eventAttributes, eventType.Type);
+                    constructingType.Events[i] = new PickledEventInfoDef(constructingType, eventBuilder, eventName);
+
+                    var count = state.Reader.Read7BitEncodedInt();
+                    var hasRaiser = (count & 0x1) != 0;
+                    var otherCount = count >> 1;
+
+                    eventBuilder.SetAddOnMethod(GetMethod(DeserializeSignature(state)));
+                    eventBuilder.SetRemoveOnMethod(GetMethod(DeserializeSignature(state)));
+
+                    if (hasRaiser)
+                    {
+                        eventBuilder.SetRaiseMethod(GetMethod(DeserializeSignature(state)));
+                    }
+                    for (var j = 0; j < otherCount; ++j)
+                    {
+                        eventBuilder.AddOtherMethod(GetMethod(DeserializeSignature(state)));
+                    }
+                }
+
+                state.Stages.PushStage3(state =>
+                {
+                    ReadCustomAttributes(state, constructingType.TypeBuilder.SetCustomAttribute);
+
+                    foreach (var method in constructingType.Methods)
+                    {
+                        var methodBuilder = method.MethodBuilder;
+                        ReadCustomAttributes(state, methodBuilder.SetCustomAttribute);
+                        if (methodBuilder.Attributes.HasFlag(MethodAttributes.PinvokeImpl) || methodBuilder.Attributes.HasFlag(MethodAttributes.UnmanagedExport) || methodBuilder.Attributes.HasFlag(MethodAttributes.Abstract))
+                        {
+
+                        }
+                        else
+                        {
+                            DeserializeMethodBody(state, new GenericTypeContext(typeContext.GenericTypeParameters, method.GenericParameters), methodBuilder);
+                        }
+                    }
+                    foreach (var property in constructingType.Properties)
+                    {
+                        ReadCustomAttributes(state, property.PropertyBuilder.SetCustomAttribute);
+                    }
+                    foreach (var evt in constructingType.Events)
+                    {
+                        ReadCustomAttributes(state, evt.EventBuilder.SetCustomAttribute);
+                    }
+
+                    constructingType.FullyDefined = true;
+                });
+            });
+        }
+
         private void DeserializeTypeDefComplex(PicklerDeserializationState state, PickledTypeInfoDef constructingType)
         {
             var typeContext = new GenericTypeContext(constructingType.GenericParameters);
@@ -596,12 +745,11 @@ namespace Ibasa.Pikala
             state.Stages.PushStage2(state =>
             {
                 var isValueType = constructingType.TypeDef == TypeDef.Struct;
-                var isInterface = constructingType.TypeDef == TypeDef.Interface;
                 var typeBuilder = constructingType.TypeBuilder;
 
                 var baseTypes = new List<PickledTypeInfo>();
 
-                if (!isValueType && !isInterface)
+                if (!isValueType)
                 {
                     var baseType = DeserializeType(state, typeContext);
                     baseTypes.Add(baseType);
@@ -617,12 +765,6 @@ namespace Ibasa.Pikala
                     var interfaceType = DeserializeType(state, typeContext);
                     baseTypes.Add(interfaceType);
                     typeBuilder.AddInterfaceImplementation(interfaceType.Type);
-
-                    // If this is an interface we don't need the method map
-                    if (isInterface)
-                    {
-                        continue;
-                    }
 
                     var mapCount = state.Reader.Read7BitEncodedInt();
                     for (int j = 0; j < mapCount; ++j)
@@ -981,6 +1123,10 @@ namespace Ibasa.Pikala
                         });
                     });
                 });
+            } 
+            else if (constructingType.TypeDef == TypeDef.Interface)
+            {
+                DeserializeInterfaceDef(state, constructingType);
             }
             else
             {

@@ -526,8 +526,117 @@ namespace Ibasa.Pikala
             });
         }
 
+        private void SerializeInterfaceDef(PicklerSerializationState state, Type type, Type[]? genericParameters)
+        {
+            System.Diagnostics.Debug.Assert(type.IsInterface, "Passed non-interface to SerializeInterfaceDef");
+
+            var methods = type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+            var properties = type.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+            var events = type.GetEvents(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+
+            state.Stages.PushStage2(state =>
+            {
+                WriteCustomAttributesTypes(state, type.CustomAttributes.ToArray());
+
+                var interfaces = type.GetInterfaces();
+                state.Writer.Write7BitEncodedInt(interfaces.Length);
+                foreach (var interfaceType in interfaces)
+                {
+                    SerializeType(state, interfaceType, genericParameters, null);
+                }
+
+                state.Writer.Write7BitEncodedInt(methods.Length);
+                foreach (var method in methods)
+                {
+                    WriteCustomAttributesTypes(state, method.CustomAttributes.ToArray());
+                    SerializeMethodBaseHeader(state, genericParameters, method);
+                }
+                state.Writer.Write7BitEncodedInt(properties.Length);
+                foreach (var property in properties)
+                {
+                    WriteCustomAttributesTypes(state, property.CustomAttributes.ToArray());
+                    state.Writer.Write(property.Name);
+                    state.Writer.Write((int)property.Attributes);
+                    SerializeSignature(state, Signature.GetSignature(property));
+
+                    var accessors = property.GetAccessors(true);
+                    var getter = property.GetMethod;
+                    var setter = property.SetMethod;
+                    var otherCount = accessors.Length - (
+                            (getter == null ? 0 : 1) +
+                            (setter == null ? 0 : 1));
+
+                    var count = (otherCount << 2) + (setter == null ? 0 : 2) + (getter == null ? 0 : 1);
+                    state.Writer.Write7BitEncodedInt(count);
+                    // Make sure get and set are first
+                    // GetAccessors should return get first
+                    System.Diagnostics.Debug.Assert(getter == null || accessors[0] == getter);
+                    // GetAccessors should return set after get, that is either first if get is null, or second.
+                    System.Diagnostics.Debug.Assert(setter == null || accessors[getter == null ? 0 : 1] == setter);
+                    foreach (var accessor in accessors)
+                    {
+                        SerializeSignature(state, Signature.GetSignature(accessor));
+                    }
+                }
+                state.Writer.Write7BitEncodedInt(events.Length);
+                foreach (var evt in events)
+                {
+                    WriteCustomAttributesTypes(state, evt.CustomAttributes.ToArray());
+                    state.Writer.Write(evt.Name);
+                    state.Writer.Write((int)evt.Attributes);
+                    SerializeType(state, evt.EventHandlerType, genericParameters, null);
+
+                    var others = evt.GetOtherMethods();
+                    var raiser = evt.RaiseMethod;
+
+                    var count = (others.Length << 1) + (raiser == null ? 0 : 1);
+                    state.Writer.Write7BitEncodedInt(count);
+                    // add and remove look to be required so we don't include them in count
+                    // 22.13 Event : 0x14
+                    // 9. For each row, there shall be one add_ and one remove_ row in the MethodSemantics table [ERROR]
+                    SerializeSignature(state, Signature.GetSignature(evt.AddMethod!));
+                    SerializeSignature(state, Signature.GetSignature(evt.RemoveMethod!));
+
+                    if (raiser != null)
+                    {
+                        SerializeSignature(state, Signature.GetSignature(raiser));
+                    }
+                    foreach (var other in others)
+                    {
+                        SerializeSignature(state, Signature.GetSignature(other));
+                    }
+                }
+
+                state.Stages.PushStage3(state =>
+                {
+                    // Custom attributes might be self referencing so make sure all ctors and things are setup first
+                    WriteCustomAttributes(state, type.CustomAttributes.ToArray());
+
+                    foreach (var method in methods)
+                    {
+                        WriteCustomAttributes(state, method.CustomAttributes.ToArray());
+                        var methodBody = method.GetMethodBody();
+                        if (methodBody != null)
+                        {
+                            SerializeMethodBody(state, genericParameters, method.Module, method.GetGenericArguments(), methodBody);
+                        }
+                    }
+                    foreach (var property in properties)
+                    {
+                        WriteCustomAttributes(state, property.CustomAttributes.ToArray());
+                    }
+                    foreach (var evt in events)
+                    {
+                        WriteCustomAttributes(state, evt.CustomAttributes.ToArray());
+                    }
+                });
+            });
+        }
+
         private void SerializeDef(PicklerSerializationState state, Type type, Type[]? genericParameters)
         {
+            System.Diagnostics.Debug.Assert(!type.IsInterface, "Passed interface to SerializeDef");
+
             var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             var constructors = type.GetConstructors(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             var methods = type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
@@ -539,10 +648,6 @@ namespace Ibasa.Pikala
                 if (type.IsValueType)
                 {
                     // Value types don't ever have any base class
-                }
-                else if (type.IsInterface)
-                {
-                    // Interface types don't have any base class
                 }
                 else
                 {
@@ -557,12 +662,6 @@ namespace Ibasa.Pikala
                 foreach (var interfaceType in interfaces)
                 {
                     SerializeType(state, interfaceType, genericParameters, null);
-
-                    // If this is an interface itself we don't need the method map
-                    if (type.IsInterface)
-                    {
-                        continue;
-                    }
 
                     var interfaceMap = type.GetInterfaceMap(interfaceType);
                     var mappedMethods = new List<(Signature, Signature)>();
@@ -1580,6 +1679,11 @@ namespace Ibasa.Pikala
                             WriteCustomAttributes(state, type.CustomAttributes.ToArray());
                         });
                     });
+                }
+                else if (type.IsInterface)
+                {
+                    AddMemo(state, type);
+                    SerializeInterfaceDef(state, type, genericTypeParameters);
                 }
                 else
                 {
