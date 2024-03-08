@@ -603,7 +603,6 @@ namespace Ibasa.Pikala
                 ReadCustomAttributesTypes(state);
 
                 var interfaceCount = state.Reader.Read7BitEncodedInt();
-                var interfaceMap = new List<(PickledMethodInfo, Signature)>();
                 for (int i = 0; i < interfaceCount; ++i)
                 {
                     var interfaceType = DeserializeType(state, typeContext);
@@ -759,21 +758,11 @@ namespace Ibasa.Pikala
                 ReadCustomAttributesTypes(state);
 
                 var interfaceCount = state.Reader.Read7BitEncodedInt();
-                var interfaceMap = new List<(PickledMethodInfo, Signature)>();
                 for (int i = 0; i < interfaceCount; ++i)
                 {
                     var interfaceType = DeserializeType(state, typeContext);
                     baseTypes.Add(interfaceType);
                     typeBuilder.AddInterfaceImplementation(interfaceType.Type);
-
-                    var mapCount = state.Reader.Read7BitEncodedInt();
-                    for (int j = 0; j < mapCount; ++j)
-                    {
-                        var interfaceMethodSignature = DeserializeSignature(state);
-                        var targetMethodSignature = DeserializeSignature(state);
-                        var interfaceMethod = interfaceType.GetMethod(interfaceMethodSignature);
-                        interfaceMap.Add((interfaceMethod, targetMethodSignature));
-                    }
                 }
 
                 constructingType.BaseTypes = baseTypes.ToArray();
@@ -815,26 +804,6 @@ namespace Ibasa.Pikala
                 {
                     ReadCustomAttributesTypes(state);
                     DeserializeMethodHeader(state, constructingType.GenericParameters, constructingType, ref constructingType.Methods[i]);
-                }
-
-                foreach (var (interfaceMethod, targetMethodSignature) in interfaceMap)
-                {
-                    MethodInfo? targetMethod = null;
-                    foreach (var method in constructingType.Methods)
-                    {
-                        if (targetMethodSignature == method.GetSignature())
-                        {
-                            targetMethod = method.MethodBuilder;
-                            break;
-                        }
-                    }
-
-                    if (targetMethod == null)
-                    {
-                        throw new Exception($"Could not find {typeBuilder}.{targetMethodSignature}");
-                    }
-
-                    typeBuilder.DefineMethodOverride(targetMethod, interfaceMethod.MethodInfo);
                 }
 
                 MethodBuilder GetMethod(Signature signature)
@@ -923,6 +892,36 @@ namespace Ibasa.Pikala
 
                 state.Stages.PushStage(SerializationStage.Definitions, state =>
                 {
+                    var offset = isValueType ? 0 : 1;
+                    for (int i = 0; i < interfaceCount; ++i)
+                    {
+                        var interfaceType = baseTypes[i + offset];
+                        var mapCount = state.Reader.Read7BitEncodedInt();
+                        for (int j = 0; j < mapCount; ++j)
+                        {
+                            var interfaceMethodSignature = DeserializeSignature(state);
+                            var targetMethodSignature = DeserializeSignature(state);
+                            var interfaceMethod = interfaceType.GetMethod(interfaceMethodSignature);
+
+                            MethodInfo? targetMethod = null;
+                            foreach (var method in constructingType.Methods)
+                            {
+                                if (targetMethodSignature == method.GetSignature())
+                                {
+                                    targetMethod = method.MethodBuilder;
+                                    break;
+                                }
+                            }
+
+                            if (targetMethod == null)
+                            {
+                                throw new Exception($"Could not find {typeBuilder}.{targetMethodSignature}");
+                            }
+
+                            typeBuilder.DefineMethodOverride(targetMethod, interfaceMethod.MethodInfo);
+                        }
+                    }
+
                     ReadCustomAttributes(state, constructingType.TypeBuilder.SetCustomAttribute);
 
                     foreach (var field in constructingType.Fields)

@@ -453,9 +453,9 @@ namespace Ibasa.Pikala.Tests
 
             var disposable = Assert.IsAssignableFrom<IDisposable>(result);
 
-            Assert.Equal("false", disposable.ToString());
+            Assert.Equal("False", disposable.ToString());
             disposable.Dispose();
-            Assert.Equal("true", disposable.ToString());
+            Assert.Equal("True", disposable.ToString());
         }
     }
 }

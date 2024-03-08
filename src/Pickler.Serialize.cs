@@ -662,37 +662,6 @@ namespace Ibasa.Pikala
                 foreach (var interfaceType in interfaces)
                 {
                     SerializeType(state, interfaceType, genericParameters, null);
-
-                    var interfaceMap = type.GetInterfaceMap(interfaceType);
-                    var mappedMethods = new List<(Signature, Signature)>();
-                    for (int i = 0; i < interfaceMap.InterfaceMethods.Length; ++i)
-                    {
-                        var targetMethod = interfaceMap.TargetMethods[i];
-
-                        if (targetMethod.DeclaringType != interfaceMap.TargetType)
-                        {
-                            // We only care about storing in the map methods that THIS class needs to override. Any interface
-                            // methods that our base classes are implementing don
-                        }
-                        else
-                        {
-                            var interfaceMethodSignature = Signature.GetSignature(interfaceMap.InterfaceMethods[i]);
-                            var targetMethodSignature = Signature.GetSignature(targetMethod);
-                            var isNewSlot = targetMethod.Attributes.HasFlag(MethodAttributes.NewSlot);
-
-                            if (interfaceMethodSignature != targetMethodSignature || isNewSlot)
-                            {
-                                mappedMethods.Add((interfaceMethodSignature, targetMethodSignature));
-                            }
-                        }
-                    }
-
-                    state.Writer.Write7BitEncodedInt(mappedMethods.Count);
-                    foreach (var (interfaceMethod, targetMethod) in mappedMethods)
-                    {
-                        SerializeSignature(state, interfaceMethod);
-                        SerializeSignature(state, targetMethod);
-                    }
                 }
 
                 state.Writer.Write7BitEncodedInt(fields.Length);
@@ -777,6 +746,41 @@ namespace Ibasa.Pikala
 
                 state.Stages.PushStage(SerializationStage.Definitions, state =>
                 {
+                    // Write out the interface maps
+                    foreach (var interfaceType in interfaces)
+                    {
+                        var interfaceMap = type.GetInterfaceMap(interfaceType);
+                        var mappedMethods = new List<(Signature, Signature)>();
+                        for (int i = 0; i < interfaceMap.InterfaceMethods.Length; ++i)
+                        {
+                            var targetMethod = interfaceMap.TargetMethods[i];
+
+                            if (targetMethod.DeclaringType != interfaceMap.TargetType)
+                            {
+                                // We only care about storing in the map methods that THIS class needs to override. Any interface
+                                // methods that our base classes are implementing don
+                            }
+                            else
+                            {
+                                var interfaceMethodSignature = Signature.GetSignature(interfaceMap.InterfaceMethods[i]);
+                                var targetMethodSignature = Signature.GetSignature(targetMethod);
+                                var isNewSlot = targetMethod.Attributes.HasFlag(MethodAttributes.NewSlot);
+
+                                if (interfaceMethodSignature != targetMethodSignature || isNewSlot)
+                                {
+                                    mappedMethods.Add((interfaceMethodSignature, targetMethodSignature));
+                                }
+                            }
+                        }
+
+                        state.Writer.Write7BitEncodedInt(mappedMethods.Count);
+                        foreach (var (interfaceMethod, targetMethod) in mappedMethods)
+                        {
+                            SerializeSignature(state, interfaceMethod);
+                            SerializeSignature(state, targetMethod);
+                        }
+                    }
+
                     // Custom attributes might be self referencing so make sure all ctors and things are setup first
                     WriteCustomAttributes(state, type.CustomAttributes.ToArray());
 

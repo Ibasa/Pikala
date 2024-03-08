@@ -6,8 +6,7 @@ namespace Ibasa.Pikala
 {
     enum SerializationStage
     {
-        Interfaces = 0,
-        Declarations,
+        Declarations = 0,
         Definitions,
         Completion,
     }
