@@ -448,7 +448,7 @@ namespace Ibasa.Pikala
             var fields = module.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             var methods = module.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
 
-            state.Stages.PushStage2(state =>
+            state.Stages.PushStage(SerializationStage.Declarations, state =>
             {
                 WriteCustomAttributesTypes(state, module.CustomAttributes.ToArray());
 
@@ -508,7 +508,7 @@ namespace Ibasa.Pikala
                     SerializeMethodBaseHeader(state, null, method);
                 }
 
-                state.Stages.PushStage3(state =>
+                state.Stages.PushStage(SerializationStage.Definitions, state =>
                 {
                     WriteCustomAttributes(state, module.CustomAttributes.ToArray());
 
@@ -534,7 +534,7 @@ namespace Ibasa.Pikala
             var properties = type.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             var events = type.GetEvents(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
 
-            state.Stages.PushStage2(state =>
+            state.Stages.PushStage(SerializationStage.Declarations, state =>
             {
                 WriteCustomAttributesTypes(state, type.CustomAttributes.ToArray());
 
@@ -607,7 +607,7 @@ namespace Ibasa.Pikala
                     }
                 }
 
-                state.Stages.PushStage3(state =>
+                state.Stages.PushStage(SerializationStage.Definitions, state =>
                 {
                     // Custom attributes might be self referencing so make sure all ctors and things are setup first
                     WriteCustomAttributes(state, type.CustomAttributes.ToArray());
@@ -643,7 +643,7 @@ namespace Ibasa.Pikala
             var properties = type.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             var events = type.GetEvents(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
 
-            state.Stages.PushStage2(state =>
+            state.Stages.PushStage(SerializationStage.Declarations, state =>
             {
                 if (type.IsValueType)
                 {
@@ -775,7 +775,7 @@ namespace Ibasa.Pikala
                     }
                 }
 
-                state.Stages.PushStage3(state =>
+                state.Stages.PushStage(SerializationStage.Definitions, state =>
                 {
                     // Custom attributes might be self referencing so make sure all ctors and things are setup first
                     WriteCustomAttributes(state, type.CustomAttributes.ToArray());
@@ -807,7 +807,7 @@ namespace Ibasa.Pikala
                         WriteCustomAttributes(state, evt.CustomAttributes.ToArray());
                     }
 
-                    state.Stages.PushStage4(state =>
+                    state.Stages.PushStage(SerializationStage.Completion, state =>
                     {
                         var staticFields =
                             type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly).OrderBy(fi => fi.Name);
@@ -1376,11 +1376,11 @@ namespace Ibasa.Pikala
                 state.Writer.Write((byte)AssemblyOperation.AssemblyDef);
                 state.Writer.Write(assembly.FullName);
 
-                state.Stages.PushStage2(state =>
+                state.Stages.PushStage(SerializationStage.Declarations, state =>
                 {
                     WriteCustomAttributesTypes(state, assembly.CustomAttributes.ToArray());
 
-                    state.Stages.PushStage3(state =>
+                    state.Stages.PushStage(SerializationStage.Definitions, state =>
                     {
                         WriteCustomAttributes(state, assembly.CustomAttributes.ToArray());
                     });
@@ -1643,14 +1643,14 @@ namespace Ibasa.Pikala
 
                     AddMemo(state, type);
 
-                    state.Stages.PushStage2(state =>
+                    state.Stages.PushStage(SerializationStage.Declarations, state =>
                     {
                         WriteCustomAttributesTypes(state, type.CustomAttributes.ToArray());
 
-                        state.Stages.PushStage3(state =>
-                    {
-                        WriteCustomAttributes(state, type.CustomAttributes.ToArray());
-                    });
+                        state.Stages.PushStage(SerializationStage.Definitions, state =>
+                        {
+                            WriteCustomAttributes(state, type.CustomAttributes.ToArray());
+                        });
                     });
                 }
                 else if (type.IsAssignableTo(typeof(Delegate)))
@@ -1670,11 +1670,11 @@ namespace Ibasa.Pikala
 
                     AddMemo(state, type);
 
-                    state.Stages.PushStage2(state =>
+                    state.Stages.PushStage(SerializationStage.Declarations, state =>
                     {
                         WriteCustomAttributesTypes(state, type.CustomAttributes.ToArray());
 
-                        state.Stages.PushStage3(state =>
+                        state.Stages.PushStage(SerializationStage.Definitions, state =>
                         {
                             WriteCustomAttributes(state, type.CustomAttributes.ToArray());
                         });
@@ -1755,7 +1755,7 @@ namespace Ibasa.Pikala
                 state.Writer.Write(true);
                 SerializeType(state, field.ReflectedType, null, null);
             }
-            state.Stages.PopStages(state, 2);
+            state.Stages.PopStages(state, SerializationStage.Declarations);
             AddMemo(state, field);
         }
 
@@ -1778,7 +1778,7 @@ namespace Ibasa.Pikala
 
             SerializeSignature(state, Signature.GetSignature(property));
             SerializeType(state, property.ReflectedType, null, null);
-            state.Stages.PopStages(state, 2);
+            state.Stages.PopStages(state, SerializationStage.Declarations);
             AddMemo(state, property);
         }
 
@@ -1801,7 +1801,7 @@ namespace Ibasa.Pikala
 
             state.Writer.Write(evt.Name);
             SerializeType(state, evt.ReflectedType, null, null);
-            state.Stages.PopStages(state, 2);
+            state.Stages.PopStages(state, SerializationStage.Declarations);
             AddMemo(state, evt);
         }
 
@@ -1849,7 +1849,7 @@ namespace Ibasa.Pikala
                 state.Writer.Write(true);
                 SerializeType(state, methodInfo.ReflectedType, null, null);
             }
-            state.Stages.PopStages(state, 2);
+            state.Stages.PopStages(state, SerializationStage.Declarations);
             AddMemo(state, methodInfo);
         }
 
@@ -1872,7 +1872,7 @@ namespace Ibasa.Pikala
 
             SerializeSignature(state, Signature.GetSignature(constructor));
             SerializeType(state, constructor.ReflectedType, null, null);
-            state.Stages.PopStages(state, 2);
+            state.Stages.PopStages(state, SerializationStage.Declarations);
             AddMemo(state, constructor);
         }
 
@@ -2891,12 +2891,12 @@ namespace Ibasa.Pikala
             var runtimeType = obj.GetType();
             SerializeType(state, runtimeType, null, null);
             // Don't serialize static fields at this level
-            state.Stages.PopStages(state, 3);
+            state.Stages.PopStages(state, SerializationStage.Definitions);
             // Get the type info for this type
             var typeInfo = GetCachedTypeInfo(runtimeType);
             MaybeWriteTypeInfo(state, typeInfo);
             // Now we can write out static fields (which might serialise this type again)
-            state.Stages.PopStages(state, 4);
+            state.Stages.PopStages(state, SerializationStage.Completion);
             // At this point we _may_ have written out the value as part of circular static fields, so write a maybememo
             if (state.MaybeWriteMemo(obj, null)) return true;
             state.Writer.Write15BitEncodedLong(0);

@@ -1,74 +1,84 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace Ibasa.Pikala
 {
+    enum SerializationStage
+    {
+        Interfaces = 0,
+        Declarations,
+        Definitions,
+        Completion,
+    }
+
     sealed class SerializationStage<T>
     {
-        Queue<Action<T>> _stage2 = new Queue<Action<T>>();
-        Queue<Action<T>> _stage3 = new Queue<Action<T>>();
-        Queue<Action<T>> _stage4 = new Queue<Action<T>>();
+        List<Queue<Action<T>>> _stages = new List<Queue<Action<T>>>();
 
         public SerializationStage()
         {
         }
 
-        public void PushStage2(Action<T> action)
+        public void PushStage(SerializationStage stage, Action<T> action)
         {
-            _stage2.Enqueue(action);
+            var index = (int)stage;
+
+            while (index >= _stages.Count)
+            {
+                _stages.Add(new Queue<Action<T>>());
+            }
+
+            var queue = _stages[(int)stage];
+            queue.Enqueue(action);
         }
-        public void PushStage3(Action<T> action)
+
+        public void PopStages(T state, SerializationStage to = SerializationStage.Completion)
         {
-            _stage3.Enqueue(action);
-        }
-        public void PushStage4(Action<T> action)
-        {
-            _stage4.Enqueue(action);
-        }
-
-        public void PopStages(T state, int to = 4)
-        {
-            if (to < 2 || to > 4)
+            var index = (int)to;
+            if (index < 0 || index > (int)SerializationStage.Completion)
             {
-                throw new ArgumentException("to must be 2, 3 or 4");
+                throw new ArgumentException("to must be a valid SerializationStage");
             }
 
-            while (_stage2.TryDequeue(out var action))
+            for (int i = 0; i < index; i++)
             {
-                action(state);
+                if (i >= _stages.Count)
+                {
+                    return;
+                }
+
+                var queue = _stages[i];
+
+                while (queue.TryDequeue(out var action))
+                {
+                    action(state);
+
+                    // Ensure that no lower stage items have been added
+                    for (int j = 0; j < i; j++)
+                    {
+                        var lower = _stages[j];
+                        System.Diagnostics.Debug.Assert(
+                            lower.Count == 0,
+                            string.Format("Stage {0} was added to while processing stage {1}",
+                                (SerializationStage)j,
+                                (SerializationStage)i
+                            ));
+                    }
+                }
+
+                System.Diagnostics.Debug.Assert(queue.Count == 0, string.Format("Stage {0} was not cleared", (SerializationStage)i));
             }
-
-            System.Diagnostics.Debug.Assert(_stage2.Count == 0, "Stage 2 was not cleared");
-
-            if (to == 2) return;
-
-            while (_stage3.TryDequeue(out var action))
-            {
-                action(state);
-                // Ensure that no stage 2 items have been added.
-                System.Diagnostics.Debug.Assert(_stage2.Count == 0, "Stage 2 was added to while processing stage 3");
-            }
-
-            System.Diagnostics.Debug.Assert(_stage3.Count == 0, "Stage 3 was not cleared");
-
-            if (to == 3) return;
-
-            while (_stage4.TryDequeue(out var action))
-            {
-                action(state);
-                // Ensure that no stage 2 or 3 itesm have been added.
-                System.Diagnostics.Debug.Assert(_stage2.Count == 0, "Stage 2 was added to while processing stage 4");
-                System.Diagnostics.Debug.Assert(_stage3.Count == 0, "Stage 3 was added to while processing stage 4");
-            }
-
-            System.Diagnostics.Debug.Assert(_stage4.Count == 0, "Stage 4 was not cleared");
         }
 
         public void AssertEmpty()
         {
-            System.Diagnostics.Debug.Assert(_stage2.Count == 0, "Stage 2 was not empty");
-            System.Diagnostics.Debug.Assert(_stage3.Count == 0, "Stage 3 was not empty");
-            System.Diagnostics.Debug.Assert(_stage4.Count == 0, "Stage 4 was not empty");
+            for (int i = 0; i < _stages.Count; i++)
+            {
+                var queue = _stages[i];
+                System.Diagnostics.Debug.Assert(queue.Count == 0,
+                    string.Format("Stage {0} was not empty", (SerializationStage)i));
+            }
         }
     }
 }

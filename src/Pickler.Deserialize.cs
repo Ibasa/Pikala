@@ -594,7 +594,7 @@ namespace Ibasa.Pikala
 
             AddMemo(state, constructingType);
 
-            state.Stages.PushStage2(state =>
+            state.Stages.PushStage(SerializationStage.Declarations, state =>
             {
                 var typeBuilder = constructingType.TypeBuilder;
 
@@ -705,7 +705,7 @@ namespace Ibasa.Pikala
                     }
                 }
 
-                state.Stages.PushStage3(state =>
+                state.Stages.PushStage(SerializationStage.Definitions, state =>
                 {
                     ReadCustomAttributes(state, constructingType.TypeBuilder.SetCustomAttribute);
 
@@ -742,7 +742,7 @@ namespace Ibasa.Pikala
 
             AddMemo(state, constructingType);
 
-            state.Stages.PushStage2(state =>
+            state.Stages.PushStage(SerializationStage.Declarations, state =>
             {
                 var isValueType = constructingType.TypeDef == TypeDef.Struct;
                 var typeBuilder = constructingType.TypeBuilder;
@@ -921,7 +921,7 @@ namespace Ibasa.Pikala
                     }
                 }
 
-                state.Stages.PushStage3(state =>
+                state.Stages.PushStage(SerializationStage.Definitions, state =>
                 {
                     ReadCustomAttributes(state, constructingType.TypeBuilder.SetCustomAttribute);
 
@@ -961,7 +961,7 @@ namespace Ibasa.Pikala
 
                     constructingType.FullyDefined = true;
 
-                    state.Stages.PushStage4(state =>
+                    state.Stages.PushStage(SerializationStage.Completion, state =>
                     {
                         var type = constructingType.CompleteType;
 
@@ -1043,17 +1043,17 @@ namespace Ibasa.Pikala
 
                 AddMemo(state, constructingType);
 
-                state.Stages.PushStage2(state =>
+                state.Stages.PushStage(SerializationStage.Declarations, state =>
                 {
                     ReadCustomAttributesTypes(state);
 
-                    state.Stages.PushStage3(state =>
+                    state.Stages.PushStage(SerializationStage.Definitions, state =>
                     {
                         ReadCustomAttributes(state, typeBuilder.SetCustomAttribute);
 
                         constructingType.FullyDefined = true;
 
-                        state.Stages.PushStage4(state =>
+                        state.Stages.PushStage(SerializationStage.Completion, state =>
                         {
                             // Ensure the type is constructed
                             var _ = constructingType.CompleteType;
@@ -1106,17 +1106,17 @@ namespace Ibasa.Pikala
 
                 AddMemo(state, constructingType);
 
-                state.Stages.PushStage2(state =>
+                state.Stages.PushStage(SerializationStage.Declarations, state =>
                 {
                     ReadCustomAttributesTypes(state);
 
-                    state.Stages.PushStage3(state =>
+                    state.Stages.PushStage(SerializationStage.Definitions, state =>
                     {
                         ReadCustomAttributes(state, typeBuilder.SetCustomAttribute);
 
                         constructingType.FullyDefined = true;
 
-                        state.Stages.PushStage4(state =>
+                        state.Stages.PushStage(SerializationStage.Completion, state =>
                         {
                             // Ensure the type is constructed
                             var _ = constructingType.CompleteType;
@@ -1154,7 +1154,7 @@ namespace Ibasa.Pikala
             if (typeField)
             {
                 var type = DeserializeType(state, default);
-                state.Stages.PopStages(state, 2);
+                state.Stages.PopStages(state, SerializationStage.Declarations);
                 var result = type.GetField(name);
                 AddMemo(state, result);
                 return result;
@@ -1162,7 +1162,7 @@ namespace Ibasa.Pikala
             else
             {
                 var module = DeserializeModule(state);
-                state.Stages.PopStages(state, 2);
+                state.Stages.PopStages(state, SerializationStage.Declarations);
                 var result = module.GetField(name);
                 AddMemo(state, result);
                 return result;
@@ -1185,7 +1185,7 @@ namespace Ibasa.Pikala
 
             var signature = DeserializeSignature(state);
             var type = DeserializeType(state, default);
-            state.Stages.PopStages(state, 2);
+            state.Stages.PopStages(state, SerializationStage.Declarations);
             var result = type.GetProperty(signature);
             AddMemo(state, result);
             return result;
@@ -1207,7 +1207,7 @@ namespace Ibasa.Pikala
 
             var name = state.Reader.ReadString();
             var type = DeserializeType(state, default);
-            state.Stages.PopStages(state, 2);
+            state.Stages.PopStages(state, SerializationStage.Declarations);
             var result = type.GetEvent(name);
             AddMemo(state, result);
             return result;
@@ -1229,7 +1229,7 @@ namespace Ibasa.Pikala
 
             var signature = DeserializeSignature(state);
             var type = DeserializeType(state, default);
-            state.Stages.PopStages(state, 2);
+            state.Stages.PopStages(state, SerializationStage.Declarations);
             var result = type.GetConstructor(signature);
             AddMemo(state, result);
             return result;
@@ -1267,13 +1267,13 @@ namespace Ibasa.Pikala
             if (typeMethod)
             {
                 var type = DeserializeType(state, default);
-                state.Stages.PopStages(state, 2);
+                state.Stages.PopStages(state, SerializationStage.Declarations);
                 methodInfo = type.GetMethod(signature);
             }
             else
             {
                 var module = DeserializeModule(state);
-                state.Stages.PopStages(state, 2);
+                state.Stages.PopStages(state, SerializationStage.Declarations);
                 methodInfo = module.GetMethod(signature);
             }
 
@@ -1806,11 +1806,11 @@ namespace Ibasa.Pikala
 
             var assemblyDef = new PickledAssemblyDef(assemblyBuilder);
             AddMemo(state, assemblyDef);
-            state.Stages.PushStage2(state =>
+            state.Stages.PushStage(SerializationStage.Declarations, state =>
             {
                 ReadCustomAttributesTypes(state);
 
-                state.Stages.PushStage3(state =>
+                state.Stages.PushStage(SerializationStage.Definitions, state =>
                 {
                     ReadCustomAttributes(state, assemblyDef.AssemblyBuilder.SetCustomAttribute);
                 });
@@ -1855,7 +1855,7 @@ namespace Ibasa.Pikala
             }
             var moduleDef = new PickledModuleDef(module);
             AddMemo(state, moduleDef);
-            state.Stages.PushStage2(state =>
+            state.Stages.PushStage(SerializationStage.Declarations, state =>
             {
                 ReadCustomAttributesTypes(state);
 
@@ -1891,7 +1891,7 @@ namespace Ibasa.Pikala
                     //ReadCustomAttributes(state, method.SetCustomAttribute, typeContext);
                 }
 
-                state.Stages.PushStage3(state =>
+                state.Stages.PushStage(SerializationStage.Definitions, state =>
                 {
 
                     ReadCustomAttributes(state, moduleDef.ModuleBuilder.SetCustomAttribute);
@@ -3353,10 +3353,10 @@ namespace Ibasa.Pikala
         private bool ReadObjectType<T>(PicklerDeserializationState state, [NotNullWhen(true)] out T? obj)
         {
             var pickledType = DeserializeType(state, default);
-            state.Stages.PopStages(state, 3);
+            state.Stages.PopStages(state, SerializationStage.Definitions);
             var type = pickledType.CompleteType;
             var typeInfo = GetOrReadSerialisedObjectTypeInfo(state, type);
-            state.Stages.PopStages(state, 4);
+            state.Stages.PopStages(state, SerializationStage.Completion);
 
             if (MaybeReadMemo(state, out obj)) return true;
 
