@@ -41,7 +41,7 @@ namespace Ibasa.Pikala
                 throw new ArgumentException("to must be a valid SerializationStage");
             }
 
-            for (int i = 0; i < index; i++)
+            for (int i = 0; i <= index; i++)
             {
                 if (i >= _stages.Count)
                 {
