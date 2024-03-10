@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Net.Http.Headers;
-using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace Ibasa.Pikala.Tests
@@ -698,6 +696,28 @@ namespace Ibasa.Pikala.Tests
             public override string ToString()
             {
                 return disposed.ToString();
+            }
+        }
+
+        // Test that a typedef works even if it's only seen in a method body
+        public sealed class TypeDefInMethod
+        {
+            private int _x;
+
+            public TypeDefInMethod(int x)
+            {
+                _x = x;
+            }
+
+            public int Method(int y)
+            {
+                var obj = new PlainObject()
+                {
+                    X = _x,
+                    Z = (y, y),
+                };
+
+                return obj.GetHashCode();
             }
         }
     }

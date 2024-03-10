@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Ibasa.Pikala.Tests.TestTypes;
+using System;
 using Xunit;
 
 namespace Ibasa.Pikala.Tests
@@ -474,6 +475,19 @@ namespace Ibasa.Pikala.Tests
 
             var result = RoundTrip.Do(pickler, func);
             Assert.Equal(9223372034707325052ul, result());
+        }
+
+        [Fact]
+        public void TestTypeDefMethodBody()
+        {
+            var pickler = CreatePickler();
+            var obj = new TestTypes.TypeDefInMethod(1);
+            var result = RoundTrip.Do<object>(pickler, obj);
+
+            var resultMethod = result.GetType().GetMethod("Method");
+            var actual = resultMethod.Invoke(result, new object[] { 2 });
+
+            Assert.Equal(obj.Method(2), actual);
         }
     }
 }
