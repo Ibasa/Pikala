@@ -960,38 +960,42 @@ namespace Ibasa.Pikala
 
                     constructingType.FullyDefined = true;
 
-                    state.Stages.PushStage(SerializationStage.Completion, state =>
+                    // Only read in static values now if this is a non-generic type
+                    if (constructingType.GenericParameters == null || constructingType.GenericParameters.Length == 0)
                     {
-                        var type = constructingType.CompleteType;
-
-                        var staticFields =
-                            type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-                            .Where(field => !field.IsLiteral && !field.IsInitOnly)
-                            .ToArray();
-
-                        for (int i = 0; i < staticFields.Length; ++i)
+                        state.Stages.PushStage(SerializationStage.Completion, state =>
                         {
-                            var fieldName = state.Reader.ReadString();
-                            FieldInfo? fieldInfo = null;
-                            for (int j = 0; j < staticFields.Length; ++j)
+                            var type = constructingType.CompleteType;
+
+                            var staticFields =
+                                type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                                .Where(field => !field.IsLiteral && !field.IsInitOnly)
+                                .ToArray();
+
+                            for (int i = 0; i < staticFields.Length; ++i)
                             {
-                                if (fieldName == staticFields[j].Name)
+                                var fieldName = state.Reader.ReadString();
+                                FieldInfo? fieldInfo = null;
+                                for (int j = 0; j < staticFields.Length; ++j)
                                 {
-                                    fieldInfo = staticFields[j];
-                                    break;
+                                    if (fieldName == staticFields[j].Name)
+                                    {
+                                        fieldInfo = staticFields[j];
+                                        break;
+                                    }
                                 }
-                            }
 
-                            if (fieldInfo == null)
-                            {
-                                throw new Exception($"Could not find static field '{fieldName}' on type '{type.Name}'");
-                            }
+                                if (fieldInfo == null)
+                                {
+                                    throw new Exception($"Could not find static field '{fieldName}' on type '{type.Name}'");
+                                }
 
-                            var typeInfo = GetOrReadSerialisedObjectTypeInfo(state, fieldInfo.FieldType);
-                            var fieldValue = InvokeDeserializationMethod(typeInfo, state, false);
-                            fieldInfo.SetValue(null, fieldValue);
-                        }
-                    });
+                                var typeInfo = GetOrReadSerialisedObjectTypeInfo(state, fieldInfo.FieldType);
+                                var fieldValue = InvokeDeserializationMethod(typeInfo, state, false);
+                                fieldInfo.SetValue(null, fieldValue);
+                            }
+                        });
+                    }
                 });
             });
         }
@@ -1925,6 +1929,42 @@ namespace Ibasa.Pikala
             }
             var result = new PickledGenericType(genericType, genericArguments);
             AddMemo(state, result);
+
+            // Need to read in the static field values here
+            state.Stages.PushStage(SerializationStage.Completion, state =>
+            {
+                var type = result.CompleteType;
+
+                var staticFields =
+                    type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                    .Where(field => !field.IsLiteral && !field.IsInitOnly)
+                    .ToArray();
+
+                for (int i = 0; i < staticFields.Length; ++i)
+                {
+                    var fieldName = state.Reader.ReadString();
+                    FieldInfo? fieldInfo = null;
+                    for (int j = 0; j < staticFields.Length; ++j)
+                    {
+                        if (fieldName == staticFields[j].Name)
+                        {
+                            fieldInfo = staticFields[j];
+                            break;
+                        }
+                    }
+
+                    if (fieldInfo == null)
+                    {
+                        throw new Exception($"Could not find static field '{fieldName}' on type '{type.Name}'");
+                    }
+
+                    var typeInfo = GetOrReadSerialisedObjectTypeInfo(state, fieldInfo.FieldType);
+                    var fieldValue = InvokeDeserializationMethod(typeInfo, state, false);
+                    fieldInfo.SetValue(null, fieldValue);
+                }
+            });
+
+
             return result;
         }
 

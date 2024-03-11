@@ -817,26 +817,30 @@ namespace Ibasa.Pikala
                         WriteCustomAttributes(state, evt.CustomAttributes.ToArray());
                     }
 
-                    state.Stages.PushStage(SerializationStage.Completion, state =>
+                    // Only non-generic types can write their static fields out in the typedef. Generic types need to write their static fields when first defined
+                    if (!type.IsGenericTypeDefinition)
                     {
-                        var staticFields =
-                            type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly).OrderBy(fi => fi.Name);
-                        foreach (var field in staticFields)
+                        state.Stages.PushStage(SerializationStage.Completion, state =>
                         {
-                            if (!field.IsLiteral && !field.IsInitOnly)
+                            var staticFields =
+                                type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly).OrderBy(fi => fi.Name);
+                            foreach (var field in staticFields)
                             {
-                                // It's ok to just have names here because we're only looking at fields one exactly one type, no base type fields. So there will not be any name conflicts.
-                                state.Writer.Write(field.Name);
-                                var value = field.GetValue(null);
+                                if (!field.IsLiteral && !field.IsInitOnly)
+                                {
+                                    // It's ok to just have names here because we're only looking at fields one exactly one type, no base type fields. So there will not be any name conflicts.
+                                    state.Writer.Write(field.Name);
+                                    var value = field.GetValue(null);
 
-                                // This will be a no-op for most well known types but also sealed types which we will of written out for the static value
-                                var typeInfo = GetCachedTypeInfo(field.FieldType);
-                                MaybeWriteTypeInfo(state, typeInfo);
+                                    // This will be a no-op for most well known types but also sealed types which we will of written out for the static value
+                                    var typeInfo = GetCachedTypeInfo(field.FieldType);
+                                    MaybeWriteTypeInfo(state, typeInfo);
 
-                                InvokeSerializationMethod(typeInfo, state, value, null, false);
+                                    InvokeSerializationMethod(typeInfo, state, value, null, false);
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                 });
             });
         }
@@ -1482,6 +1486,28 @@ namespace Ibasa.Pikala
                     SerializeType(state, arg, genericTypeParameters, genericMethodParameters);
                 }
                 AddMemo(state, type);
+
+                // This is the first time we've seen this constructed generic type, we need to write out the values of it's static fields.
+                state.Stages.PushStage(SerializationStage.Completion, state =>
+                {
+                    var staticFields =
+                        type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly).OrderBy(fi => fi.Name);
+                    foreach (var field in staticFields)
+                    {
+                        if (!field.IsLiteral && !field.IsInitOnly)
+                        {
+                            // It's ok to just have names here because we're only looking at fields one exactly one type, no base type fields. So there will not be any name conflicts.
+                            state.Writer.Write(field.Name);
+                            var value = field.GetValue(null);
+
+                            // This will be a no-op for most well known types but also sealed types which we will of written out for the static value
+                            var typeInfo = GetCachedTypeInfo(field.FieldType);
+                            MaybeWriteTypeInfo(state, typeInfo);
+
+                            InvokeSerializationMethod(typeInfo, state, value, null, false);
+                        }
+                    }
+                });
             }
 
             // Arrays aren't simple generic types, we need to write out the rank and element type

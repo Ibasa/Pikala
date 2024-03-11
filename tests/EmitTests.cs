@@ -498,10 +498,10 @@ namespace Ibasa.Pikala.Tests
             TestTypes.StaticGeneric<int>.Value = 2;
             TestTypes.StaticGeneric<float>.Value = 4;
 
-            var result = RoundTrip.Do<object>(pickler, typeof(UsesStaticGeneric));
+            var result = RoundTrip.Do<Type>(pickler, typeof(UsesStaticGeneric));
 
-            var resultMethod = result.GetType().GetMethod("Method");
-            var actual = resultMethod.Invoke(result, new object[] { });
+            var resultMethod = result.GetMethod("Method");
+            var actual = resultMethod.Invoke(null, new object[] { });
 
             Assert.Equal(2.0f, (float)actual);
         }
