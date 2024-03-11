@@ -489,5 +489,21 @@ namespace Ibasa.Pikala.Tests
 
             Assert.Equal(obj.Method(2), actual);
         }
+
+        [Fact]
+        public void TestStaticGenericField()
+        {
+            var pickler = CreatePickler();
+
+            TestTypes.StaticGeneric<int>.Value = 2;
+            TestTypes.StaticGeneric<float>.Value = 4;
+
+            var result = RoundTrip.Do<object>(pickler, typeof(UsesStaticGeneric));
+
+            var resultMethod = result.GetType().GetMethod("Method");
+            var actual = resultMethod.Invoke(result, new object[] { });
+
+            Assert.Equal(2.0f, (float)actual);
+        }
     }
 }

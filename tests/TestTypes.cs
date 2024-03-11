@@ -720,5 +720,19 @@ namespace Ibasa.Pikala.Tests
                 return obj.GetHashCode();
             }
         }
+
+        // Test for static fields on a generic class
+        public static class StaticGeneric<T>
+        {
+            public static T Value;
+        }
+
+        public static class UsesStaticGeneric
+        {
+            public static float Method()
+            {
+                return StaticGeneric<float>.Value / StaticGeneric<int>.Value;
+            }
+        }
     }
 }
